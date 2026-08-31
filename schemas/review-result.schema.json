@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidahmann/mill/schemas/review-result.schema.json",
+  "title": "ReviewResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateCommit", "summary", "findings"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "class",
+          "title",
+          "body",
+          "file",
+          "line"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"]
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "correctness",
+              "security",
+              "data-loss",
+              "provenance",
+              "compatibility",
+              "authority",
+              "maintainability",
+              "style"
+            ]
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "body": { "type": "string", "minLength": 1 },
+          "file": { "type": ["string", "null"], "minLength": 1 },
+          "line": { "type": ["integer", "null"], "minimum": 1 }
+        }
+      }
+    }
+  }
+}

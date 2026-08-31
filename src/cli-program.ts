@@ -9,6 +9,20 @@ import { doctor, doctorReady, type DoctorMode } from "./doctor.js";
 import { asMillError, ExitCode, MillError } from "./errors.js";
 import { inspectPrd } from "./intake/prd.js";
 import { scanRepository } from "./repository/scan.js";
+import {
+  cancelRun,
+  codexAuthStatus,
+  qualifyBaseline,
+  resumeRun,
+  reviewRun,
+  runStatus,
+  startLocalRun,
+  stateBackup,
+  statePurge,
+  stateRestore,
+  supportBundle,
+  verifyRun,
+} from "./runtime/lifecycle.js";
 import { commandResult, formatHuman, type CommandResult } from "./result.js";
 import { safeReadText } from "./security/safe-path.js";
 import { MILL_VERSION } from "./version.js";
@@ -216,6 +230,327 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           ok: true,
           data: { kind: options.kind, file: options.file },
         }),
+      );
+    });
+
+  const auth = program
+    .command("auth")
+    .description("inspect adapter authentication readiness");
+  auth
+    .command("status")
+    .description("report operator-owned Codex authentication readiness")
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const status = await codexAuthStatus(root);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "auth.status",
+          ok: status.available,
+          data: status,
+        }),
+      );
+      if (!status.available) {
+        throw new MillError(
+          "CODEX_AUTH_UNAVAILABLE",
+          "The operator's Codex CLI is not logged in.",
+          ExitCode.unavailable,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("qualify")
+    .description(
+      "qualify declared commands in a disposable exact-base worktree",
+    )
+    .requiredOption("--baseline", "qualify the pre-change base")
+    .requiredOption("--task <path>", "approved task packet path")
+    .action(async (options: { task: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await qualifyBaseline({ root, taskPath: options.task });
+      const { evidence } = result;
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "qualify.baseline",
+          ok: evidence.passed,
+          status: evidence.passed ? "ok" : "blocked",
+          data: result,
+          reasons: evidence.passed
+            ? []
+            : [
+                {
+                  code: "BASELINE_QUALIFICATION_FAILED",
+                  message: "A required baseline command failed or was blocked.",
+                },
+              ],
+        }),
+      );
+      if (!evidence.passed) {
+        throw new MillError(
+          "BASELINE_QUALIFICATION_FAILED",
+          "A required baseline command failed or was blocked.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("run")
+    .description(
+      "build one explicitly approved task in an isolated local worktree",
+    )
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption(
+      "--approve <digest>",
+      "approval digest from successful matching baseline qualification",
+    )
+    .requiredOption(
+      "--attended",
+      "acknowledge attended trusted-host Codex execution",
+    )
+    .action(async (options: { task: string; approve: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await startLocalRun({
+        root,
+        taskPath: options.task,
+        approvalDigest: options.approve,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "run", ok: true, data: result }),
+      );
+    });
+
+  program
+    .command("status")
+    .description("report durable local run state")
+    .option("--run <id>", "run identifier")
+    .action(async (options: { run?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await runStatus({
+        root,
+        ...(options.run === undefined ? {} : { runId: options.run }),
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "status", ok: true, data }),
+      );
+    });
+
+  program
+    .command("verify")
+    .description(
+      "validate an exact committed candidate through declared commands",
+    )
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await verifyRun({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "verify",
+          ok: result.evidence.passed,
+          status: result.evidence.passed ? "ok" : "blocked",
+          data: result,
+          reasons: result.evidence.passed
+            ? []
+            : [
+                {
+                  code: "VALIDATION_FAILED",
+                  message: "A required command failed or was blocked.",
+                },
+              ],
+        }),
+      );
+      if (!result.evidence.passed) {
+        throw new MillError(
+          "VALIDATION_FAILED",
+          "A required command failed or was blocked.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("review")
+    .description(
+      "obtain a fresh read-only review of the exact verified candidate",
+    )
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await reviewRun({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      const ok = result.review.findings.length === 0;
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "review",
+          ok,
+          status: ok ? "ok" : "blocked",
+          data: result,
+          reasons: ok
+            ? []
+            : [
+                {
+                  code: result.run.blockCode ?? "REVIEW_FINDINGS",
+                  message:
+                    "The exact-candidate review reported actionable findings.",
+                },
+              ],
+        }),
+      );
+      if (!ok) {
+        throw new MillError(
+          result.run.blockCode ?? "REVIEW_FINDINGS",
+          "The exact-candidate review reported actionable findings.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("resume")
+    .description("resume one safe blocked checkpoint within its retry budget")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const run = await resumeRun({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "resume", ok: true, data: { run } }),
+      );
+    });
+
+  program
+    .command("cancel")
+    .description("persist cancellation for the exact foreground controller")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const run = await cancelRun({ root, runId: options.run });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "cancel", ok: true, data: { run } }),
+      );
+    });
+
+  const state = program
+    .command("state")
+    .description("manage local operational state");
+  state
+    .command("backup")
+    .description("create a user-only SQLite backup")
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const backupPath = await stateBackup({ root });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "state.backup",
+          ok: true,
+          data: { backupPath },
+        }),
+      );
+    });
+  state
+    .command("restore")
+    .description("restore one Mill-owned state backup")
+    .requiredOption("--from <path>", "backup path returned by state backup")
+    .action(async (options: { from: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      await stateRestore({ root, backupPath: options.from });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "state.restore", ok: true, data: {} }),
+      );
+    });
+  state
+    .command("purge")
+    .description("remove terminal local state and disposable worktrees")
+    .requiredOption(
+      "--confirm <repository-id>",
+      "exact repository UUID acknowledgement",
+    )
+    .action(async (options: { confirm: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      await statePurge({ root, confirmation: options.confirm });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "state.purge", ok: true, data: {} }),
+      );
+    });
+
+  program
+    .command("support-bundle")
+    .description("emit a redacted static support bundle")
+    .option("--run <id>", "run identifier")
+    .action(async (options: { run?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await supportBundle({
+        root,
+        ...(options.run === undefined ? {} : { runId: options.run }),
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "support-bundle", ok: true, data }),
       );
     });
 

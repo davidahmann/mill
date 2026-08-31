@@ -4,6 +4,7 @@ export const ExitCode = {
   data: 65,
   unavailable: 69,
   io: 74,
+  temporary: 75,
   configuration: 78,
 } as const;
 

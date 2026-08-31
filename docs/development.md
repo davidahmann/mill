@@ -10,7 +10,7 @@ Install the pinned runtime through asdf, then use `npm ci`.
 
 ## Required commands
 
-The implementation establishes these native gates in Wave 1:
+The repository enforces these native gates:
 
 - `npm run format:check`
 - `npm run lint`
@@ -41,6 +41,32 @@ Only applicable tiers are active. A skipped required lane blocks promotion.
 | UAT          | active before public alpha | clean-machine founder journey                         |
 | Scenario     | active                     | normal, exception, degradation, recovery, adversarial |
 | Cross-system | Wave 3+                    | Codex, OCI and GitHub canaries                        |
+
+Wave 2 keeps a deterministic fake-adapter suite in CI and requires an attended
+real Codex/OCI canary before the wave is accepted. The realistic scenario set
+covers:
+
+- normal approval, build, lifecycle commit, verification, and clean review;
+- negative controls for failed, stale, inspect-only, or interrupted baseline
+  qualification, changed command configuration, mutable command-control paths,
+  bound-input/output overlap, dirty checkout, ignored-file contamination,
+  hostile Git metadata, unauthorized paths, symlinks, replacement/graft history
+  substitution, hidden index flags, authority drift, and attempted automatic
+  Codex escalation approval;
+- degradation from provider failure, missing OCI runtime/image, nonzero command,
+  deadline, cancellation, and output exhaustion;
+- recovery through crash-released writer leases, PID-reuse-safe orphan
+  reconciliation, explicit OCI container cleanup, provisional workspace cleanup,
+  exact-candidate repair revalidation, per-candidate review budgets, validated
+  state backup/restore, and terminal-only purge;
+- provenance through exact base, context, candidate commit/tree, validation, and
+  review identity checks;
+- packaging through installation of the generated tarball and execution of its
+  public CLI and schema exports.
+
+The real provider canary is maintainer evidence, not a deterministic CI job: it
+uses the maintainer's personal Codex account and a pre-pulled digest-pinned
+image, and it must never push or create a pull request in Wave 2.
 
 ## Architecture questions
 

@@ -14,10 +14,19 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   mode-aware doctor command.
 - Pinned least-privilege CI, CodeQL, dependency review, DCO, package smoke,
   coverage, and trusted-publishing release foundations.
+- Attended local task delivery through explicit canonical approval, a disposable
+  worktree, lifecycle-owned commit, digest-pinned no-network OCI verification,
+  and exact-candidate read-only Codex review.
+- Repository-namespaced SQLite state with append-only events, exclusive writer
+  leases, cancellation, interruption recovery, backup/validated restore,
+  terminal-only purge, and redacted support export.
+- Executable task-packet, context-manifest, validation-evidence, and
+  review-result contracts with aligned runtime and JSON Schema validation.
 
 ### Changed
 
-- None.
+- Dependabot preserves the qualified Node type and TypeScript major boundaries;
+  incompatible major upgrades require an intentional toolchain qualification.
 
 ### Deprecated
 
@@ -33,6 +42,31 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   errors, malformed-contract classification, operator-tool discovery, Node
   readiness, valid `..name` paths, Git-root lock authority, JSON help isolation,
   and runtime/JSON Schema parity now honor their documented contracts.
+- Codex builder invocation uses approval routing's workspace-write sandbox
+  without passing the mutually exclusive explicit sandbox selector.
+- Structured review schemas use Codex-compatible explicit and nullable types;
+  failed provider JSONL retains only a safe error code for diagnosis.
+- Builder and reviewer invocations disable host skill search so operator-global
+  skills cannot silently widen behavior or inflate provider usage.
+- Transient or invalid review-provider results can retry the unchanged verified
+  candidate once through a durable per-candidate attempt budget, without
+  consuming the one post-repair review generation.
+- Builder, retry, repair, and review completions record source-qualified token
+  usage while refusing to invent currency cost.
+- Baseline approval now requires matching successful qualification state and
+  binds the exact base, task, command configuration, and normalized evidence.
+- Exact-candidate checks reject ignored-file contamination, repair reasserts the
+  reviewed candidate before writes, and failed context setup removes provisional
+  worktree and branch state.
+- Bound task, configuration, authority, context, instruction, and declared
+  command-control inputs cannot overlap candidate output scope or be rewritten
+  into a validated commit.
+- Writer exclusion now uses a crash-released SQLite transaction instead of a
+  stale-directory protocol; cancellation is polled by the exact foreground
+  owner, persisted PIDs are never signalling authority, and delayed exits clear
+  active attempts only through compare-and-swap.
+- Named OCI verifier containers are force-removed under an independent cleanup
+  deadline after success, failure, timeout, output exhaustion, or cancellation.
 
 ### Security
 
@@ -42,3 +76,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   fail closed; scan digests include Git hazard and truncation state. Git config
   syntax and linked-worktree metadata now fail closed at their parsing and
   indirection boundaries, and explicit tool overrides must be absolute.
+- Candidate building is restricted to an exact-base disposable worktree and
+  approved paths. Tracked symlinks and configured sensitive paths are rejected
+  before builder access; Git hooks and transforming attributes are disabled or
+  blocked. Required verification runs without network under resource bounds,
+  process-group cancellation escalates across signal-ignoring descendants, and
+  public runtime output excludes host worktree paths and frozen context
+  contents.
+- Codex invocations ignore ambient execution rules, and OCI verification uses a
+  clean read-only candidate workspace so uncommitted ignored artifacts cannot
+  affect promotion evidence.

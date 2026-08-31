@@ -14,4 +14,18 @@ export {
 export { MillError, ExitCode } from "./errors.js";
 export { inspectPrd, type PrdInspection } from "./intake/prd.js";
 export { scanRepository, type RepositoryScan } from "./repository/scan.js";
+export {
+  cancelRun,
+  codexAuthStatus,
+  qualifyBaseline,
+  resumeRun,
+  reviewRun,
+  runStatus,
+  startLocalRun,
+  stateBackup,
+  statePurge,
+  stateRestore,
+  supportBundle,
+  verifyRun,
+} from "./runtime/lifecycle.js";
 export { MILL_PACKAGE, MILL_VERSION } from "./version.js";

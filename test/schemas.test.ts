@@ -73,13 +73,81 @@ const samples = {
     repositoryId: "123e4567-e89b-12d3-a456-426614174000",
     trustCeiling: "inspect",
     commands: {
-      test: { argv: ["npm", "test"], cwd: ".", capability: "test" },
+      test: {
+        argv: ["npm", "test"],
+        cwd: ".",
+        controlPaths: ["package.json", "package-lock.json"],
+        capability: "test",
+      },
     },
   },
   millLock: {
     schemaVersion: "1",
     mill: { package: "@davidahmann/mill", version: "0.0.0-development" },
     schemaDigests: {},
+  },
+  taskPacket: {
+    schemaVersion: "1",
+    id: "task-1",
+    title: "Implement one task",
+    objective: "Produce one bounded candidate.",
+    riskClass: "low",
+    baseRef: "HEAD",
+    authority: {
+      productContract: { path: "product/contract.yaml", digest },
+      scenarioSet: { path: "quality/scenarios.yaml", digest },
+      policy: { path: "WORKFLOW.md", digest },
+    },
+    contextPaths: ["src/index.ts"],
+    allowedPaths: ["src/**"],
+    commandIds: ["test"],
+    acceptance: [{ id: "A1", statement: "The test passes." }],
+    commit: {
+      message: "feat: implement task",
+      authorName: "Mill",
+      authorEmail: "mill@example.invalid",
+    },
+    budget: {
+      deadlineSeconds: 600,
+      maxOutputBytes: 1048576,
+      retryCount: 1,
+    },
+  },
+  contextManifest: {
+    schemaVersion: "1",
+    taskDigest: digest,
+    baseCommit: "a".repeat(40),
+    provider: "openai",
+    adapter: "codex-cli",
+    authOwner: "operator",
+    isolation: "attended-trusted-host",
+    modelIdentity: "provider-mutable",
+    included: [{ path: "src/index.ts", digest }],
+    excludedPatterns: [".env"],
+    disclosure: ["approved context"],
+  },
+  reviewResult: {
+    schemaVersion: "1",
+    candidateCommit: "a".repeat(40),
+    summary: "clean",
+    findings: [],
+  },
+  validationEvidence: {
+    schemaVersion: "1",
+    candidateCommit: "a".repeat(40),
+    verifierImage: `node@${digest}`,
+    network: "none",
+    commands: [
+      {
+        commandId: "test",
+        required: true,
+        status: "passed",
+        exitCode: 0,
+        durationMs: 10,
+        outputDigest: digest,
+      },
+    ],
+    passed: true,
   },
 } as const;
 
@@ -91,6 +159,10 @@ const schemaFiles = {
   outcomePlan: "outcome-plan.schema.json",
   millConfig: "mill-config.schema.json",
   millLock: "mill-lock.schema.json",
+  taskPacket: "task-packet.schema.json",
+  contextManifest: "context-manifest.schema.json",
+  reviewResult: "review-result.schema.json",
+  validationEvidence: "validation-evidence.schema.json",
 } as const;
 
 describe("compact schemas", () => {
@@ -108,6 +180,7 @@ describe("compact schemas", () => {
         return false;
       }
     });
+    ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
     for (const kind of Object.keys(
       schemaFiles,
     ) as (keyof typeof schemaFiles)[]) {
@@ -160,12 +233,46 @@ describe("compact schemas", () => {
     const configWithEmptyKey = {
       ...samples.millConfig,
       commands: {
-        "": { argv: ["npm"], cwd: ".", capability: "read" },
+        "": {
+          argv: ["npm"],
+          cwd: ".",
+          controlPaths: ["package.json"],
+          capability: "read",
+        },
       },
     };
     expect(millConfig(configWithEmptyKey)).toBe(false);
     expect(
       contractSchemas.millConfig.safeParse(configWithEmptyKey).success,
+    ).toBe(false);
+
+    const configWithArgumentGlob = {
+      ...samples.millConfig,
+      commands: {
+        test: {
+          ...samples.millConfig.commands.test,
+          argv: ["node", "--test", "test/**/*.test.ts"],
+          controlPaths: ["test/**"],
+        },
+      },
+    };
+    expect(millConfig(configWithArgumentGlob)).toBe(true);
+    expect(
+      contractSchemas.millConfig.safeParse(configWithArgumentGlob).success,
+    ).toBe(true);
+
+    const configWithUnsafeControlPath = {
+      ...samples.millConfig,
+      commands: {
+        test: {
+          ...samples.millConfig.commands.test,
+          controlPaths: ["../test"],
+        },
+      },
+    };
+    expect(millConfig(configWithUnsafeControlPath)).toBe(false);
+    expect(
+      contractSchemas.millConfig.safeParse(configWithUnsafeControlPath).success,
     ).toBe(false);
 
     const millLock = ajv.compile(
@@ -181,5 +288,23 @@ describe("compact schemas", () => {
     expect(contractSchemas.millLock.safeParse(lockWithEmptyKey).success).toBe(
       false,
     );
+  });
+
+  it("rejects option-like and whitespace-bearing Git base references", async () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
+    const validate = ajv.compile(
+      JSON.parse(
+        await readFile(path.join("schemas", "task-packet.schema.json"), "utf8"),
+      ),
+    );
+    for (const baseRef of ["--help", "HEAD main", "\tHEAD"]) {
+      const candidate = { ...samples.taskPacket, baseRef };
+      expect(validate(candidate), baseRef).toBe(false);
+      expect(
+        contractSchemas.taskPacket.safeParse(candidate).success,
+        baseRef,
+      ).toBe(false);
+    }
   });
 });
