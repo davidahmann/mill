@@ -3,8 +3,10 @@
 Mill is an experimental local-first software-delivery system for turning an
 approved product outcome into a tested, reviewed draft pull request.
 
-The project is pre-alpha. Wave 1 provides an installable source package, compact
-schemas, static PRD/repository inspection, and readiness diagnostics. The CLI is
+The project is pre-alpha. Wave 1 provides the installable source package,
+compact schemas, static PRD/repository inspection, and readiness diagnostics.
+Wave 2 adds an attended local path from one explicit task approval to an exact
+committed, OCI-validated, independently reviewed candidate. The CLI is
 `millctl`, published eventually as `@davidahmann/mill` to avoid collision with
 the existing `mill` command and npm package.
 
@@ -33,6 +35,51 @@ node dist/cli.js inspect --prd product/PRD.md
 node dist/cli.js adopt --scan-only
 ```
 
+## Run one attended local task
+
+A build-enabled downstream repository supplies `mill.yaml`, a task packet, and
+the product/scenario/policy files whose digests the task binds. First qualify
+the unchanged base and copy the returned `data.approvalDigest`; that digest is
+issued only for a passing baseline and binds the exact base, task, repository
+configuration, selected commands, and baseline evidence. Then approve and run
+that exact qualified input set. Qualification is executable build authority: an
+`inspect` trust ceiling rejects it before OCI discovery or command execution,
+and interruption terminates the foreground verifier and completes cleanup:
+
+```yaml
+commands:
+  test:
+    argv: ["npm", "test"]
+    cwd: "."
+    controlPaths: ["package.json", "package-lock.json", "test/**"]
+    capability: test
+    required: true
+    timeoutSeconds: 600
+    execution: oci
+```
+
+```sh
+node dist/cli.js --json qualify --baseline --task product/tasks/TASK.yaml
+node dist/cli.js --json run --task product/tasks/TASK.yaml \
+  --approve sha256:<digest-from-qualification> --attended
+node dist/cli.js --json verify --task product/tasks/TASK.yaml --run <run-id>
+node dist/cli.js --json review --task product/tasks/TASK.yaml --run <run-id>
+node dist/cli.js --json status --run <run-id>
+```
+
+`run` creates the candidate on a Mill-owned branch in a disposable worktree; it
+does not modify the operator checkout. `resume` reconciles an interrupted
+controller only when no recorded execution can still be active, or performs the
+one allowed review-repair pass. `cancel` records durable intent; the exact
+foreground lease owner polls that intent and terminates its own in-memory child
+group. Mill never signals a process from a persisted PID. Ambiguous orphaned
+execution state fails closed for attended reconciliation. `state backup`,
+`state restore`, `state purge`, and `support-bundle` provide explicit local
+recovery and redacted diagnostics. The unchanged exact candidate may retry one
+transient or invalid provider review; the durable per-candidate attempt budget
+prevents an unbounded token loop while still allowing the one reviewed repair
+generation.
+
 Use `--json` before the command for the stable machine-readable envelope.
 `--json --version` is machine-readable; help is human-only and combining it with
 `--json` returns a typed usage error. `doctor` and static adoption never execute
@@ -45,10 +92,41 @@ adoption validates normal and linked-worktree Git metadata, inspects common and
 worktree configuration, and blocks syntax it cannot classify without running
 repository-controlled commands.
 
+Codex build execution uses the operator's existing Codex login and provider
+billing. It is attended trusted-host execution: the builder receives an explicit
+`workspace-write` sandbox and `never` approval policy, so Mill cannot approve an
+escalation request. Workspace scope is checked before promotion, but Mill does
+not claim that the Codex process is isolated from the host, network, keychain,
+or unrelated files. Repository validation is separate: selected commands run in
+an already-present digest-pinned OCI image with no network, a read-only
+container root, dropped capabilities, bounded resources, deadlines, and bounded
+output. Mill never pulls the image implicitly. The candidate workspace is
+mounted read-only and ignored builder artifacts are removed before
+exact-candidate evidence is accepted. Each verifier command has a unique
+Mill-owned container name, and Mill force-removes that exact container under a
+fresh cleanup deadline before accepting evidence. Mill ignores operator Codex
+configuration, disables host skill search, and ignores ambient execution rules
+for builder/reviewer invocations; repository-local `AGENTS.md` instructions
+still apply. Provider usage is measured when Codex reports it, while currency
+cost is reported as unavailable rather than estimated. Completion events in the
+redacted support bundle preserve that source-qualified token evidence for the
+initial build, retries, repairs, and review.
+
+The builder can read the non-sensitive tracked files in its disposable worktree;
+`contextPaths` are frozen, read-only priority inputs, not a filesystem read ACL.
+They, `mill.yaml`, the active task, authority files, repository instructions,
+and each selected command's declared `controlPaths` cannot overlap task output
+scope or enter the candidate. `controlPaths` name the scripts, tests, manifests,
+or other repository files that define the selected command's acceptance oracle.
+Qualification therefore rejects tracked symlinks and any tracked path matched by
+`sensitivePaths`. Keep secrets and other excluded material untracked and outside
+the repository.
+
 ## Status
 
-Not published. No Codex execution, GitHub mutation, compatibility, containment,
-or release claim exists until its corresponding later-wave canary passes.
+Not published. Local attended delivery is implemented, but no GitHub mutation,
+hostile-host containment, release, or generalized stack-compatibility claim
+exists until its corresponding later-wave canary passes.
 
 ## License
 

@@ -59,7 +59,7 @@ export function isSupportedNodeVersion(version: string): boolean {
   return true;
 }
 
-async function executable(
+export async function findTrustedExecutable(
   name: string,
   root: string,
 ): Promise<string | undefined> {
@@ -146,7 +146,7 @@ async function tool(
   root: string,
   required: boolean,
 ): Promise<ToolStatus> {
-  const executablePath = await executable(name, root);
+  const executablePath = await findTrustedExecutable(name, root);
   if (executablePath === undefined) {
     return { name, required, available: false };
   }

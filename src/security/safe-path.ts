@@ -108,7 +108,10 @@ export async function safeReadText(
     if (
       !after.isFile() ||
       after.dev !== before.dev ||
-      after.ino !== before.ino
+      after.ino !== before.ino ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs ||
+      after.ctimeMs !== before.ctimeMs
     ) {
       throw new MillError(
         "FILE_CHANGED_DURING_READ",
@@ -116,7 +119,35 @@ export async function safeReadText(
         ExitCode.data,
       );
     }
+    if (after.size > maxBytes) {
+      throw new MillError(
+        "FILE_TOO_LARGE",
+        `File exceeds the ${maxBytes}-byte inspection limit: ${requestedPath}`,
+        ExitCode.data,
+      );
+    }
     const bytes = await handle.readFile();
+    if (bytes.byteLength > maxBytes) {
+      throw new MillError(
+        "FILE_TOO_LARGE",
+        `File exceeds the ${maxBytes}-byte inspection limit: ${requestedPath}`,
+        ExitCode.data,
+      );
+    }
+    const final = await handle.stat();
+    if (
+      final.dev !== after.dev ||
+      final.ino !== after.ino ||
+      final.size !== after.size ||
+      final.mtimeMs !== after.mtimeMs ||
+      final.ctimeMs !== after.ctimeMs
+    ) {
+      throw new MillError(
+        "FILE_CHANGED_DURING_READ",
+        `File identity changed during inspection: ${requestedPath}`,
+        ExitCode.data,
+      );
+    }
     try {
       return strictUtf8Decoder.decode(bytes);
     } catch (error) {

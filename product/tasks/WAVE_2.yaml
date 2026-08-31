@@ -1,0 +1,160 @@
+task_id: mill-wave-2-local-delivery
+status: active
+objective: >-
+  Turn one explicitly approved task packet into an exact lifecycle-owned local
+  commit in a disposable worktree, validate it through declared OCI commands,
+  and obtain a fresh read-only Codex review without any remote mutation.
+risk_class: high
+support_decision:
+  host: macOS-arm64
+  builder_mode: attended-trusted-host
+  builder_claim: >-
+    Codex workspace-write sandboxing with a never-approve policy plus post-run
+    repository integrity checks; no claim of preventing unrelated host,
+    keychain, credential, or network access
+  codex_auth: operator personal ChatGPT session in the operator-owned Codex home
+  verifier_mode: oci
+  verifier_image: >-
+    node@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+  verifier_network: none
+design_decisions:
+  - Node 24 built-in SQLite is accepted for pre-alpha operational state under
+    the exact runtime pin
+  - one foreground control-plane process and one active writer per repository
+  - baseline approval is recorded only after success and binds the exact base,
+    canonical task and config, selected commands, and normalized evidence
+  - task packets select stable command IDs and cannot define executable argv
+  - selected commands declare immutable control paths; task, config, authority,
+    context, instruction, and command-control inputs cannot be candidate outputs
+  - the lifecycle commits before verification and review
+  - raw prompts, model event streams, command output, and credentials are not
+    durable state
+  - failed or skipped required commands block promotion
+allowed_paths:
+  - .github/dependabot.yml
+  - architecture/**
+  - docs/**
+  - product/**
+  - schemas/**
+  - scripts/**
+  - src/**
+  - test/**
+  - AGENTS.md
+  - CHANGELOG.md
+  - README.md
+  - WORKFLOW.md
+  - package.json
+  - package-lock.json
+  - vitest.config.ts
+forbidden_paths:
+  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - .env*
+  - .mill/**
+  - .github/workflows/release.yml
+acceptance_items:
+  - W2-A1 exact task approval, base, policy, scenario, context, and command
+    identities are bound
+  - W2-A2 schema-versioned SQLite transitions and append-only redacted events
+    are transactional
+  - W2-A3 state paths and files are user-only with backup, recovery, retention,
+    purge, and support export
+  - W2-A4 dirty checkout, concurrent writer, hostile Git metadata, tracked
+    sensitive paths, path escape, and symlink escape fail closed
+  - W2-A5 builder runs only in a disposable exact-base worktree, cannot change
+    task command definitions, and cannot request automatic approval escalation
+  - W2-A6 lifecycle creates a local commit before exact-candidate validation and
+    review
+  - W2-A7 OCI preflight and required commands run without network under one
+    caller-owned absolute deadline and bounded output
+  - W2-A8 cancellation terminates process descendants and leaves a truthful
+    resumable checkpoint
+  - W2-A8a writer ownership is atomic and crash-released; stored PIDs are never
+    external signalling authority and ambiguous orphan state fails closed
+  - W2-A8b every named OCI verifier container is explicitly removed before
+    evidence finalization, including timeout and cancellation paths
+  - W2-A9 fresh read-only Codex review preserves structured findings and binds
+    the exact candidate
+  - W2-A10 one systemic repair invalidates prior evidence and recurring
+    protected findings block
+  - W2-A11 normal, negative-control, cancellation, crash, drift, dirty, and
+    dependency-outage scenarios pass
+  - W2-A12 no Mill path pushes, opens a PR, merges, deploys, or claims
+    hostile-host containment
+  - W2-A13 automated dependency updates preserve the qualified Node and
+    TypeScript major boundaries
+  - W2-A14 successful baseline qualification records and returns the exact
+    approval digest required by the attended run command; failed or stale
+    qualification grants no authority, inspect-only trust executes nothing, and
+    interruption terminates and cleans up the verifier
+commands_in_scope:
+  - auth status
+  - qualify --baseline
+  - run
+  - status
+  - verify
+  - review
+  - resume
+  - cancel
+  - state backup
+  - state restore
+  - state purge
+  - support-bundle
+validation_commands:
+  - npm run format:check
+  - npm run lint
+  - npm run typecheck
+  - npm test
+  - npm run test:coverage
+  - npm run test:package
+final_validation_commands:
+  - npm run check
+  - packed CLI disposable-repository lifecycle canary
+required_worker_chain:
+  - task-executor
+  - validation-gate
+  - code-review
+  - commit-push
+lifecycle_gates:
+  code_review_required: true
+  required_pr_ci: true
+  human_merge_required: true
+evidence_required:
+  - visible command results
+  - item-level acceptance and scenario results
+  - exact committed candidate validation and review
+  - clean-checkout packed-CLI canary
+scope_exclusions:
+  - push, PR, merge, deployment, or other forge mutation
+  - daemon, parallel workers, hosted state, or shared credentials
+  - generalized PRD compiler, stack research, bootstrap recipe, or retrofit
+    apply
+  - hostile-host containment claim for the Codex builder
+stop_conditions:
+  - Codex auth would need to be copied into a Mill-owned isolated home
+  - repository or model input can grant executable command authority
+  - a builder can alter the acceptance oracle without task authorization
+  - required validation or review is not bound to the exact clean commit
+  - cancellation cannot terminate the launched process group
+  - the same subsystem produces recurring P0/P1 review findings
+retry_budget: 1
+runtime_pins:
+  node: 24.20.0
+  npm: 11.x
+  typescript: 6.0.3
+  codex_cli_observed: 0.151.0-alpha.7.2
+  docker_observed: 29.7.2
+alignment_gate_ref: product/PRD.md
+plan_drift_policy_ref: WORKFLOW.md
+test_matrix_refs:
+  - docs/development.md#testing-matrix
+engineering_policy_refs:
+  - AGENTS.md#engineering-rules
+architecture_guidance_refs:
+  - architecture/ARCHITECTURE.md
+changelog_intent: add attended local delivery control plane
+versioning_impact: pre-alpha additive CLI and schema contracts
+migration_impact: initial operational-state schema only
+docs_sync_refs:
+  - README.md
+  - architecture/ARCHITECTURE.md
+  - docs/development.md

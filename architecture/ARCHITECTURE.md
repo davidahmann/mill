@@ -11,6 +11,21 @@ and exits to resumable state for long waits—there is no daemon.
 
 ## Boundaries
 
+The implemented Wave 2 boundary is:
+
+```text
+exact human-authored task + product/scenario/policy digests
+        -> passing exact-base qualification and explicit approval digest
+        -> disposable exact-base worktree
+        -> bounded Codex builder using operator authentication
+        -> lifecycle-owned clean local commit
+        -> selected digest-pinned OCI commands without network
+        -> fresh read-only Codex review of the exact verified commit
+        -> reviewed local candidate or one repair-and-revalidate cycle
+```
+
+The complete planned v1 boundary extends that path:
+
 ```text
 untrusted PRD/repo/web inputs
         -> source and product compiler (proposal only)
@@ -29,6 +44,51 @@ untrusted PRD/repo/web inputs
 The builder never receives forge/deployment authority. The shipper cannot create
 or amend the candidate commit. Product/oracle changes invalidate the candidate.
 Provider state is authoritative for external effects.
+
+In Wave 2, the qualification approval digest binds a passing baseline's exact
+base commit, canonical task and repository configuration, selected command
+definitions, and normalized evidence identity. The context manifest, candidate
+commit/tree, validation evidence, and review result are durably linked in
+repository-namespaced SQLite state. Public CLI results and support bundles omit
+the worktree path, context payload, prompts, raw model streams, command output,
+and credentials. Codex invocations ignore operator configuration and execution
+rules and disable host skill search to prevent globally installed workflows from
+silently changing task behavior or token use. They still use the operator-owned
+authentication home and honor repository-local instructions, so this is input
+control rather than host containment. `contextPaths` select frozen priority
+read-only context rather than limiting filesystem reads. The active task,
+`mill.yaml`, authority files, repository instructions, and selected-command
+`controlPaths` form the immutable oracle closure and cannot overlap candidate
+output scope. Build qualification rejects tracked symlinks and configured
+sensitive paths, Git replacement refs, and graft metadata before creating the
+worktree; lifecycle Git commands also disable replacement objects. Secrets must
+remain untracked and outside the repository.
+
+Baseline qualification is part of build authority, not static inspection. The
+runtime enforces the repository trust ceiling before OCI discovery or command
+execution. Verifier preflight and commands inherit the caller's same absolute
+deadline and foreground signal lifecycle, while safety cleanup alone retains its
+independent bounded deadline.
+
+## Local lifecycle and recovery
+
+Only one writer lease may mutate a repository namespace. The lease is a
+dedicated SQLite exclusive transaction: kernel ownership makes acquisition
+atomic and releases it on controller death, without stale-directory deletion or
+ABA races. Child processes run in their own process group with an absolute
+deadline and output cap. The persisted absolute run deadline is reused for
+verification, review, retry, repair, and resume; no checkpoint grants a fresh
+budget. An attempt ID plus PID, PGID, and process-start digest is diagnostic
+state, not signalling authority. Cancellation is durable state polled by the
+foreground lease owner, which terminates its own in-memory child; no command
+signals a stored PID. If the lease is free but a recorded process may still
+exist, resume and terminal cancellation fail closed for attended reconciliation.
+State events are append-only, backup restore validates SQLite integrity, schema,
+and required objects before atomic replacement, and purge requires every run to
+be terminal. A failed pre-build context setup removes its provisional worktree
+and branch. Review attempt budgets are scoped to an exact candidate generation,
+and repair reasserts the reviewed commit/tree before allowing writes. There is
+no background daemon or implicit retry.
 
 ## Core modules
 
@@ -53,12 +113,16 @@ before the call and reconciles unknown outcomes before retry.
 
 ## Containment claim
 
-Build/test commands should run in a pinned OCI environment where available.
-Codex initially runs in attended trusted-host mode using workspace-write
-sandboxing and promotion-time scope checks. Mill does not claim this prevents
-all host access. Stronger containment requires a separately qualified
-container/VM worker with controlled model authentication and no host-home,
-Docker-socket, keychain, or forge credential access.
+Selected verification commands run against a clean exact candidate in a
+digest-pinned OCI environment with no network, a read-only root and workspace,
+dropped capabilities, no-new-privileges, resource bounds, and no implicit image
+pull. Every command receives an opaque Mill-owned container name and evidence is
+withheld until an unconditional, separately bounded `docker rm --force`
+succeeds. Codex runs in attended trusted-host mode using workspace-write
+sandboxing and promotion-time Git scope and identity checks. Mill does not claim
+this prevents all host access. Stronger containment requires a separately
+qualified container/VM worker with controlled model authentication and no
+host-home, Docker-socket, keychain, or forge credential access.
 
 ## Release trust
 

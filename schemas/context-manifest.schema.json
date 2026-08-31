@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidahmann/mill/schemas/context-manifest.schema.json",
+  "title": "ContextManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "taskDigest",
+    "baseCommit",
+    "provider",
+    "adapter",
+    "authOwner",
+    "isolation",
+    "modelIdentity",
+    "included",
+    "excludedPatterns",
+    "disclosure"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "taskDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "provider": { "const": "openai" },
+    "adapter": { "const": "codex-cli" },
+    "authOwner": { "const": "operator" },
+    "isolation": { "const": "attended-trusted-host" },
+    "modelIdentity": { "const": "provider-mutable" },
+    "included": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "digest"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "excludedPatterns": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "disclosure": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

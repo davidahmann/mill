@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidahmann/mill/schemas/validation-evidence.schema.json",
+  "title": "ValidationEvidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "candidateCommit",
+    "verifierImage",
+    "network",
+    "commands",
+    "passed"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "verifierImage": {
+      "type": "string",
+      "pattern": "^[^@\\s]+@sha256:[a-f0-9]{64}$"
+    },
+    "network": { "const": "none" },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "required",
+          "status",
+          "exitCode",
+          "durationMs",
+          "outputDigest"
+        ],
+        "properties": {
+          "commandId": { "type": "string", "minLength": 1 },
+          "required": { "type": "boolean" },
+          "status": { "enum": ["passed", "failed", "blocked"] },
+          "exitCode": { "type": ["integer", "null"] },
+          "durationMs": { "type": "integer", "minimum": 0 },
+          "outputDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "reason": {
+            "enum": [
+              "HOST_EXECUTION_NOT_QUALIFIED",
+              "CANCELLED",
+              "DEADLINE_EXCEEDED",
+              "OUTPUT_BUDGET_EXCEEDED",
+              "NONZERO_EXIT"
+            ]
+          }
+        }
+      }
+    },
+    "passed": { "type": "boolean" }
+  }
+}
