@@ -38,7 +38,7 @@ function globals(program: Command): GlobalOptions {
   return program.opts<GlobalOptions>();
 }
 
-export function createProgram(io: CliIo): Command {
+export function createProgram(io: CliIo, jsonErrors = false): Command {
   const program = new Command();
   program
     .name("millctl")
@@ -49,7 +49,11 @@ export function createProgram(io: CliIo): Command {
     .exitOverride()
     .configureOutput({
       writeOut: (value) => io.stdout.write(value),
-      writeErr: (value) => io.stderr.write(value),
+      writeErr: (value) => {
+        if (!jsonErrors) {
+          io.stderr.write(value);
+        }
+      },
     });
 
   program
@@ -117,7 +121,29 @@ export function createProgram(io: CliIo): Command {
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
       const report = await scanRepository(root);
-      const blocked = report.gitConfigHazards.length > 0;
+      const blocked =
+        report.gitConfigHazards.length > 0 ||
+        report.truncatedDirectories.length > 0;
+      const reasons = [
+        ...(report.gitConfigHazards.length > 0
+          ? [
+              {
+                code: "UNSAFE_GIT_CONFIGURATION",
+                message:
+                  "Repository Git configuration requires human disposition.",
+              },
+            ]
+          : []),
+        ...(report.truncatedDirectories.length > 0
+          ? [
+              {
+                code: "SCAN_INCOMPLETE",
+                message:
+                  "Repository scan reached its depth limit and is incomplete.",
+              },
+            ]
+          : []),
+      ];
       emit(
         io,
         global.json === true,
@@ -126,21 +152,13 @@ export function createProgram(io: CliIo): Command {
           ok: !blocked,
           status: blocked ? "blocked" : "ok",
           data: report,
-          reasons: blocked
-            ? [
-                {
-                  code: "UNSAFE_GIT_CONFIGURATION",
-                  message:
-                    "Repository Git configuration requires human disposition.",
-                },
-              ]
-            : [],
+          reasons,
         }),
       );
       if (blocked) {
         throw new MillError(
-          "UNSAFE_GIT_CONFIGURATION",
-          "Repository Git configuration requires human disposition.",
+          reasons[0]?.code ?? "SCAN_INCOMPLETE",
+          reasons[0]?.message ?? "Repository scan is incomplete.",
           ExitCode.configuration,
           { resultAlreadyEmitted: true },
         );
@@ -156,7 +174,7 @@ export function createProgram(io: CliIo): Command {
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
-      if (!(options.kind in contractSchemas)) {
+      if (!Object.hasOwn(contractSchemas, options.kind)) {
         throw new MillError(
           "UNKNOWN_CONTRACT_KIND",
           `Unknown contract kind: ${options.kind}`,
@@ -166,8 +184,16 @@ export function createProgram(io: CliIo): Command {
       }
       const source = await safeReadText(root, options.file);
       const extension = path.extname(options.file).toLowerCase();
-      const raw: unknown =
-        extension === ".json" ? JSON.parse(source) : parseYaml(source);
+      let raw: unknown;
+      try {
+        raw = extension === ".json" ? JSON.parse(source) : parseYaml(source);
+      } catch (error) {
+        throw new MillError(
+          "INVALID_CONTRACT",
+          `Contract syntax is invalid: ${String(error)}`,
+          ExitCode.data,
+        );
+      }
       const parsed =
         contractSchemas[options.kind as ContractKind].safeParse(raw);
       if (!parsed.success) {
@@ -196,7 +222,8 @@ export async function runCli(
   argv: readonly string[],
   io: CliIo,
 ): Promise<number> {
-  const program = createProgram(io);
+  const jsonRequested = argv.includes("--json");
+  const program = createProgram(io, jsonRequested);
   try {
     await program.parseAsync(argv, { from: "user" });
     return ExitCode.ok;
@@ -207,6 +234,25 @@ export async function runCli(
         error.code === "commander.helpDisplayed"
       ) {
         return ExitCode.ok;
+      }
+      if (jsonRequested) {
+        emit(
+          io,
+          true,
+          commandResult({
+            command: program.args[0] ?? "millctl",
+            ok: false,
+            status: "error",
+            data: {},
+            reasons: [
+              {
+                code: "USAGE_ERROR",
+                message: error.message,
+                details: { commanderCode: error.code },
+              },
+            ],
+          }),
+        );
       }
       return ExitCode.usage;
     }

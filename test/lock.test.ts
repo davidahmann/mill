@@ -28,7 +28,7 @@ describe("exact version and safe path contracts", () => {
         await findRepositoryRoot(path.join(temporary.path, "nested", "path")),
       ).toBe(temporary.path);
       expect(exactInvocation("1.0.0")).toBe(
-        "npx --yes @davidahmann/mill@1.0.0 millctl",
+        "npx --yes @davidahmann/mill@1.0.0",
       );
     } finally {
       await temporary.cleanup();
@@ -76,7 +76,7 @@ describe("exact version and safe path contracts", () => {
         found: true,
         compatible: false,
         requiredVersion: "9.9.9",
-        invocation: "npx --yes @davidahmann/mill@9.9.9 millctl",
+        invocation: "npx --yes @davidahmann/mill@9.9.9",
       });
       await expect(enforceExactVersion(temporary.path)).rejects.toMatchObject({
         code: "MILL_VERSION_MISMATCH",
@@ -104,6 +104,18 @@ describe("exact version and safe path contracts", () => {
       });
     } finally {
       await Promise.all([root.cleanup(), outside.cleanup()]);
+    }
+  });
+
+  it("allows ordinary in-root names that begin with two dots", async () => {
+    const temporary = await temporaryDirectory("mill-safe-dotdot-name-");
+    try {
+      await writeFile(path.join(temporary.path, "..prd.md"), "# Product\n");
+      await expect(safeReadText(temporary.path, "..prd.md")).resolves.toBe(
+        "# Product\n",
+      );
+    } finally {
+      await temporary.cleanup();
     }
   });
 

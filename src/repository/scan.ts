@@ -1,4 +1,5 @@
-import { lstat, readdir } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { lstat, opendir } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalDigest } from "../contracts/canonical.js";
@@ -29,14 +30,8 @@ const documentationNames = new Set([
   "WORKFLOW.md",
 ]);
 const secretReferenceNames = [/^\.env(?:\.|$)/u, /secret/iu, /credential/iu];
-const gitHazards = [
-  /hooksPath\s*=/iu,
-  /fsmonitor\s*=/iu,
-  /textconv\s*=/iu,
-  /smudge\s*=/iu,
-  /clean\s*=/iu,
-  /pager\s*=/iu,
-];
+const maximumEntries = 5_000;
+const maximumDepth = 8;
 
 export interface ScanObservation {
   kind: "observed" | "inferred" | "missing" | "conflicting";
@@ -48,8 +43,10 @@ export interface ScanObservation {
 export interface RepositoryScan {
   root: string;
   digest: string;
+  entriesVisited: number;
   filesVisited: number;
   symlinksSkipped: readonly string[];
+  truncatedDirectories: readonly string[];
   manifests: readonly string[];
   documentation: readonly string[];
   workflows: readonly string[];
@@ -60,8 +57,67 @@ export interface RepositoryScan {
 }
 
 interface WalkState {
+  entries: number;
   files: string[];
   symlinks: string[];
+  truncatedDirectories: string[];
+}
+
+export interface ScanLimits {
+  maxDepth: number;
+  maxEntries: number;
+}
+
+function gitConfigHazards(source: string): string[] {
+  const hazards = new Set<string>();
+  let section = "";
+  for (const rawLine of source.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#") || line.startsWith(";")) {
+      continue;
+    }
+    const sectionMatch = /^\[\s*([^\s\]"]+)(?:\s+"[^"]*")?\s*\]$/u.exec(line);
+    if (sectionMatch !== null) {
+      section = (sectionMatch[1] ?? "").toLowerCase();
+      continue;
+    }
+    const assignment = /^([^=\s]+)\s*=\s*(.*)$/u.exec(line);
+    if (assignment === null || section === "") {
+      continue;
+    }
+    const key = (assignment[1] ?? "").toLowerCase();
+    const value = (assignment[2] ?? "").trim();
+    const qualified = `${section}.${key}`;
+    const executable =
+      (section === "include" && key === "path") ||
+      (section === "includeif" && key === "path") ||
+      (section === "core" &&
+        [
+          "askpass",
+          "editor",
+          "fsmonitor",
+          "hookspath",
+          "pager",
+          "sshcommand",
+        ].includes(key)) ||
+      (section === "credential" && key === "helper") ||
+      (section === "diff" && ["external", "textconv"].includes(key)) ||
+      (section === "filter" && ["clean", "process", "smudge"].includes(key)) ||
+      (section === "merge" && key === "driver") ||
+      (section === "gpg" && key === "program") ||
+      section === "pager" ||
+      (section === "interactive" && key === "difffilter") ||
+      (section === "sequence" && key === "editor") ||
+      (section === "difftool" && key === "cmd") ||
+      (section === "mergetool" && key === "cmd") ||
+      (section === "remote" && ["receivepack", "uploadpack"].includes(key)) ||
+      (section === "submodule" && key === "update") ||
+      (section === "alias" && value.startsWith("!"));
+    if (executable) {
+      hazards.add(qualified);
+    }
+  }
+  return [...hazards].sort();
 }
 
 async function walk(
@@ -69,22 +125,25 @@ async function walk(
   relative: string,
   state: WalkState,
   depth: number,
+  limits: ScanLimits,
 ): Promise<void> {
-  if (depth > 8) {
-    return;
-  }
   const absolute = path.join(root, relative);
-  const entries = await readdir(absolute, { withFileTypes: true });
-  for (const entry of entries.sort((left, right) =>
-    left.name.localeCompare(right.name),
-  )) {
-    if (state.files.length + state.symlinks.length >= 5_000) {
+  const directory = await opendir(absolute);
+  const entries: Dirent[] = [];
+  for await (const entry of directory) {
+    state.entries += 1;
+    if (state.entries > limits.maxEntries) {
       throw new MillError(
         "SCAN_BUDGET_EXCEEDED",
-        "Static scan exceeded the 5,000-entry budget.",
+        `Static scan exceeded the ${limits.maxEntries}-entry budget.`,
         ExitCode.data,
       );
     }
+    entries.push(entry);
+  }
+  for (const entry of entries.sort((left, right) =>
+    left.name.localeCompare(right.name),
+  )) {
     const child = path.join(relative, entry.name);
     const info = await lstat(path.join(root, child));
     if (info.isSymbolicLink()) {
@@ -93,7 +152,11 @@ async function walk(
     }
     if (info.isDirectory()) {
       if (!ignoredDirectories.has(entry.name)) {
-        await walk(root, child, state, depth + 1);
+        if (depth >= limits.maxDepth) {
+          state.truncatedDirectories.push(child);
+        } else {
+          await walk(root, child, state, depth + 1, limits);
+        }
       }
       continue;
     }
@@ -105,10 +168,26 @@ async function walk(
 
 export async function scanRepository(
   rootInput: string,
+  requestedLimits: Partial<ScanLimits> = {},
 ): Promise<RepositoryScan> {
   const root = path.resolve(rootInput);
-  const state: WalkState = { files: [], symlinks: [] };
-  await walk(root, ".", state, 0);
+  const limits: ScanLimits = {
+    maxDepth: Math.max(
+      0,
+      Math.min(maximumDepth, requestedLimits.maxDepth ?? maximumDepth),
+    ),
+    maxEntries: Math.max(
+      1,
+      Math.min(maximumEntries, requestedLimits.maxEntries ?? maximumEntries),
+    ),
+  };
+  const state: WalkState = {
+    entries: 0,
+    files: [],
+    symlinks: [],
+    truncatedDirectories: [],
+  };
+  await walk(root, ".", state, 0, limits);
   const files = state.files.sort();
   const manifests = files.filter((file) =>
     manifestNames.has(path.basename(file)),
@@ -123,19 +202,19 @@ export async function scanRepository(
     secretReferenceNames.some((pattern) => pattern.test(path.basename(file))),
   );
 
-  const gitConfigHazards: string[] = [];
+  let configurationDigest = "git_config_missing";
+  let configurationHazards: string[] = [];
   try {
     const gitConfig = await safeReadText(root, ".git/config", 512 * 1024);
-    for (const pattern of gitHazards) {
-      if (pattern.test(gitConfig)) {
-        gitConfigHazards.push(pattern.source);
-      }
-    }
+    configurationDigest = canonicalDigest(gitConfig);
+    configurationHazards = gitConfigHazards(gitConfig);
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes("ENOENT")) {
-      gitConfigHazards.push("git_config_unavailable_or_nonstandard");
+      configurationDigest = "git_config_unavailable_or_nonstandard";
+      configurationHazards.push("git_config_unavailable_or_nonstandard");
     }
   }
+  const truncatedDirectories = state.truncatedDirectories.sort();
 
   const observations: ScanObservation[] = [
     ...(manifests.length > 0
@@ -165,7 +244,7 @@ export async function scanRepository(
           },
         ]
       : []),
-    ...(gitConfigHazards.length > 0
+    ...(configurationHazards.length > 0
       ? [
           {
             kind: "conflicting" as const,
@@ -175,18 +254,38 @@ export async function scanRepository(
           },
         ]
       : []),
+    ...(truncatedDirectories.length > 0
+      ? [
+          {
+            kind: "conflicting" as const,
+            subject: "static_scan_incomplete_at_depth_limit",
+            sources: truncatedDirectories,
+            confidence: "high" as const,
+          },
+        ]
+      : []),
   ];
+
+  const digest = canonicalDigest({
+    configurationDigest,
+    configurationHazards,
+    files,
+    symlinks: state.symlinks.sort(),
+    truncatedDirectories,
+  });
 
   return {
     root: ".",
-    digest: canonicalDigest({ files, symlinks: state.symlinks.sort() }),
+    digest,
+    entriesVisited: state.entries,
     filesVisited: files.length,
     symlinksSkipped: state.symlinks.sort(),
+    truncatedDirectories,
     manifests,
     documentation,
     workflows,
     secretReferences,
-    gitConfigHazards,
+    gitConfigHazards: configurationHazards,
     observations,
     executableBaseline: "unverified",
   };

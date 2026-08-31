@@ -13,7 +13,7 @@ const result = spawnSync(
     "-c",
     "core.fsmonitor=false",
     "log",
-    "--format=%H%x00%B%x00",
+    "--format=%H%x00%ae%x00%B%x00",
     `${base}..${head}`,
   ],
   {
@@ -31,16 +31,25 @@ if (result.status !== 0) {
   throw new Error(`unable to read PR commits: ${result.stderr}`);
 }
 
-const fields = result.stdout.split("\0").filter(Boolean);
+const fields = result.stdout.replace(/\0\n?$/u, "").split(/\0\n?/u);
 const unsigned = [];
-for (let index = 0; index < fields.length; index += 2) {
+for (let index = 0; index < fields.length; index += 3) {
   const sha = fields[index] ?? "unknown";
-  const message = fields[index + 1] ?? "";
-  if (!/^Signed-off-by:\s+.+\s+<[^>]+>\s*$/imu.test(message)) {
+  const authorEmail = fields[index + 1] ?? "";
+  const message = fields[index + 2] ?? "";
+  const signoffs = [
+    ...message.matchAll(/^Signed-off-by:\s+.+\s+<([^>]+)>\s*$/gimu),
+  ];
+  if (
+    signoffs.length === 0 ||
+    !signoffs.some(
+      (match) => (match[1] ?? "").toLowerCase() === authorEmail.toLowerCase(),
+    )
+  ) {
     unsigned.push(sha);
   }
 }
 if (unsigned.length > 0) {
   throw new Error(`DCO sign-off missing from commits: ${unsigned.join(", ")}`);
 }
-process.stdout.write(`DCO check passed for ${fields.length / 2} commit(s)\n`);
+process.stdout.write(`DCO check passed for ${fields.length / 3} commit(s)\n`);

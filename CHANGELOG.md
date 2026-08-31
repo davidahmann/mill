@@ -29,9 +29,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- None.
+- Exact-version recovery, DCO parsing, per-job workflow bounds, JSON usage
+  errors, malformed-contract classification, Node readiness, and valid `..name`
+  paths now honor their documented contracts.
 
 ### Security
 
 - Static inspection rejects path escape, symlink targets, oversized inputs,
-  executable Git configuration, and repository-controlled command execution.
+  executable Git configuration, incomplete or over-budget trees, and
+  repository-controlled command execution. Scan digests include Git hazard and
+  truncation state.

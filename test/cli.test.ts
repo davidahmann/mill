@@ -70,7 +70,7 @@ describe("CLI contracts", () => {
           {
             code: "MILL_VERSION_MISMATCH",
             details: {
-              exactInvocation: "npx --yes @davidahmann/mill@1.2.3 millctl",
+              exactInvocation: "npx --yes @davidahmann/mill@1.2.3",
             },
           },
         ],
@@ -149,6 +149,50 @@ describe("CLI contracts", () => {
         ok: false,
         reasons: [{ code: "INVALID_CONTRACT" }],
       });
+
+      await writeFile(
+        path.join(temporary.path, "product", "malformed.json"),
+        "{not-json",
+      );
+      const malformed = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "validate-contract",
+            "--kind",
+            "productContract",
+            "--file",
+            "product/malformed.json",
+          ],
+          malformed.io,
+        ),
+      ).toBe(65);
+      expect(JSON.parse(malformed.stdout.join(""))).toMatchObject({
+        reasons: [{ code: "INVALID_CONTRACT" }],
+      });
+
+      const inheritedKind = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "validate-contract",
+            "--kind",
+            "constructor",
+            "--file",
+            "product/contract.yaml",
+          ],
+          inheritedKind.io,
+        ),
+      ).toBe(64);
+      expect(JSON.parse(inheritedKind.stdout.join(""))).toMatchObject({
+        reasons: [{ code: "UNKNOWN_CONTRACT_KIND" }],
+      });
     } finally {
       await temporary.cleanup();
     }
@@ -182,5 +226,18 @@ describe("CLI contracts", () => {
     expect(output.stderr.join("")).toContain(
       "mode must be inspect, build, or propose",
     );
+  });
+
+  it("keeps Commander usage failures machine-readable in JSON mode", async () => {
+    const output = capture();
+    expect(
+      await runCli(["--json", "doctor", "--mode", "invalid"], output.io),
+    ).toBe(64);
+    expect(output.stderr).toEqual([]);
+    expect(JSON.parse(output.stdout.join(""))).toMatchObject({
+      ok: false,
+      status: "error",
+      reasons: [{ code: "USAGE_ERROR" }],
+    });
   });
 });

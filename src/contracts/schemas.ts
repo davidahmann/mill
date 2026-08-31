@@ -2,6 +2,12 @@ import { z } from "zod";
 
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const versionSchema = z.string().min(1);
+const exactSemverSchema = z
+  .string()
+  .regex(
+    /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u,
+    "expected an exact semantic version",
+  );
 
 export const managedRepositorySchema = z.strictObject({
   schemaVersion: z.literal("1"),
@@ -93,7 +99,7 @@ export const millLockSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   mill: z.strictObject({
     package: z.literal("@davidahmann/mill"),
-    version: versionSchema,
+    version: exactSemverSchema,
     integrity: digestSchema.optional(),
   }),
   schemaDigests: z.record(z.string().min(1), digestSchema).default({}),

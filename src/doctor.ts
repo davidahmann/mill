@@ -29,6 +29,32 @@ export interface DoctorReport {
 }
 
 const searchDirectories = ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"];
+const minimumNodeVersion = [24, 20, 0] as const;
+
+export function isSupportedNodeVersion(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(version);
+  if (match === null) {
+    return false;
+  }
+  const current = match.slice(1, 4).map((part) => Number(part));
+  if (current.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  if (current[0] !== minimumNodeVersion[0]) {
+    return false;
+  }
+  for (let index = 1; index < minimumNodeVersion.length; index += 1) {
+    const actual = current[index] ?? 0;
+    const minimum = minimumNodeVersion[index] ?? 0;
+    if (actual > minimum) {
+      return true;
+    }
+    if (actual < minimum) {
+      return false;
+    }
+  }
+  return true;
+}
 
 async function executable(
   name: string,
@@ -99,11 +125,10 @@ export async function doctor(
 ): Promise<DoctorReport> {
   const root = await findRepositoryRoot(start);
   const runtimeVersion = process.versions.node;
-  const runtimeMajor = Number.parseInt(runtimeVersion.split(".")[0] ?? "0", 10);
   const runtime: ToolStatus = {
     name: "node",
     required: true,
-    available: runtimeMajor === 24,
+    available: isSupportedNodeVersion(runtimeVersion),
     executable: process.execPath,
     version: runtimeVersion,
   };

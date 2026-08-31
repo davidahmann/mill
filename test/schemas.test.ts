@@ -125,4 +125,24 @@ describe("compact schemas", () => {
       expect(contractSchemas[kind].safeParse(withUnknown).success).toBe(false);
     }
   });
+
+  it("rejects mutable or local Mill lock selectors in both validators", async () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validate = ajv.compile(
+      JSON.parse(
+        await readFile(path.join("schemas", "mill-lock.schema.json"), "utf8"),
+      ),
+    );
+    for (const version of ["latest", "^1.2.3", "file:../mill.tgz", "01.2.3"]) {
+      const candidate = {
+        schemaVersion: "1",
+        mill: { package: "@davidahmann/mill", version },
+      };
+      expect(validate(candidate), version).toBe(false);
+      expect(
+        contractSchemas.millLock.safeParse(candidate).success,
+        version,
+      ).toBe(false);
+    }
+  });
 });

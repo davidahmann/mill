@@ -55,8 +55,149 @@ describe("static repository scan", () => {
       ]);
       expect(scan.symlinksSkipped).toEqual(["linked-secret"]);
       expect(scan.gitConfigHazards).not.toHaveLength(0);
+      expect(scan.gitConfigHazards).toContain("core.hookspath");
       expect(scan.executableBaseline).toBe("unverified");
       await expect(access(marker)).rejects.toThrow();
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("classifies executable Git config and binds it into the report digest", async () => {
+    const temporary = await temporaryDirectory("mill-scan-config-");
+    try {
+      await mkdir(path.join(temporary.path, ".git"));
+      await writeFile(path.join(temporary.path, "package.json"), "{}\n");
+      await writeFile(path.join(temporary.path, ".git", "config"), "[core]\n");
+      const clean = await scanRepository(temporary.path);
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        '[diff "unsafe"]\n  external = /tmp/untrusted-helper\n',
+      );
+      const hazardous = await scanRepository(temporary.path);
+      expect(hazardous.gitConfigHazards).toContain("diff.external");
+      expect(hazardous.digest).not.toBe(clean.digest);
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("recognizes the supported executable Git configuration families", async () => {
+    const temporary = await temporaryDirectory("mill-scan-config-families-");
+    try {
+      await mkdir(path.join(temporary.path, ".git"));
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        [
+          "# every value is inert fixture text; Mill never executes it",
+          "[include]",
+          "  path = fixture",
+          '[includeIf "gitdir:fixture"]',
+          "  path = fixture",
+          "[core]",
+          "  askpass = fixture",
+          "  editor = fixture",
+          "  fsmonitor = fixture",
+          "  hooksPath = fixture",
+          "  pager = fixture",
+          "  sshCommand = fixture",
+          "[credential]",
+          "  helper = fixture",
+          '[diff "fixture"]',
+          "  external = fixture",
+          "  textconv = fixture",
+          '[filter "fixture"]',
+          "  clean = fixture",
+          "  process = fixture",
+          "  smudge = fixture",
+          '[merge "fixture"]',
+          "  driver = fixture",
+          "[gpg]",
+          "  program = fixture",
+          '[pager "fixture"]',
+          "  log = fixture",
+          "[interactive]",
+          "  diffFilter = fixture",
+          "[sequence]",
+          "  editor = fixture",
+          '[difftool "fixture"]',
+          "  cmd = fixture",
+          '[mergetool "fixture"]',
+          "  cmd = fixture",
+          '[remote "fixture"]',
+          "  receivepack = fixture",
+          "  uploadpack = fixture",
+          '[submodule "fixture"]',
+          "  update = fixture",
+          '[alias "fixture"]',
+          "  run = !fixture",
+          "",
+        ].join("\n"),
+      );
+      const scan = await scanRepository(temporary.path);
+      expect(scan.gitConfigHazards).toEqual([
+        "alias.run",
+        "core.askpass",
+        "core.editor",
+        "core.fsmonitor",
+        "core.hookspath",
+        "core.pager",
+        "core.sshcommand",
+        "credential.helper",
+        "diff.external",
+        "diff.textconv",
+        "difftool.cmd",
+        "filter.clean",
+        "filter.process",
+        "filter.smudge",
+        "gpg.program",
+        "include.path",
+        "includeif.path",
+        "interactive.difffilter",
+        "merge.driver",
+        "mergetool.cmd",
+        "pager.log",
+        "remote.receivepack",
+        "remote.uploadpack",
+        "sequence.editor",
+        "submodule.update",
+      ]);
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("counts directories against the entry budget", async () => {
+    const temporary = await temporaryDirectory("mill-scan-budget-");
+    try {
+      await mkdir(path.join(temporary.path, "one"));
+      await mkdir(path.join(temporary.path, "two"));
+      await expect(
+        scanRepository(temporary.path, { maxEntries: 1 }),
+      ).rejects.toMatchObject({ code: "SCAN_BUDGET_EXCEEDED" });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("reports rather than hides depth truncation", async () => {
+    const temporary = await temporaryDirectory("mill-scan-depth-");
+    try {
+      await mkdir(path.join(temporary.path, "one", "two"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(temporary.path, "one", "two", "package.json"),
+        "{}\n",
+      );
+      const scan = await scanRepository(temporary.path, { maxDepth: 0 });
+      expect(scan.truncatedDirectories).toEqual(["one"]);
+      expect(scan.observations).toContainEqual({
+        kind: "conflicting",
+        subject: "static_scan_incomplete_at_depth_limit",
+        sources: ["one"],
+        confidence: "high",
+      });
     } finally {
       await temporary.cleanup();
     }

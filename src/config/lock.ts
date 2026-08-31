@@ -48,7 +48,7 @@ export async function findRepositoryRoot(start: string): Promise<string> {
 }
 
 export function exactInvocation(version: string): string {
-  return `npx --yes ${MILL_PACKAGE}@${version} millctl`;
+  return `npx --yes ${MILL_PACKAGE}@${version}`;
 }
 
 export async function readLockStatus(root: string): Promise<LockStatus> {

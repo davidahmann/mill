@@ -3,7 +3,12 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { doctor, doctorReady, type DoctorReport } from "../src/doctor.js";
+import {
+  doctor,
+  doctorReady,
+  isSupportedNodeVersion,
+  type DoctorReport,
+} from "../src/doctor.js";
 import { temporaryDirectory } from "./helpers.js";
 
 describe("doctor", () => {
@@ -51,5 +56,13 @@ describe("doctor", () => {
       lock: { found: true, compatible: false },
     };
     expect(doctorReady(blocked)).toBe(false);
+  });
+
+  it("enforces the complete supported Node range", () => {
+    expect(isSupportedNodeVersion("24.19.9")).toBe(false);
+    expect(isSupportedNodeVersion("24.20.0")).toBe(true);
+    expect(isSupportedNodeVersion("24.21.0")).toBe(true);
+    expect(isSupportedNodeVersion("25.0.0")).toBe(false);
+    expect(isSupportedNodeVersion("not-a-version")).toBe(false);
   });
 });
