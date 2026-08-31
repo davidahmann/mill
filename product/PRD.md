@@ -1,8 +1,7 @@
 # Mill product requirements
 
-Status: approved foundation contract
-Owner: David Ahmann
-Last updated: 2026-08-31
+Status: approved foundation contract Owner: David Ahmann Last updated:
+2026-08-31
 
 ## Problem
 
@@ -70,4 +69,3 @@ self-modification.
 - Model output may vary; approved canonical bytes and exact candidates do not.
 - Required pending, skipped, stale, or flaky evidence does not count as pass.
 - Downstream repositories work without Mill.
-

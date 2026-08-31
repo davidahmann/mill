@@ -27,20 +27,20 @@ the same definitions.
 
 Only applicable tiers are active. A skipped required lane blocks promotion.
 
-| Tier | V1 posture | Examples |
-|---|---|---|
-| Unit | active | canonicalization, schema and transition rules |
-| Integration | active from Wave 2 | SQLite, worktree, process and adapter boundaries |
-| End-to-end | active from Wave 2 | packed CLI against disposable repositories |
-| Acceptance | active | exact task acceptance IDs |
-| Hardening | active by risk | hostile paths/config, cancellation, recovery |
-| Chaos | targeted | crash boundaries and external-effect ambiguity |
-| Performance | measured where relevant | budgets and bounded output |
-| Soak | deferred | only after routine unattended operation exists |
-| Contract | active | schemas, CLI JSON and exit codes |
-| UAT | active before public alpha | clean-machine founder journey |
-| Scenario | active | normal, exception, degradation, recovery, adversarial |
-| Cross-system | Wave 3+ | Codex, OCI and GitHub canaries |
+| Tier         | V1 posture                 | Examples                                              |
+| ------------ | -------------------------- | ----------------------------------------------------- |
+| Unit         | active                     | canonicalization, schema and transition rules         |
+| Integration  | active from Wave 2         | SQLite, worktree, process and adapter boundaries      |
+| End-to-end   | active from Wave 2         | packed CLI against disposable repositories            |
+| Acceptance   | active                     | exact task acceptance IDs                             |
+| Hardening    | active by risk             | hostile paths/config, cancellation, recovery          |
+| Chaos        | targeted                   | crash boundaries and external-effect ambiguity        |
+| Performance  | measured where relevant    | budgets and bounded output                            |
+| Soak         | deferred                   | only after routine unattended operation exists        |
+| Contract     | active                     | schemas, CLI JSON and exit codes                      |
+| UAT          | active before public alpha | clean-machine founder journey                         |
+| Scenario     | active                     | normal, exception, degradation, recovery, adversarial |
+| Cross-system | Wave 3+                    | Codex, OCI and GitHub canaries                        |
 
 ## Architecture questions
 
@@ -60,4 +60,3 @@ Before medium/high-risk code, answer:
 Run one architecture/threat pass before medium/high-risk implementation and one
 complete exact-candidate review after validation. Batch all actionable findings
 into one systemic repair. Recurring same-subsystem P1 findings return to design.
-

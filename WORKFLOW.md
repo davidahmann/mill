@@ -26,4 +26,3 @@ For each wave:
 Current Factory skills are optional maintainer-side bootstrap tools. Their
 prompts, profiles, artifacts, or state are not Mill runtime or product
 dependencies. Native repository commands remain sufficient and authoritative.
-

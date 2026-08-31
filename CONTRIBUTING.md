@@ -1,8 +1,8 @@
 # Contributing
 
 Mill is maintained by David Ahmann. Please discuss large changes before
-implementation and keep pull requests to one customer-visible or system
-outcome with tests and documentation.
+implementation and keep pull requests to one customer-visible or system outcome
+with tests and documentation.
 
 Every commit must include a Developer Certificate of Origin sign-off:
 
@@ -15,7 +15,6 @@ By signing off, you certify the Developer Certificate of Origin 1.1 at
 contributions. Run the complete native gate documented in `AGENTS.md` before
 opening a pull request.
 
-Be respectful, disclose generated/agent-assisted work, do not include secrets
-or private execution evidence, and follow the repository's authority and
-security boundaries.
-
+Be respectful, disclose generated/agent-assisted work, do not include secrets or
+private execution evidence, and follow the repository's authority and security
+boundaries.

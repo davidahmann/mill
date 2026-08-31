@@ -1,6 +1,7 @@
 # Mill delivery plan
 
 Status: active
+
 Owner: David Ahmann
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
@@ -18,4 +19,3 @@ Owner: David Ahmann
 Each item is one vertical delivery wave, not a bucket of microtasks. Later-wave
 choices close only before their wave. The current detailed task is in
 `product/tasks/`.
-

@@ -1,14 +1,13 @@
 # Mill architecture
 
-Status: approved foundation decision
-Last updated: 2026-08-31
+Status: approved foundation decision Last updated: 2026-08-31
 
 ## Form
 
 Mill is a TypeScript modular monolith on Node 24 LTS. It exposes the `millctl`
 CLI and stable JSON result envelopes. Operational state uses Node's SQLite API;
-durable product truth remains in Git. V1 runs one attended control-plane
-process and exits to resumable state for long waits—there is no daemon.
+durable product truth remains in Git. V1 runs one attended control-plane process
+and exits to resumable state for long waits—there is no daemon.
 
 ## Boundaries
 
@@ -27,9 +26,9 @@ untrusted PRD/repo/web inputs
         -> main-check observation and closure
 ```
 
-The builder never receives forge/deployment authority. The shipper cannot
-create or amend the candidate commit. Product/oracle changes invalidate the
-candidate. Provider state is authoritative for external effects.
+The builder never receives forge/deployment authority. The shipper cannot create
+or amend the candidate commit. Product/oracle changes invalidate the candidate.
+Provider state is authoritative for external effects.
 
 ## Core modules
 
@@ -48,9 +47,9 @@ candidate. Provider state is authoritative for external effects.
 
 Product truth and native commands come from the canonical Git revision.
 Operational state is keyed by repository UUID, canonical Git common directory,
-and run UUID. A fork, changed forge owner, lookalike remote, or second clone does
-not inherit `propose` authority. Every external mutation persists intent before
-the call and reconciles unknown outcomes before retry.
+and run UUID. A fork, changed forge owner, lookalike remote, or second clone
+does not inherit `propose` authority. Every external mutation persists intent
+before the call and reconciles unknown outcomes before retry.
 
 ## Containment claim
 
@@ -66,6 +65,5 @@ Docker-socket, keychain, or forge credential access.
 The first public artifact follows a genesis protocol: exact reviewed commit,
 pinned external/native builder, two fresh reproductions outside candidate
 control, artifact comparison, provenance verification, disposable canary, and
-explicit maintainer approval. Trusted release N qualifies N+1 beginning with
-the next release.
-
+explicit maintainer approval. Trusted release N qualifies N+1 beginning with the
+next release.

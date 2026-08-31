@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidahmann/mill/schemas/managed-repository.schema.json",
+  "title": "ManagedRepository",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "forgeHost",
+    "owner",
+    "repository",
+    "canonicalBranch",
+    "remoteName",
+    "remoteUrl",
+    "trustCeiling"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "id": { "type": "string", "format": "uuid" },
+    "forgeHost": { "type": "string", "minLength": 1 },
+    "owner": { "type": "string", "minLength": 1 },
+    "repository": { "type": "string", "minLength": 1 },
+    "canonicalBranch": { "type": "string", "minLength": 1 },
+    "remoteName": { "type": "string", "minLength": 1 },
+    "remoteUrl": { "type": "string", "format": "uri" },
+    "trustCeiling": { "enum": ["inspect", "build", "propose"] }
+  }
+}
