@@ -145,4 +145,41 @@ describe("compact schemas", () => {
       ).toBe(false);
     }
   });
+
+  it("keeps map-key constraints aligned between JSON and runtime schemas", async () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    ajv.addFormat(
+      "uuid",
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+    );
+    const millConfig = ajv.compile(
+      JSON.parse(
+        await readFile(path.join("schemas", "mill-config.schema.json"), "utf8"),
+      ),
+    );
+    const configWithEmptyKey = {
+      ...samples.millConfig,
+      commands: {
+        "": { argv: ["npm"], cwd: ".", capability: "read" },
+      },
+    };
+    expect(millConfig(configWithEmptyKey)).toBe(false);
+    expect(
+      contractSchemas.millConfig.safeParse(configWithEmptyKey).success,
+    ).toBe(false);
+
+    const millLock = ajv.compile(
+      JSON.parse(
+        await readFile(path.join("schemas", "mill-lock.schema.json"), "utf8"),
+      ),
+    );
+    const lockWithEmptyKey = {
+      ...samples.millLock,
+      schemaDigests: { "": `sha256:${"a".repeat(64)}` },
+    };
+    expect(millLock(lockWithEmptyKey)).toBe(false);
+    expect(contractSchemas.millLock.safeParse(lockWithEmptyKey).success).toBe(
+      false,
+    );
+  });
 });

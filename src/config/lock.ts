@@ -35,18 +35,25 @@ async function exists(candidate: string): Promise<boolean> {
 
 export async function findRepositoryRoot(start: string): Promise<string> {
   let current = path.resolve(start);
+  let nearestLock: string | undefined;
   for (let depth = 0; depth < 128; depth += 1) {
-    if (
-      (await exists(path.join(current, "mill.lock"))) ||
-      (await exists(path.join(current, ".git")))
-    ) {
+    if (await exists(path.join(current, ".git"))) {
       return current;
+    }
+    if (
+      nearestLock === undefined &&
+      (await exists(path.join(current, "mill.lock")))
+    ) {
+      nearestLock = current;
     }
     const parent = path.dirname(current);
     if (parent === current) {
-      return path.resolve(start);
+      return nearestLock ?? path.resolve(start);
     }
     current = parent;
+  }
+  if (nearestLock !== undefined) {
+    return nearestLock;
   }
   throw new MillError(
     "REPOSITORY_ROOT_DEPTH_EXCEEDED",

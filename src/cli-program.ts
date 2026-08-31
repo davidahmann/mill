@@ -48,7 +48,11 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     .option("--cwd <path>", "repository or directory to inspect", process.cwd())
     .exitOverride()
     .configureOutput({
-      writeOut: (value) => io.stdout.write(value),
+      writeOut: (value) => {
+        if (!jsonErrors) {
+          io.stdout.write(value);
+        }
+      },
       writeErr: (value) => {
         if (!jsonErrors) {
           io.stderr.write(value);

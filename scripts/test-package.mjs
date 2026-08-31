@@ -87,6 +87,24 @@ try {
   if (packageJson.scripts?.postinstall !== undefined) {
     throw new Error("packed package must not define postinstall");
   }
+  const schemaImport = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      'await import("@davidahmann/mill/schemas/mill-lock.schema.json", { with: { type: "json" } })',
+    ],
+    {
+      cwd: temporary,
+      encoding: "utf8",
+      timeout: 10_000,
+    },
+  );
+  if (schemaImport.status !== 0) {
+    throw new Error(
+      `packed schema import failed: ${schemaImport.stdout}${schemaImport.stderr}`,
+    );
+  }
   void consumer;
   process.stdout.write(`package smoke passed: ${packResult.filename}\n`);
 } finally {

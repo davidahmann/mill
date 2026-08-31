@@ -11,6 +11,7 @@
     "trustCeiling": { "enum": ["inspect", "build", "propose"] },
     "commands": {
       "type": "object",
+      "propertyNames": { "minLength": 1 },
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,

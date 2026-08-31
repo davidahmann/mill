@@ -35,6 +35,31 @@ describe("exact version and safe path contracts", () => {
     }
   });
 
+  it("uses the enclosing Git boundary instead of a nested lock", async () => {
+    const temporary = await temporaryDirectory("mill-root-authority-");
+    try {
+      const nested = path.join(temporary.path, "nested");
+      await mkdir(path.join(temporary.path, ".git"));
+      await mkdir(nested);
+      await writeFile(
+        path.join(temporary.path, "mill.lock"),
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "9.9.9"\n',
+      );
+      await writeFile(
+        path.join(nested, "mill.lock"),
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\n',
+      );
+
+      const root = await findRepositoryRoot(nested);
+      expect(root).toBe(temporary.path);
+      await expect(enforceExactVersion(root)).rejects.toMatchObject({
+        code: "MILL_VERSION_MISMATCH",
+      });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("accepts the running version and rejects malformed lock data", async () => {
     const temporary = await temporaryDirectory("mill-valid-lock-");
     try {

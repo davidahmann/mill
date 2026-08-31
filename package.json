@@ -18,7 +18,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./schemas/*.json": "./schemas/*.json"
   },
   "engines": {
     "node": ">=24.20.0 <25"

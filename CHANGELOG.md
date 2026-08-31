@@ -31,7 +31,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 - Exact-version recovery, DCO parsing, per-job workflow bounds, JSON usage
   errors, malformed-contract classification, operator-tool discovery, Node
-  readiness, and valid `..name` paths now honor their documented contracts.
+  readiness, valid `..name` paths, Git-root lock authority, JSON help isolation,
+  and runtime/JSON Schema parity now honor their documented contracts.
 
 ### Security
 

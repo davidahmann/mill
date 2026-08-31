@@ -258,6 +258,14 @@ describe("CLI contracts", () => {
       ok: false,
       reasons: [{ code: "USAGE_ERROR" }],
     });
+
+    const helpCommand = capture();
+    expect(await runCli(["--json", "help", "doctor"], helpCommand.io)).toBe(64);
+    expect(helpCommand.stderr).toEqual([]);
+    expect(JSON.parse(helpCommand.stdout.join(""))).toMatchObject({
+      ok: false,
+      reasons: [{ code: "USAGE_ERROR" }],
+    });
   });
 
   it("returns typed input errors without exposing absolute host paths", async () => {
