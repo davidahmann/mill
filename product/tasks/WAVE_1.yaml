@@ -1,0 +1,109 @@
+task_id: mill-wave-1-foundation
+objective: >-
+  Deliver an installable exact-version millctl foundation with compact schemas,
+  static PRD/repository inspection, truthful doctor output, native checks and
+  public OSS/release security foundations, without executing downstream code or
+  mutating downstream repositories or GitHub.
+risk_class: medium
+allowed_paths:
+  - .github/**
+  - architecture/**
+  - docs/**
+  - product/**
+  - schemas/**
+  - src/**
+  - test/**
+  - AGENTS.md
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+  - GOVERNANCE.md
+  - LICENSE
+  - README.md
+  - SECURITY.md
+  - SUPPORT.md
+  - WORKFLOW.md
+  - eslint.config.js
+  - package-lock.json
+  - package.json
+  - tsconfig.json
+  - vitest.config.ts
+  - .gitignore
+  - .prettierignore
+  - .prettierrc.json
+  - .tool-versions
+forbidden_paths:
+  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - .env*
+  - .mill/**
+acceptance_items:
+  - W1-A1 exact pinned installation and mill.lock mismatch refusal
+  - W1-A2 stable human and JSON CLI envelopes with typed exit reasons
+  - W1-A3 canonical serialization and digests for compact contracts
+  - W1-A4 hostile-safe static PRD and repository inspection
+  - W1-A5 doctor reports readiness without downstream code execution
+  - W1-A6 packed-package clean install and CLI smoke
+  - W1-A7 native CI/security/release foundations are least-privilege and pinned
+baseline_commands:
+  - git status --short
+red_first_commands:
+  - npm test
+validation_commands:
+  - npm run format:check
+  - npm run lint
+  - npm run typecheck
+  - npm test
+  - npm run test:coverage
+  - npm run test:package
+final_validation_commands:
+  - npm run check
+required_worker_chain:
+  - task-executor
+  - validation-gate
+  - code-review
+  - commit-push
+lifecycle_gates:
+  code_review_required: true
+  required_pr_ci: true
+  human_merge_required: true
+evidence_required:
+  - visible command results
+  - item-level acceptance results
+  - exact committed candidate review
+scope_exclusions:
+  - downstream writes or command execution
+  - Codex execution
+  - operational SQLite state
+  - remote provisioning or GitHub mutation by millctl
+  - automatic merge, deployment, daemon, recipes or PRD generation
+stop_conditions:
+  - authority or release identity becomes ambiguous
+  - a static inspection path can execute repository-controlled behavior
+  - required security or package check cannot run
+retry_budget: 3
+runtime_pins:
+  node: 24.20.0
+  npm: 11.x
+  typescript: 6.0.3
+  package: '@davidahmann/mill'
+alignment_gate_ref: product/PRD.md
+plan_drift_policy_ref: WORKFLOW.md
+factory_compatibility:
+  posture: bootstrap_operator_tooling_only
+  runtime_dependency: false
+test_matrix_refs:
+  - docs/development.md#testing-matrix
+coverage_policy_ref: docs/development.md#required-commands
+scanner_gates:
+  - GitHub CodeQL
+engineering_policy_refs:
+  - AGENTS.md#engineering-rules
+architecture_guidance_refs:
+  - architecture/ARCHITECTURE.md
+changelog_intent: create Unreleased entry for public CLI foundation
+versioning_impact: pre-alpha 0.1.0 foundation
+migration_impact: none
+docs_sync_refs:
+  - README.md
+  - docs/development.md
+  - product/PRD.md
+

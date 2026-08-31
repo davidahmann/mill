@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible Mill defect
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Redact source, credentials, prompts, and private logs.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Mill, Node, OS, Codex, Git, and gh versions
+    validations:
+      required: true
+

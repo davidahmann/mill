@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+.mill/
+TEMP_MILL_GREENFIELD_WORK_PLAN_*.md
+
