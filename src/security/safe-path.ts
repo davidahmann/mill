@@ -5,6 +5,7 @@ import path from "node:path";
 import { ExitCode, MillError } from "../errors.js";
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+const strictUtf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 export function isWithin(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
@@ -73,7 +74,17 @@ export async function safeReadText(
         ExitCode.data,
       );
     }
-    return await handle.readFile({ encoding: "utf8" });
+    const bytes = await handle.readFile();
+    try {
+      return strictUtf8Decoder.decode(bytes);
+    } catch (error) {
+      throw new MillError(
+        "INVALID_UTF8",
+        `Expected valid UTF-8 text: ${requestedPath}`,
+        ExitCode.data,
+        { cause: String(error) },
+      );
+    }
   } finally {
     await handle.close();
   }

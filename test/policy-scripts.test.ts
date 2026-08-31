@@ -17,6 +17,12 @@ function run(
   const result = spawnSync(executable, arguments_, {
     cwd,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+    },
     timeout: 10_000,
   });
   return {

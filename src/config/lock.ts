@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import path from "node:path";
 
 import { parse } from "yaml";
@@ -18,10 +18,18 @@ export interface LockStatus {
 
 async function exists(candidate: string): Promise<boolean> {
   try {
-    await access(candidate);
+    await lstat(candidate);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw new MillError(
+      "REPOSITORY_MARKER_UNREADABLE",
+      `Cannot inspect repository marker: ${candidate}`,
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
   }
 }
 
@@ -56,7 +64,17 @@ export async function readLockStatus(root: string): Promise<LockStatus> {
   if (!(await exists(lockPath))) {
     return { found: false, compatible: true };
   }
-  const source = await safeReadText(root, "mill.lock", 256 * 1024);
+  let source: string;
+  try {
+    source = await safeReadText(root, "mill.lock", 256 * 1024);
+  } catch (error) {
+    throw new MillError(
+      "INVALID_MILL_LOCK",
+      "mill.lock exists but is not a readable regular in-repository file.",
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
+  }
   let raw: unknown;
   try {
     raw = parse(source);

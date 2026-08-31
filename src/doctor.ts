@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, realpath } from "node:fs/promises";
+import { access, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -29,6 +29,9 @@ export interface DoctorReport {
 }
 
 const searchDirectories = ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"];
+const fixedToolPaths: Readonly<Record<string, readonly string[]>> = {
+  codex: ["/Applications/ChatGPT.app/Contents/Resources/codex"],
+};
 const minimumNodeVersion = [24, 20, 0] as const;
 
 export function isSupportedNodeVersion(version: string): boolean {
@@ -60,16 +63,47 @@ async function executable(
   name: string,
   root: string,
 ): Promise<string | undefined> {
-  for (const directory of searchDirectories) {
-    const candidate = path.join(directory, name);
+  const configured = process.env[`MILL_${name.toUpperCase()}_PATH`];
+  const pathDirectories = (process.env.PATH ?? "")
+    .split(path.delimiter)
+    .filter((directory) => path.isAbsolute(directory));
+  const candidates = [
+    ...(configured === undefined ? [] : [configured]),
+    ...searchDirectories.map((directory) => path.join(directory, name)),
+    ...pathDirectories.map((directory) => path.join(directory, name)),
+    ...(fixedToolPaths[name] ?? []),
+  ];
+  const canonicalRoot = await realpath(root);
+  for (const candidate of new Set(candidates)) {
     try {
       await access(candidate, constants.X_OK);
       const canonical = await realpath(candidate);
-      if (!isWithin(await realpath(root), canonical)) {
+      if (isWithin(canonicalRoot, canonical)) {
+        continue;
+      }
+      const information = await stat(canonical);
+      if (!information.isFile()) {
+        continue;
+      }
+      const fromFixedLocation =
+        searchDirectories.some(
+          (directory) => path.dirname(candidate) === directory,
+        ) || (fixedToolPaths[name] ?? []).includes(candidate);
+      const owner = process.getuid?.();
+      const trustedDynamicCandidate =
+        (owner === undefined ||
+          information.uid === 0 ||
+          information.uid === owner) &&
+        (information.mode & 0o022) === 0;
+      if (
+        fromFixedLocation ||
+        candidate === configured ||
+        trustedDynamicCandidate
+      ) {
         return canonical;
       }
     } catch {
-      // Try the next trusted host directory.
+      // Try the next configured or trusted host candidate.
     }
   }
   return undefined;
@@ -85,7 +119,9 @@ function versionOf(
       HOME: "/var/empty",
       LANG: "C",
       LC_ALL: "C",
-      PATH: searchDirectories.join(path.delimiter),
+      PATH: [path.dirname(executablePath), ...searchDirectories].join(
+        path.delimiter,
+      ),
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_OPTIONAL_LOCKS: "0",

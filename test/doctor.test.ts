@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -64,5 +64,31 @@ describe("doctor", () => {
     expect(isSupportedNodeVersion("24.21.0")).toBe(true);
     expect(isSupportedNodeVersion("25.0.0")).toBe(false);
     expect(isSupportedNodeVersion("not-a-version")).toBe(false);
+  });
+
+  it("accepts an explicit non-repository Codex executable", async () => {
+    const repository = await temporaryDirectory("mill-doctor-repo-");
+    const tools = await temporaryDirectory("mill-doctor-tools-");
+    const previous = process.env.MILL_CODEX_PATH;
+    try {
+      await mkdir(path.join(repository.path, ".git"));
+      const codex = path.join(tools.path, "codex");
+      await writeFile(codex, "#!/bin/sh\nprintf 'codex-cli fixture\\n'\n");
+      await chmod(codex, 0o755);
+      process.env.MILL_CODEX_PATH = codex;
+      const report = await doctor(repository.path, "build");
+      expect(report.tools.find((tool) => tool.name === "codex")).toMatchObject({
+        available: true,
+        executable: await realpath(codex),
+        required: true,
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.MILL_CODEX_PATH;
+      } else {
+        process.env.MILL_CODEX_PATH = previous;
+      }
+      await Promise.all([repository.cleanup(), tools.cleanup()]);
+    }
   });
 });

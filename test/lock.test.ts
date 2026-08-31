@@ -64,6 +64,19 @@ describe("exact version and safe path contracts", () => {
     }
   });
 
+  it("fails closed when a mill.lock marker is a dangling symlink", async () => {
+    const temporary = await temporaryDirectory("mill-dangling-lock-");
+    try {
+      await symlink("missing-lock", path.join(temporary.path, "mill.lock"));
+      await expect(readLockStatus(temporary.path)).rejects.toMatchObject({
+        code: "INVALID_MILL_LOCK",
+        exitCode: 78,
+      });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("refuses a mismatched mill.lock with an exact invocation", async () => {
     const temporary = await temporaryDirectory("mill-lock-");
     try {
@@ -140,6 +153,21 @@ describe("exact version and safe path contracts", () => {
       });
     } finally {
       await Promise.all([root.cleanup(), outside.cleanup()]);
+    }
+  });
+
+  it("rejects malformed UTF-8 instead of hashing replacement text", async () => {
+    const temporary = await temporaryDirectory("mill-safe-utf8-");
+    try {
+      await writeFile(
+        path.join(temporary.path, "invalid.md"),
+        Buffer.from([0x80]),
+      );
+      await expect(
+        safeReadText(temporary.path, "invalid.md"),
+      ).rejects.toMatchObject({ code: "INVALID_UTF8" });
+    } finally {
+      await temporary.cleanup();
     }
   });
 });

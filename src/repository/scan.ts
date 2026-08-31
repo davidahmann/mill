@@ -96,6 +96,7 @@ function gitConfigHazards(source: string): string[] {
           "askpass",
           "editor",
           "fsmonitor",
+          "gitproxy",
           "hookspath",
           "pager",
           "sshcommand",
@@ -115,9 +116,57 @@ function gitConfigHazards(source: string): string[] {
       (section === "alias" && value.startsWith("!"));
     if (executable) {
       hazards.add(qualified);
+    } else if (!isAllowedStaticGitConfig(section, key, value)) {
+      hazards.add(`unclassified_git_config:${qualified}`);
     }
   }
   return [...hazards].sort();
+}
+
+function isAllowedStaticGitConfig(
+  section: string,
+  key: string,
+  value: string,
+): boolean {
+  if (section === "core") {
+    return [
+      "bare",
+      "filemode",
+      "ignorecase",
+      "logallrefupdates",
+      "precomposeunicode",
+      "repositoryformatversion",
+      "worktree",
+    ].includes(key);
+  }
+  if (section === "remote") {
+    if (key === "fetch") {
+      return true;
+    }
+    if (key === "url" || key === "pushurl") {
+      return !value.toLowerCase().startsWith("ext::");
+    }
+    return false;
+  }
+  if (section === "branch") {
+    return ["merge", "pushremote", "remote", "vscode-merge-base"].includes(key);
+  }
+  if (section === "extensions") {
+    return [
+      "objectformat",
+      "partialclone",
+      "preciousobjects",
+      "refstorage",
+      "worktreeconfig",
+    ].includes(key);
+  }
+  if (section === "submodule") {
+    return (
+      key === "active" ||
+      (key === "url" && !value.toLowerCase().startsWith("ext::"))
+    );
+  }
+  return section === "lfs" && key === "repositoryformatversion";
 }
 
 async function walk(

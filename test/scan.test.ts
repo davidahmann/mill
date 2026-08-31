@@ -98,6 +98,7 @@ describe("static repository scan", () => {
           "  askpass = fixture",
           "  editor = fixture",
           "  fsmonitor = fixture",
+          "  gitProxy = fixture",
           "  hooksPath = fixture",
           "  pager = fixture",
           "  sshCommand = fixture",
@@ -140,6 +141,7 @@ describe("static repository scan", () => {
         "core.askpass",
         "core.editor",
         "core.fsmonitor",
+        "core.gitproxy",
         "core.hookspath",
         "core.pager",
         "core.sshcommand",
@@ -161,6 +163,43 @@ describe("static repository scan", () => {
         "remote.uploadpack",
         "sequence.editor",
         "submodule.update",
+      ]);
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("allows ordinary repository identity config and blocks unknown keys", async () => {
+    const temporary = await temporaryDirectory(
+      "mill-scan-config-default-deny-",
+    );
+    try {
+      await mkdir(path.join(temporary.path, ".git"));
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        [
+          "[core]",
+          "  repositoryFormatVersion = 0",
+          "  fileMode = true",
+          '[remote "origin"]',
+          "  url = https://github.com/example/repository.git",
+          "  fetch = +refs/heads/*:refs/remotes/origin/*",
+          '[branch "main"]',
+          "  remote = origin",
+          "  merge = refs/heads/main",
+          "",
+        ].join("\n"),
+      );
+      await expect(scanRepository(temporary.path)).resolves.toMatchObject({
+        gitConfigHazards: [],
+      });
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        "[core]\n  unknownFutureKey = fixture\n",
+      );
+      const unknown = await scanRepository(temporary.path);
+      expect(unknown.gitConfigHazards).toEqual([
+        "unclassified_git_config:core.unknownfuturekey",
       ]);
     } finally {
       await temporary.cleanup();
