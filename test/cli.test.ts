@@ -228,6 +228,13 @@ describe("CLI contracts", () => {
     );
   });
 
+  it("treats the human help subcommand as a successful meta request", async () => {
+    const output = capture();
+    expect(await runCli(["help", "doctor"], output.io)).toBe(0);
+    expect(output.stderr).toEqual([]);
+    expect(output.stdout.join("")).toContain("Usage: millctl doctor");
+  });
+
   it("keeps Commander usage failures machine-readable in JSON mode", async () => {
     const output = capture();
     expect(

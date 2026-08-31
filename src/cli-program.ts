@@ -266,7 +266,8 @@ export async function runCli(
     if (error instanceof CommanderError) {
       if (
         error.code === "commander.version" ||
-        error.code === "commander.helpDisplayed"
+        error.code === "commander.helpDisplayed" ||
+        (!jsonRequested && error.code === "commander.help")
       ) {
         return ExitCode.ok;
       }

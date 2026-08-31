@@ -52,9 +52,6 @@ export async function findRepositoryRoot(start: string): Promise<string> {
     }
     current = parent;
   }
-  if (nearestLock !== undefined) {
-    return nearestLock;
-  }
   throw new MillError(
     "REPOSITORY_ROOT_DEPTH_EXCEEDED",
     "Repository-root search exceeded its path-depth budget.",

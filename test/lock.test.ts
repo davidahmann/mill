@@ -60,6 +60,29 @@ describe("exact version and safe path contracts", () => {
     }
   });
 
+  it("rejects a nested lock when Git-root discovery exhausts its budget", async () => {
+    const temporary = await temporaryDirectory("mill-root-depth-");
+    try {
+      await mkdir(path.join(temporary.path, ".git"));
+      let nested = temporary.path;
+      for (let depth = 0; depth < 129; depth += 1) {
+        nested = path.join(nested, "d");
+        await mkdir(nested);
+      }
+      await writeFile(
+        path.join(nested, "mill.lock"),
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\n',
+      );
+
+      await expect(findRepositoryRoot(nested)).rejects.toMatchObject({
+        code: "REPOSITORY_ROOT_DEPTH_EXCEEDED",
+        exitCode: 78,
+      });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("accepts the running version and rejects malformed lock data", async () => {
     const temporary = await temporaryDirectory("mill-valid-lock-");
     try {
