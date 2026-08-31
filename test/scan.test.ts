@@ -82,6 +82,93 @@ describe("static repository scan", () => {
     }
   });
 
+  it("fails closed on alternate Git syntax and ambiguous values", async () => {
+    const temporary = await temporaryDirectory("mill-scan-config-syntax-");
+    try {
+      await mkdir(path.join(temporary.path, ".git"));
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        [
+          "[core] # Git accepts a trailing section comment",
+          "  hooksPath = hooks",
+          '[remote "origin"]',
+          '  url = "ext::sh -c echo% injected"',
+          '[filter "fixture"]',
+          "  process",
+          "this is not understood config syntax",
+          "",
+        ].join("\n"),
+      );
+
+      const scan = await scanRepository(temporary.path);
+      expect(scan.gitConfigHazards).toContain("core.hookspath");
+      expect(scan.gitConfigHazards).toContain("filter.process");
+      expect(scan.gitConfigHazards).toContain(
+        "ambiguous_git_config_value:remote.url:line:4",
+      );
+      expect(scan.gitConfigHazards).toContain("unparseable_git_config_line:7");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("resolves validated linked-worktree metadata and inspects common config", async () => {
+    const temporary = await temporaryDirectory("mill-scan-worktree-");
+    const common = path.join(temporary.path, "main", ".git");
+    const worktree = path.join(temporary.path, "worktree");
+    const worktreeGit = path.join(common, "worktrees", "fixture");
+    try {
+      await mkdir(worktreeGit, { recursive: true });
+      await mkdir(worktree);
+      await writeFile(path.join(common, "config"), "[core]\n  bare = false\n");
+      await writeFile(path.join(worktree, ".git"), `gitdir: ${worktreeGit}\n`);
+      await writeFile(path.join(worktreeGit, "commondir"), "../..\n");
+      await writeFile(
+        path.join(worktreeGit, "gitdir"),
+        `${path.join(worktree, ".git")}\n`,
+      );
+      await writeFile(path.join(worktree, "package.json"), "{}\n");
+
+      const clean = await scanRepository(worktree);
+      expect(clean.gitConfigHazards).toEqual([]);
+      expect(clean.manifests).toEqual(["package.json"]);
+
+      await writeFile(
+        path.join(common, "config"),
+        "[core]\n  hooksPath = hooks\n",
+      );
+      const hazardous = await scanRepository(worktree);
+      expect(hazardous.gitConfigHazards).toContain("core.hookspath");
+      expect(hazardous.digest).not.toBe(clean.digest);
+
+      await writeFile(path.join(common, "config"), "[core]\n  bare = false\n");
+      await writeFile(
+        path.join(worktreeGit, "config.worktree"),
+        '[filter "fixture"]\n  process = fixture\n',
+      );
+      const worktreeHazard = await scanRepository(worktree);
+      expect(worktreeHazard.gitConfigHazards).toContain("filter.process");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("fails closed on unvalidated linked-worktree metadata", async () => {
+    const temporary = await temporaryDirectory("mill-scan-bad-worktree-");
+    try {
+      await writeFile(
+        path.join(temporary.path, ".git"),
+        "gitdir: /not/a/validated/worktree\n",
+      );
+      const scan = await scanRepository(temporary.path);
+      expect(scan.gitConfigHazards).toEqual([
+        "git_config_unavailable_or_nonstandard",
+      ]);
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("recognizes the supported executable Git configuration families", async () => {
     const temporary = await temporaryDirectory("mill-scan-config-families-");
     try {

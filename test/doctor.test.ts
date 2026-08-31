@@ -91,4 +91,31 @@ describe("doctor", () => {
       await Promise.all([repository.cleanup(), tools.cleanup()]);
     }
   });
+
+  it("fails closed on a relative explicit tool override", async () => {
+    const repository = await temporaryDirectory("mill-doctor-relative-repo-");
+    const tools = await temporaryDirectory("mill-doctor-relative-tools-");
+    const previous = process.env.MILL_GIT_PATH;
+    try {
+      await mkdir(path.join(repository.path, ".git"));
+      const git = path.join(tools.path, "git");
+      await writeFile(git, "#!/bin/sh\nprintf 'fixture git\\n'\n");
+      await chmod(git, 0o755);
+      process.env.MILL_GIT_PATH = path.relative(process.cwd(), git);
+
+      const report = await doctor(repository.path, "inspect");
+      expect(report.tools.find((tool) => tool.name === "git")).toMatchObject({
+        available: false,
+        required: true,
+      });
+      expect(doctorReady(report)).toBe(false);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.MILL_GIT_PATH;
+      } else {
+        process.env.MILL_GIT_PATH = previous;
+      }
+      await Promise.all([repository.cleanup(), tools.cleanup()]);
+    }
+  });
 });

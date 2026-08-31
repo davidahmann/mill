@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { lstat, opendir } from "node:fs/promises";
+import { lstat, opendir, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalDigest } from "../contracts/canonical.js";
@@ -68,25 +68,80 @@ export interface ScanLimits {
   maxEntries: number;
 }
 
+interface NormalizedConfigLine {
+  source: string;
+  ambiguous: boolean;
+}
+
+interface GitConfigurationSnapshot {
+  digest: string;
+  hazards: string[];
+}
+
+function normalizeConfigLine(rawLine: string): NormalizedConfigLine {
+  let quoted = false;
+  let escaped = false;
+  let source = "";
+  for (const character of rawLine) {
+    if (escaped) {
+      source += character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      source += character;
+      escaped = true;
+      continue;
+    }
+    if (character === '"') {
+      quoted = !quoted;
+      source += character;
+      continue;
+    }
+    if (!quoted && (character === "#" || character === ";")) {
+      break;
+    }
+    source += character;
+  }
+  return { source: source.trim(), ambiguous: quoted || escaped };
+}
+
+function ambiguousValue(value: string): boolean {
+  return value.includes('"') || value.includes("\\");
+}
+
 function gitConfigHazards(source: string): string[] {
   const hazards = new Set<string>();
   let section = "";
-  for (const rawLine of source.split(/\r?\n/u)) {
-    const line = rawLine.trim();
+  const lines = source.split(/\r?\n/u);
+  for (const [index, rawLine] of lines.entries()) {
+    const lineNumber = index + 1;
+    const normalized = normalizeConfigLine(rawLine);
+    const line = normalized.source;
     if (line === "" || line.startsWith("#") || line.startsWith(";")) {
       continue;
     }
-    const sectionMatch = /^\[\s*([^\s\]"]+)(?:\s+"[^"]*")?\s*\]$/u.exec(line);
-    if (sectionMatch !== null) {
-      section = (sectionMatch[1] ?? "").toLowerCase();
+    if (normalized.ambiguous) {
+      hazards.add(`unparseable_git_config_line:${lineNumber}`);
+      section = "";
       continue;
     }
-    const assignment = /^([^=\s]+)\s*=\s*(.*)$/u.exec(line);
+    const sectionMatch =
+      /^\[\s*([A-Za-z0-9.-]+)(?:\s+"(?:[^"\\]|\\.)*")?\s*\]$/u.exec(line);
+    if (sectionMatch !== null) {
+      section = (sectionMatch[1] ?? "").split(".", 1)[0]?.toLowerCase() ?? "";
+      continue;
+    }
+    const assignment = /^([A-Za-z][A-Za-z0-9-]*)(?:\s*=\s*(.*))?$/u.exec(line);
     if (assignment === null || section === "") {
+      hazards.add(`unparseable_git_config_line:${lineNumber}`);
+      if (line.startsWith("[")) {
+        section = "";
+      }
       continue;
     }
     const key = (assignment[1] ?? "").toLowerCase();
-    const value = (assignment[2] ?? "").trim();
+    const value = (assignment[2] ?? "true").trim();
     const qualified = `${section}.${key}`;
     const executable =
       (section === "include" && key === "path") ||
@@ -113,14 +168,136 @@ function gitConfigHazards(source: string): string[] {
       (section === "mergetool" && key === "cmd") ||
       (section === "remote" && ["receivepack", "uploadpack"].includes(key)) ||
       (section === "submodule" && key === "update") ||
-      (section === "alias" && value.startsWith("!"));
+      section === "alias";
     if (executable) {
       hazards.add(qualified);
+    } else if (ambiguousValue(value)) {
+      hazards.add(`ambiguous_git_config_value:${qualified}:line:${lineNumber}`);
     } else if (!isAllowedStaticGitConfig(section, key, value)) {
       hazards.add(`unclassified_git_config:${qualified}`);
     }
   }
   return [...hazards].sort();
+}
+
+function isFileNotFound(error: unknown): boolean {
+  return error instanceof MillError && error.code === "FILE_NOT_FOUND";
+}
+
+async function optionalSafeRead(
+  root: string,
+  requestedPath: string,
+  maxBytes: number,
+): Promise<string | undefined> {
+  try {
+    return await safeReadText(root, requestedPath, maxBytes);
+  } catch (error) {
+    if (isFileNotFound(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function linkedWorktreeConfig(root: string): Promise<string[]> {
+  const pointer = await safeReadText(root, ".git", 16 * 1024);
+  const match = /^gitdir:\s*([^\r\n]+)\r?\n?$/u.exec(pointer);
+  if (match === null) {
+    throw new MillError(
+      "INVALID_GIT_WORKTREE_METADATA",
+      "Linked-worktree .git metadata is malformed.",
+      ExitCode.configuration,
+    );
+  }
+  const canonicalRoot = await realpath(root);
+  const gitDirectory = await realpath(
+    path.resolve(canonicalRoot, match[1]?.trim() ?? ""),
+  );
+  const gitDirectoryInfo = await lstat(gitDirectory);
+  if (!gitDirectoryInfo.isDirectory()) {
+    throw new MillError(
+      "INVALID_GIT_WORKTREE_METADATA",
+      "Linked-worktree Git directory is not a directory.",
+      ExitCode.configuration,
+    );
+  }
+  const commonReference = (
+    await safeReadText(gitDirectory, "commondir", 4 * 1024)
+  ).trim();
+  const commonDirectory = await realpath(
+    path.resolve(gitDirectory, commonReference),
+  );
+  const relativeGitDirectory = path.relative(commonDirectory, gitDirectory);
+  const components = relativeGitDirectory.split(path.sep);
+  if (
+    components.length !== 2 ||
+    components[0] !== "worktrees" ||
+    components[1] === ""
+  ) {
+    throw new MillError(
+      "INVALID_GIT_WORKTREE_METADATA",
+      "Linked-worktree Git directory is outside the common worktree registry.",
+      ExitCode.configuration,
+    );
+  }
+  const backReference = (
+    await safeReadText(gitDirectory, "gitdir", 16 * 1024)
+  ).trim();
+  if (
+    (await realpath(path.resolve(gitDirectory, backReference))) !==
+    (await realpath(path.join(canonicalRoot, ".git")))
+  ) {
+    throw new MillError(
+      "INVALID_GIT_WORKTREE_METADATA",
+      "Linked-worktree Git metadata does not point back to this checkout.",
+      ExitCode.configuration,
+    );
+  }
+  const commonConfig = await safeReadText(
+    commonDirectory,
+    "config",
+    512 * 1024,
+  );
+  const worktreeConfig = await optionalSafeRead(
+    gitDirectory,
+    "config.worktree",
+    512 * 1024,
+  );
+  return worktreeConfig === undefined
+    ? [commonConfig]
+    : [commonConfig, worktreeConfig];
+}
+
+async function readGitConfiguration(
+  root: string,
+): Promise<GitConfigurationSnapshot | undefined> {
+  let marker;
+  try {
+    marker = await lstat(path.join(root, ".git"));
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+  const sources = marker.isDirectory()
+    ? [await safeReadText(root, ".git/config", 512 * 1024)]
+    : marker.isFile()
+      ? await linkedWorktreeConfig(root)
+      : (() => {
+          throw new MillError(
+            "INVALID_GIT_METADATA",
+            "The .git marker is neither a directory nor a regular file.",
+            ExitCode.configuration,
+          );
+        })();
+  const hazards = [...new Set(sources.flatMap(gitConfigHazards))].sort();
+  return { digest: canonicalDigest(sources), hazards };
 }
 
 function isAllowedStaticGitConfig(
@@ -254,14 +431,14 @@ export async function scanRepository(
   let configurationDigest = "git_config_missing";
   let configurationHazards: string[] = [];
   try {
-    const gitConfig = await safeReadText(root, ".git/config", 512 * 1024);
-    configurationDigest = canonicalDigest(gitConfig);
-    configurationHazards = gitConfigHazards(gitConfig);
-  } catch (error) {
-    if (!(error instanceof Error) || !error.message.includes("ENOENT")) {
-      configurationDigest = "git_config_unavailable_or_nonstandard";
-      configurationHazards.push("git_config_unavailable_or_nonstandard");
+    const configuration = await readGitConfiguration(root);
+    if (configuration !== undefined) {
+      configurationDigest = configuration.digest;
+      configurationHazards = configuration.hazards;
     }
+  } catch {
+    configurationDigest = "git_config_unavailable_or_nonstandard";
+    configurationHazards.push("git_config_unavailable_or_nonstandard");
   }
   const truncatedDirectories = state.truncatedDirectories.sort();
 

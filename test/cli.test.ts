@@ -240,4 +240,44 @@ describe("CLI contracts", () => {
       reasons: [{ code: "USAGE_ERROR" }],
     });
   });
+
+  it("keeps JSON meta requests machine-readable", async () => {
+    const version = capture();
+    expect(await runCli(["--json", "--version"], version.io)).toBe(0);
+    expect(JSON.parse(version.stdout.join(""))).toMatchObject({
+      command: "version",
+      ok: true,
+      data: { version: "0.0.0-development" },
+    });
+
+    const help = capture();
+    expect(await runCli(["--json", "--help"], help.io)).toBe(64);
+    expect(help.stderr).toEqual([]);
+    expect(JSON.parse(help.stdout.join(""))).toMatchObject({
+      command: "millctl",
+      ok: false,
+      reasons: [{ code: "USAGE_ERROR" }],
+    });
+  });
+
+  it("returns typed input errors without exposing absolute host paths", async () => {
+    const temporary = await temporaryDirectory("mill-cli-missing-");
+    try {
+      const output = capture();
+      expect(
+        await runCli(
+          ["--json", "--cwd", temporary.path, "inspect", "--prd", "missing.md"],
+          output.io,
+        ),
+      ).toBe(65);
+      const source = output.stdout.join("");
+      expect(source).not.toContain(temporary.path);
+      expect(JSON.parse(source)).toMatchObject({
+        ok: false,
+        reasons: [{ code: "FILE_NOT_FOUND" }],
+      });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
 });

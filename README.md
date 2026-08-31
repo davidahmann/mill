@@ -34,10 +34,16 @@ node dist/cli.js adopt --scan-only
 ```
 
 Use `--json` before the command for the stable machine-readable envelope.
-`doctor` and static adoption never execute repository-controlled commands. Tool
-discovery accepts fixed system locations, trusted non-repository `PATH` entries,
-the macOS ChatGPT-bundled Codex, and explicit absolute `MILL_GIT_PATH`,
-`MILL_CODEX_PATH`, or `MILL_GH_PATH` overrides.
+`--json --version` is machine-readable; help is human-only and combining it with
+`--json` returns a typed usage error. `doctor` and static adoption never execute
+repository-controlled commands. Tool discovery accepts fixed system locations,
+trusted non-repository `PATH` entries, the macOS ChatGPT-bundled Codex, and
+explicit absolute `MILL_GIT_PATH`, `MILL_CODEX_PATH`, or `MILL_GH_PATH`
+overrides. An explicit override is exclusive, and a relative, missing, or
+unusable override blocks readiness rather than falling back silently. Static
+adoption validates normal and linked-worktree Git metadata, inspects common and
+worktree configuration, and blocks syntax it cannot classify without running
+repository-controlled commands.
 
 ## Status
 

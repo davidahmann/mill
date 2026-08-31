@@ -223,6 +223,37 @@ export async function runCli(
   io: CliIo,
 ): Promise<number> {
   const jsonRequested = argv.includes("--json");
+  if (jsonRequested && (argv.includes("--version") || argv.includes("-V"))) {
+    emit(
+      io,
+      true,
+      commandResult({
+        command: "version",
+        ok: true,
+        data: { version: MILL_VERSION },
+      }),
+    );
+    return ExitCode.ok;
+  }
+  if (jsonRequested && (argv.includes("--help") || argv.includes("-h"))) {
+    emit(
+      io,
+      true,
+      commandResult({
+        command: "millctl",
+        ok: false,
+        status: "error",
+        data: {},
+        reasons: [
+          {
+            code: "USAGE_ERROR",
+            message: "JSON mode does not support help output; omit --json.",
+          },
+        ],
+      }),
+    );
+    return ExitCode.usage;
+  }
   const program = createProgram(io, jsonRequested);
   try {
     await program.parseAsync(argv, { from: "user" });

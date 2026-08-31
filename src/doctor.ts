@@ -64,15 +64,20 @@ async function executable(
   root: string,
 ): Promise<string | undefined> {
   const configured = process.env[`MILL_${name.toUpperCase()}_PATH`];
+  if (configured !== undefined && !path.isAbsolute(configured)) {
+    return undefined;
+  }
   const pathDirectories = (process.env.PATH ?? "")
     .split(path.delimiter)
     .filter((directory) => path.isAbsolute(directory));
-  const candidates = [
-    ...(configured === undefined ? [] : [configured]),
-    ...searchDirectories.map((directory) => path.join(directory, name)),
-    ...pathDirectories.map((directory) => path.join(directory, name)),
-    ...(fixedToolPaths[name] ?? []),
-  ];
+  const candidates =
+    configured === undefined
+      ? [
+          ...searchDirectories.map((directory) => path.join(directory, name)),
+          ...pathDirectories.map((directory) => path.join(directory, name)),
+          ...(fixedToolPaths[name] ?? []),
+        ]
+      : [configured];
   const canonicalRoot = await realpath(root);
   for (const candidate of new Set(candidates)) {
     try {
