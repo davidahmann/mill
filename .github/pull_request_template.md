@@ -13,4 +13,3 @@
 - [ ] Agent-assisted work is disclosed where applicable.
 - [ ] Commits include DCO sign-off.
 - [ ] No credentials or private execution evidence are included.
-

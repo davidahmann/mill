@@ -1,0 +1,75 @@
+{
+  "name": "@davidahmann/mill",
+  "version": "0.0.0-development",
+  "description": "Local-first, repo-native software delivery from approved product intent to reviewed draft PRs.",
+  "license": "Apache-2.0",
+  "author": "David Ahmann",
+  "type": "module",
+  "bin": {
+    "millctl": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "schemas/",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=24.20.0 <25"
+  },
+  "packageManager": "npm@11.19.0",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node scripts/clean.mjs",
+    "check:workflows": "node scripts/check-workflows.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:package": "npm run clean && npm run build && node scripts/test-package.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run check:workflows && npm run test:coverage && npm run test:package",
+    "prepack": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "commander": "15.0.0",
+    "yaml": "2.9.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.11",
+    "ajv": "8.20.0",
+    "eslint": "10.9.1",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidahmann/mill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/davidahmann/mill/issues"
+  },
+  "homepage": "https://github.com/davidahmann/mill#readme",
+  "keywords": [
+    "codex",
+    "software-factory",
+    "developer-tools",
+    "cli"
+  ]
+}

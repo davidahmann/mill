@@ -1,7 +1,6 @@
 # AGENTS.md — Mill repository contract
 
-Version: 1.0
-Status: normative
+Version: 1.0 Status: normative
 
 ## Mission
 
@@ -77,7 +76,6 @@ iteration, but skipped required checks block promotion.
 ## Stop conditions
 
 Stop rather than guess when authority, credential ownership, data disclosure,
-remote destination, destructive behavior, acceptance oracle, runtime version,
-or release identity is ambiguous; when a required check cannot run; or when the
+remote destination, destructive behavior, acceptance oracle, runtime version, or
+release identity is ambiguous; when a required check cannot run; or when the
 same subsystem produces recurring P0/P1 review findings.
-

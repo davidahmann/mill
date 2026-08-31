@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidahmann/mill/schemas/scenario-set.schema.json",
+  "title": "ScenarioSet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "productContractDigest", "scenarios"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "productContractDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "given", "when", "then", "oracleOwner"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": [
+              "normal",
+              "exception",
+              "degradation",
+              "recovery",
+              "authority",
+              "adversarial"
+            ]
+          },
+          "given": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "when": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "then": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "oracleOwner": { "enum": ["repository", "human", "external"] }
+        }
+      }
+    }
+  }
+}

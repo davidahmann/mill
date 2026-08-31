@@ -11,6 +11,7 @@ allowed_paths:
   - docs/**
   - product/**
   - schemas/**
+  - scripts/**
   - src/**
   - test/**
   - AGENTS.md
@@ -25,9 +26,10 @@ allowed_paths:
   - eslint.config.js
   - package-lock.json
   - package.json
-  - tsconfig.json
+  - tsconfig*.json
   - vitest.config.ts
   - .gitignore
+  - .node-version
   - .prettierignore
   - .prettierrc.json
   - .tool-versions
@@ -84,12 +86,16 @@ runtime_pins:
   node: 24.20.0
   npm: 11.x
   typescript: 6.0.3
-  package: '@davidahmann/mill'
+  package: "@davidahmann/mill"
 alignment_gate_ref: product/PRD.md
 plan_drift_policy_ref: WORKFLOW.md
 factory_compatibility:
   posture: bootstrap_operator_tooling_only
   runtime_dependency: false
+  installed_skill_preflight: >-
+    not applicable until a verified repo-local portable-pack profile exists;
+    Mill uses the same bounded worker sequence through native commands without
+    making Factory a product dependency
 test_matrix_refs:
   - docs/development.md#testing-matrix
 coverage_policy_ref: docs/development.md#required-commands
@@ -106,4 +112,3 @@ docs_sync_refs:
   - README.md
   - docs/development.md
   - product/PRD.md
-

@@ -28,4 +28,3 @@ body:
       label: Mill, Node, OS, Codex, Git, and gh versions
     validations:
       required: true
-
