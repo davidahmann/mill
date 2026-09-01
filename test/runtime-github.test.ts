@@ -97,7 +97,7 @@ else process.exit(2);
         adapter.createDraftPullRequest({
           config,
           branch: "mill/task",
-          title: "Draft",
+          title: "@/definitely-not-a-provider-input-file",
           body: "body",
           deadlineMs: Date.now() + 10_000,
         }),
@@ -135,6 +135,29 @@ else process.exit(2);
         .filter((args) => args.includes("--paginate"));
       expect(paginated).not.toHaveLength(0);
       expect(paginated.every((args) => args.includes("--slurp"))).toBe(true);
+      const createCall = calls
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[])
+        .find(
+          (args) =>
+            args.includes("--method") &&
+            args.includes("repos/example/app/pulls"),
+        );
+      expect(createCall).toBeDefined();
+      expect(
+        createCall?.filter((value) => value === "--raw-field"),
+      ).toHaveLength(4);
+      expect(createCall).toEqual(
+        expect.arrayContaining([
+          "title=@/definitely-not-a-provider-input-file",
+          "head=mill/task",
+          "base=main",
+          "body=body",
+          "--field",
+          "draft=true",
+        ]),
+      );
 
       const git = path.join(tools.path, "git");
       await writeFile(
@@ -295,9 +318,9 @@ import {readFileSync} from "node:fs";
 const mode=readFileSync(new URL("./mode",import.meta.url),"utf8").trim();
 if(mode==="call-failed")process.exit(3);if(mode==="invalid-json"){console.log("{");process.exit(0)}
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
-const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:mode==="bad-pull-state"?"unexpected":"open",draft:true,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
+const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:mode==="bad-pull-state"?"unexpected":"open",draft:mode==="bad-draft"?"true":true,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:mode==="bad-merged"?"false":false,merge_commit_sha:null,merged_by:null,merged_at:null};
 if(endpoint==="user")console.log(JSON.stringify({login:mode==="bad-login"?"":"operator",id:mode==="bad-actor"?0:7}));
-else if(endpoint==="repos/example/app")console.log(JSON.stringify(mode==="bad-repo"?[]:{node_id:"R_example",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:false}));
+else if(endpoint==="repos/example/app")console.log(JSON.stringify(mode==="bad-repo"?[]:{node_id:"R_example",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:mode==="bad-fork"?"false":false}));
 else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:{sha:mode==="bad-sha"?"bad":"${sha}"}}));
 else if(endpoint.includes("/pulls?"))console.log(JSON.stringify(mode==="bad-pages"?{}:mode==="bad-page"?[{}]:[[pull]]));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
@@ -314,7 +337,12 @@ else process.exit(2);
       const adapter = createGitHubAdapter(repository.path);
       const inspect = () =>
         adapter.inspect({ config, deadlineMs: Date.now() + 10_000 });
-      for (const invalidMode of ["bad-actor", "bad-login", "bad-repo"]) {
+      for (const invalidMode of [
+        "bad-actor",
+        "bad-login",
+        "bad-repo",
+        "bad-fork",
+      ]) {
         await writeFile(mode, invalidMode);
         await expect(inspect()).rejects.toMatchObject({
           code: "INVALID_GITHUB_RESPONSE",
@@ -328,7 +356,13 @@ else process.exit(2);
           deadlineMs: Date.now() + 10_000,
         }),
       ).rejects.toMatchObject({ code: "INVALID_GITHUB_RESPONSE" });
-      for (const invalidMode of ["bad-pull-state", "bad-pages", "bad-page"]) {
+      for (const invalidMode of [
+        "bad-pull-state",
+        "bad-draft",
+        "bad-merged",
+        "bad-pages",
+        "bad-page",
+      ]) {
         await writeFile(mode, invalidMode);
         await expect(
           adapter.findPullRequests({

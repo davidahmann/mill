@@ -70,8 +70,8 @@ iteration, but skipped required checks block promotion.
 
 - Default branch: `main`.
 - Work branches use `codex/` unless a task says otherwise.
-- Required checks and exact-head local review must settle before David marks a
-  draft ready and merges it.
+- Required checks and exact-head local review must settle before a human marks a
+  draft ready and David, the configured merger, merges it.
 - Use conventional commits and DCO sign-off.
 - Releases come only from immutable tags through trusted npm publishing with
   provenance. The first release follows the genesis qualification protocol.

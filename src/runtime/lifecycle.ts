@@ -1051,7 +1051,7 @@ export async function runStatus(input: {
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
     if (run === undefined) return {};
     let interrupted = false;
-    let reconciliationRequired = false;
+    let reconciliationRequired = run.status === "effect_unknown";
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
     if (

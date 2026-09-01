@@ -547,6 +547,7 @@ describe("exact-candidate GitHub draft delivery", () => {
         runStatus({ root: fixture.root, runId }),
       ).resolves.toMatchObject({
         run: { status: "effect_unknown", cancelRequested: true },
+        reconciliationRequired: true,
       });
       adapter.branchSha = candidateCommit;
       await expect(
@@ -972,6 +973,34 @@ describe("exact-candidate GitHub draft delivery", () => {
         runId,
         adapter,
       });
+      adapter.pushFailure = "before";
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
+      expect(adapter.pullRequest?.headSha).toBe(candidateCommit);
+      const reconciled = await reconcileDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(reconciled.run.status).toBe("proposing");
+      expect(reconciled.delivery.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "push",
+            status: "retryable_absent",
+            attemptCount: 1,
+          }),
+        ]),
+      );
       const reopened = await openDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,
@@ -981,7 +1010,7 @@ describe("exact-candidate GitHub draft delivery", () => {
         adapter,
       });
       expect(reopened.delivery.pullRequest?.number).toBe(41);
-      expect(adapter).toMatchObject({ pushCalls: 2, createCalls: 1 });
+      expect(adapter).toMatchObject({ pushCalls: 3, createCalls: 1 });
       const changesRequested = await observeDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,

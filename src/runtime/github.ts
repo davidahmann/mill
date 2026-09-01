@@ -193,6 +193,17 @@ function integer(value: unknown, label: string): number {
   return value as number;
 }
 
+function boolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new MillError(
+      "INVALID_GITHUB_RESPONSE",
+      `GitHub returned an invalid ${label}.`,
+      ExitCode.data,
+    );
+  }
+  return value;
+}
+
 function parsePullRequest(value: unknown): GitHubPullRequest {
   const item = object(value, "pull request");
   const head = object(item.head, "pull request head");
@@ -210,12 +221,12 @@ function parsePullRequest(value: unknown): GitHubPullRequest {
     nodeId: text(item.node_id, "pull request node ID"),
     url: text(item.html_url, "pull request URL"),
     state,
-    draft: item.draft === true,
+    draft: boolean(item.draft, "pull request draft flag"),
     body: typeof item.body === "string" ? item.body : "",
     headRef: text(head.ref, "pull request head ref"),
     headSha: assertSha(head.sha, "pull request head SHA"),
     baseRef: text(base.ref, "pull request base ref"),
-    merged: item.merged === true,
+    merged: boolean(item.merged, "pull request merged flag"),
     mergeCommitSha:
       item.merge_commit_sha === null
         ? null
@@ -425,7 +436,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       fullName: text(repository.full_name, "repository full name"),
       cloneUrl: text(repository.clone_url, "repository clone URL"),
       defaultBranch: text(repository.default_branch, "default branch"),
-      fork: repository.fork === true,
+      fork: boolean(repository.fork, "repository fork flag"),
     };
   }
 
@@ -592,13 +603,13 @@ class GhGitHubAdapter implements GitHubAdapter {
         "--method",
         "POST",
         `repos/${input.config.owner}/${input.config.repository}/pulls`,
-        "--field",
+        "--raw-field",
         `title=${input.title}`,
-        "--field",
+        "--raw-field",
         `head=${input.branch}`,
-        "--field",
+        "--raw-field",
         `base=${input.config.baseBranch}`,
-        "--field",
+        "--raw-field",
         `body=${input.body}`,
         "--field",
         "draft=true",

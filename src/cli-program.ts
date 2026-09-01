@@ -693,7 +693,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     });
   state
     .command("purge")
-    .description("remove terminal local state and disposable worktrees")
+    .description("remove purge-safe local state and disposable worktrees")
     .requiredOption(
       "--confirm <repository-id>",
       "exact repository UUID acknowledgement",

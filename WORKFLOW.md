@@ -21,7 +21,8 @@ For each wave:
 6. Run a complete exact-candidate local review and one systemic repair wave if
    necessary.
 7. Push the unchanged candidate, open/update one PR, and observe required CI.
-8. David marks ready and merges. Observe the resulting main commit and checks.
+8. A human may mark the draft ready; David, the configured merger, merges it.
+   Observe the resulting main commit and checks.
 
 Current Factory skills are optional maintainer-side bootstrap tools. Their
 prompts, profiles, artifacts, or state are not Mill runtime or product

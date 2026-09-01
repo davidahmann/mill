@@ -1156,10 +1156,10 @@ export async function reconcileDraftPr(input: {
       );
     }
     const effectAbsent =
-      readback.pullRequest === null &&
-      (unknownEffect.kind === "pull_request"
-        ? readback.branchSha === delivery.candidateCommit
-        : readback.branchSha === unknownEffect.expectedOldCommit);
+      unknownEffect.kind === "pull_request"
+        ? readback.pullRequest === null &&
+          readback.branchSha === delivery.candidateCommit
+        : readback.branchSha === unknownEffect.expectedOldCommit;
     if (effectAbsent) {
       return reconcileAbsentEffect(store, run, delivery, unknownEffect);
     }

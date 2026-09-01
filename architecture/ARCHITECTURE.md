@@ -119,11 +119,12 @@ still exist, resume and terminal cancellation fail closed for attended
 reconciliation. State events are append-only, backup restore validates SQLite
 integrity, schema, and required objects before atomic replacement. Restoring
 older state moves newer unreferenced Mill worktrees into a mode-restricted
-quarantine with a durable prepared/completed manifest; it never silently deletes
-them. Purge requires every run to be terminal. A failed pre-build context setup
-removes its provisional worktree and branch. Review attempt budgets are scoped
-to an exact candidate generation, and repair reasserts the reviewed commit/tree
-before allowing writes. There is no background daemon or implicit retry.
+quarantine. Its immutable recovery manifest records the database-swap commit
+point and exact moved paths; restore never silently deletes them. Purge requires
+every run to be reviewed or terminal. A failed pre-build context setup removes
+its provisional worktree and branch. Review attempt budgets are scoped to an
+exact candidate generation, and repair reasserts the reviewed commit/tree before
+allowing writes. There is no background daemon or implicit retry.
 
 ## Core modules
 

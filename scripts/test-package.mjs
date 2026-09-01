@@ -359,7 +359,7 @@ const read=(name)=>{try{return readFileSync(new URL(name,import.meta.url),"utf8"
 const remoteHead=()=>read("./remote-head");
 const pullPath=new URL("./pull-request.json",import.meta.url);
 const pull=()=>{const value=read("./pull-request.json");return value===null?null:JSON.parse(value)};
-const field=(name)=>{for(let index=0;index<args.length-1;index+=1){if(args[index]==="--field"&&args[index+1]?.startsWith(name+"="))return args[index+1].slice(name.length+1)}return null};
+const field=(name)=>{for(let index=0;index<args.length-1;index+=1){if((args[index]==="--field"||args[index]==="--raw-field")&&args[index+1]?.startsWith(name+"="))return args[index+1].slice(name.length+1)}return null};
 if(endpoint==="user")console.log(JSON.stringify({login:"package-operator",id:9}));
 else if(endpoint==="repos/example/app")console.log(JSON.stringify({node_id:"R_package_canary",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:false}));
 else if(args.includes("--method")&&endpoint==="repos/example/app/pulls"){
