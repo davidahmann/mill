@@ -3,12 +3,14 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
+import type * as Delivery from "../src/runtime/delivery.js";
+
 import { temporaryDirectory } from "./helpers.js";
 
 const finalizeDraftPr = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/runtime/delivery.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/runtime/delivery.js")>()),
+  ...(await importOriginal<typeof Delivery>()),
   finalizeDraftPr,
 }));
 
