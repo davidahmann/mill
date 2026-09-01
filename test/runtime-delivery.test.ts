@@ -1016,6 +1016,22 @@ describe("exact-candidate GitHub draft delivery", () => {
           reconciliationRequired: true,
         });
       }
+      adapter.branchSha = reviewed.run.candidateCommit;
+      adapter.pullRequest = {
+        ...priorPullRequest,
+        number: 42,
+        nodeId: "PR_replacement",
+        headSha: reviewed.run.candidateCommit,
+      };
+      await expect(
+        reconcileDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "PULL_REQUEST_IDENTITY_MISMATCH" });
+      adapter.branchSha = candidateCommit;
       adapter.pullRequest = priorPullRequest;
       const reconciled = await reconcileDraftPr({
         root: fixture.root,
@@ -1033,6 +1049,22 @@ describe("exact-candidate GitHub draft delivery", () => {
           }),
         ]),
       );
+      adapter.pullRequest = { ...priorPullRequest, draft: false };
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "PULL_REQUEST_IDENTITY_MISMATCH" });
+      expect(adapter).toMatchObject({
+        branchSha: candidateCommit,
+        pushCalls: 2,
+      });
+      adapter.pullRequest = priorPullRequest;
       const reopened = await openDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,

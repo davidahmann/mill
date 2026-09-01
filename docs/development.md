@@ -68,9 +68,10 @@ job with personal credentials. The realistic scenario set covers:
 - remote delivery through wrong-actor/fork/remote denial, stale approvals,
   expected-head pushes, effect-before-receipt recovery, unknown-effect blocking,
   cancellation before and during mutations, paginated exact-head inline and
-  top-level review feedback, one aggregated repair, unauthorized merger and
-  disallowed merge-shape rejection, merge-tree binding, and non-false-green
-  post-merge checks;
+  top-level review feedback, one aggregated repair, stable PR identity and
+  open-draft preflight before retry whether an ambiguous push is absent or
+  landed, unauthorized merger and disallowed merge-shape rejection, merge-tree
+  binding, and non-false-green post-merge checks;
 - hostile filesystem coverage for Docker bind paths containing commas without
   weakening read-only/no-network verification;
 - restore recovery through an immutable pre-commit quarantine manifest and a

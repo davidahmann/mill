@@ -420,7 +420,7 @@ function assertExactPullRequest(
   }
 }
 
-function assertPushRetryPullRequest(
+function assertPushBoundaryPullRequest(
   pullRequest: GitHubPullRequest | null,
   delivery: DeliveryRecord,
   expectedOldCommit: string | null,
@@ -430,7 +430,7 @@ function assertPushRetryPullRequest(
     if (pullRequest !== null) {
       throw new MillError(
         "PULL_REQUEST_IDENTITY_MISMATCH",
-        "An unrecorded pull request conflicts with the absent push readback.",
+        "An unrecorded pull request conflicts with the push boundary readback.",
         ExitCode.configuration,
       );
     }
@@ -447,7 +447,7 @@ function assertPushRetryPullRequest(
   ) {
     throw new MillError(
       "PULL_REQUEST_IDENTITY_MISMATCH",
-      "The recorded pull request is no longer the expected open draft at the prior candidate head.",
+      "The recorded pull request is no longer the expected open draft at the observed branch head.",
       ExitCode.configuration,
     );
   }
@@ -882,6 +882,25 @@ export async function openDraftPr(input: {
         "delivery.push_intent",
         { effectId: push.id },
       );
+      readback = await reconcileReadback({
+        adapter,
+        config,
+        delivery,
+        deadlineMs,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+      if (readback.branchSha !== push.expectedOldCommit) {
+        throw new MillError(
+          "REMOTE_BRANCH_CONFLICT",
+          "The Mill delivery branch changed after push intent and before the mutation boundary.",
+          ExitCode.configuration,
+        );
+      }
+      assertPushBoundaryPullRequest(
+        readback.pullRequest,
+        delivery,
+        push.expectedOldCommit,
+      );
       push = {
         ...push,
         status: "call_started",
@@ -1188,17 +1207,23 @@ export async function reconcileDraftPr(input: {
         ExitCode.data,
       );
     }
+    if (
+      unknownEffect.kind === "push" &&
+      (readback.branchSha === unknownEffect.expectedOldCommit ||
+        readback.branchSha === delivery.candidateCommit)
+    ) {
+      assertPushBoundaryPullRequest(
+        readback.pullRequest,
+        delivery,
+        readback.branchSha,
+      );
+    }
     let effectAbsent = false;
     if (unknownEffect.kind === "pull_request") {
       effectAbsent =
         readback.pullRequest === null &&
         readback.branchSha === delivery.candidateCommit;
     } else if (readback.branchSha === unknownEffect.expectedOldCommit) {
-      assertPushRetryPullRequest(
-        readback.pullRequest,
-        delivery,
-        unknownEffect.expectedOldCommit,
-      );
       effectAbsent = true;
     }
     if (effectAbsent) {

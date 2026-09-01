@@ -58,10 +58,14 @@ and intended effects. Only `pr open` mutates. Its effect journal records intent
 and call start before each push or PR request, caps each effect at two attempts,
 and makes ambiguous results enter `effect_unknown`. Reconciliation performs
 authoritative branch/marker/PR readback without mutation. Exact absence permits
-one retry; a second absent outcome blocks for human disposition. GitHub API
-collections are paginated under one deadline and output budget. Tokens remain
-behind the operator-owned `gh` and Git credential-helper boundary and are not
-passed to Codex or stored in state.
+one retry; a second absent outcome blocks for human disposition. The same
+recorded PR number, node identity, marker, branch, base, open-draft state, and
+observed head are invariant whether an ambiguous repair push is absent or
+landed. A retry performs that check again from a fresh readback immediately
+before recording call start and invoking Git. GitHub API collections are
+paginated under one deadline and output budget. Tokens remain behind the
+operator-owned `gh` and Git credential-helper boundary and are not passed to
+Codex or stored in state.
 
 One stable delivery key and branch identify the PR across the single allowed
 repair. A new candidate gets new validation, review, approval, and push-effect
