@@ -30,12 +30,13 @@ const config: ProposeConfig = {
   baseBranch: "main",
   branchPrefix: "mill/",
   allowedActors: ["operator"],
+  allowedMergerLogins: ["operator"],
   requiredChecks: ["validate"],
   reviewPolicy: {
     mode: "github_required",
     requiredReviewerLogins: ["codex-review"],
   },
-  allowedMergeMethods: ["squash"],
+  allowedMergeMethods: ["linear_tree_preserving"],
   approvalTtlSeconds: 900,
   pollTimeoutSeconds: 30,
 };
@@ -52,7 +53,7 @@ describe("GitHub CLI adapter", () => {
 import {appendFileSync} from "node:fs";
 appendFileSync(new URL("./calls.log",import.meta.url),JSON.stringify(process.argv.slice(2))+"\\n");
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
-const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:"<!-- mill-delivery-key:fixture -->",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_at:null};
+const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:"<!-- mill-delivery-key:fixture -->",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
 if(endpoint==="user")console.log(JSON.stringify({login:"operator",id:7}));
 else if(endpoint==="repos/example/app")console.log(JSON.stringify({node_id:"R_example",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:false}));
 else if(endpoint.includes("/git/ref/heads/missing")){console.error("HTTP 404");process.exit(1)}
@@ -62,7 +63,7 @@ else if(args.includes("--method")&&endpoint==="repos/example/app/pulls")console.
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{name:"validate",status:"completed",conclusion:"success"}]}]));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
-else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}"}]]));
+else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"[P1] top-level finding",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11"}]]));
 else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
 else process.exit(2);
 `,
@@ -114,12 +115,17 @@ else process.exit(2);
         ],
         reviews: [
           {
+            id: "11",
             actorLogin: "codex-review",
             state: "COMMENTED",
             commitId: sha,
+            body: "[P1] top-level finding",
           },
         ],
-        feedback: [{ priority: "P2", commitId: sha }],
+        feedback: [
+          { priority: "P1", commitId: sha, path: null },
+          { priority: "P2", commitId: sha, path: "src/index.ts" },
+        ],
       });
       const calls = await readFile(path.join(tools.path, "calls.log"), "utf8");
       const paginated = calls
@@ -189,6 +195,27 @@ else process.exit(2);
           deadlineMs: Date.now() + 10_000,
         }),
       ).rejects.toMatchObject({ code: "SHIPPER_TOOL_UNAVAILABLE" });
+      await writeFile(
+        git,
+        `#!${process.execPath}\nsetInterval(()=>{},1000);\n`,
+        { mode: 0o755 },
+      );
+      await chmod(git, 0o755);
+      process.env.MILL_GIT_PATH = git;
+      let cancellationPolls = 0;
+      await expect(
+        adapter.pushExact({
+          root: repository.path,
+          config,
+          cloneUrl: "https://github.com/example/app.git",
+          branch: "mill/task",
+          candidateCommit: sha,
+          expectedOldCommit: null,
+          deadlineMs: Date.now() + 10_000,
+          cancellationRequested: () => ++cancellationPolls >= 2,
+        }),
+      ).rejects.toMatchObject({ code: "GITHUB_PUSH_OUTCOME_UNKNOWN" });
+      expect(cancellationPolls).toBeGreaterThanOrEqual(2);
       await writeFile(git, `#!${process.execPath}\nprocess.exit(9);\n`, {
         mode: 0o755,
       });
@@ -221,7 +248,7 @@ else process.exit(2);
         gh,
         `#!${process.execPath}
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
-const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"closed",draft:false,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:true,merge_commit_sha:"${mergeSha}",merged_at:"2026-09-01T17:00:00.000Z"};
+const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"closed",draft:false,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:true,merge_commit_sha:"${mergeSha}",merged_by:{login:"operator"},merged_at:"2026-09-01T17:00:00.000Z"};
 if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
 else if(endpoint.includes("/git/ref/heads/mill")){console.error("HTTP 404");process.exit(1)}
 else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${mergeSha}"}}));
@@ -245,6 +272,7 @@ else process.exit(2);
       expect(observation).toMatchObject({
         branchSha: null,
         defaultBranchHead: mergeSha,
+        pullRequest: { mergedByLogin: "operator" },
         mergeCommit: { sha: mergeSha, tree, parents: ["d".repeat(40)] },
         mergeIsOnDefaultBranch: true,
         mergeChecks: [{ name: "validate", conclusion: "success" }],
@@ -267,7 +295,7 @@ import {readFileSync} from "node:fs";
 const mode=readFileSync(new URL("./mode",import.meta.url),"utf8").trim();
 if(mode==="call-failed")process.exit(3);if(mode==="invalid-json"){console.log("{");process.exit(0)}
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
-const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:mode==="bad-pull-state"?"unexpected":"open",draft:true,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_at:null};
+const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:mode==="bad-pull-state"?"unexpected":"open",draft:true,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
 if(endpoint==="user")console.log(JSON.stringify({login:mode==="bad-login"?"":"operator",id:mode==="bad-actor"?0:7}));
 else if(endpoint==="repos/example/app")console.log(JSON.stringify(mode==="bad-repo"?[]:{node_id:"R_example",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:false}));
 else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:{sha:mode==="bad-sha"?"bad":"${sha}"}}));

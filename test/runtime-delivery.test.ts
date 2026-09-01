@@ -23,6 +23,7 @@ import type {
   ProposeConfig,
 } from "../src/runtime/github.js";
 import {
+  cancelRun,
   qualifyBaseline,
   resumeRun,
   reviewRun,
@@ -80,6 +81,7 @@ class FakeGitHub implements GitHubAdapter {
   pushCalls = 0;
   createCalls = 0;
   inspectCalls = 0;
+  onPush: (() => Promise<void>) | undefined;
   attemptedPullRequest:
     | { config: ProposeConfig; branch: string; title: string; body: string }
     | undefined;
@@ -101,6 +103,7 @@ class FakeGitHub implements GitHubAdapter {
   }): Promise<void> {
     await Promise.resolve();
     this.pushCalls += 1;
+    await this.onPush?.();
     if (input.expectedOldCommit !== this.branchSha) {
       throw new MillError(
         "FAKE_REMOTE_LEASE_MISMATCH",
@@ -155,6 +158,7 @@ class FakeGitHub implements GitHubAdapter {
       baseRef: attempted.config.baseBranch,
       merged: false,
       mergeCommitSha: null,
+      mergedByLogin: null,
       mergedAt: null,
     };
     this.pullRequest = pullRequest;
@@ -225,6 +229,7 @@ class FakeGitHub implements GitHubAdapter {
       draft: false,
       merged: true,
       mergeCommitSha: mergeSha,
+      mergedByLogin: "operator",
       mergedAt: "2026-09-01T17:00:00.000Z",
     };
     this.branchSha = null;
@@ -381,6 +386,23 @@ describe("exact-candidate GitHub draft delivery", () => {
         }),
       ).rejects.toMatchObject({ code: "MERGE_METHOD_NOT_ALLOWED" });
       adapter.merge(candidateTree);
+      if (adapter.pullRequest === null) throw new Error("fake PR missing");
+      adapter.pullRequest = {
+        ...adapter.pullRequest,
+        mergedByLogin: "automation-bot",
+      };
+      await expect(
+        finalizeDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "MERGER_NOT_ALLOWED" });
+      adapter.pullRequest = {
+        ...adapter.pullRequest,
+        mergedByLogin: "operator",
+      };
       const finalized = await finalizeDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,
@@ -390,8 +412,85 @@ describe("exact-candidate GitHub draft delivery", () => {
       expect(finalized.run.status).toBe("closed");
       expect(finalized.delivery).toMatchObject({
         state: "closed",
-        merge: { method: "squash", tree: candidateTree },
+        merge: {
+          method: "linear_tree_preserving",
+          mergedByLogin: "operator",
+          tree: candidateTree,
+        },
       });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("honors durable cancellation before a subsequent remote effect", async () => {
+    const { fixture, runId } = await reviewedFixture();
+    const adapter = new FakeGitHub();
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      adapter.onPush = async () => {
+        const cancellation = await cancelRun({ root: fixture.root, runId });
+        expect(cancellation.cancelRequested).toBe(true);
+      };
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "OPERATOR_CANCELLED" });
+      expect(adapter).toMatchObject({
+        pushCalls: 1,
+        createCalls: 0,
+        pullRequest: null,
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("reconciles an unknown effect before making cancellation terminal", async () => {
+    const { fixture, runId, candidateCommit } = await reviewedFixture();
+    const adapter = new FakeGitHub();
+    adapter.pushFailure = "before";
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
+      const pending = await cancelRun({ root: fixture.root, runId });
+      expect(pending).toMatchObject({
+        status: "effect_unknown",
+        cancelRequested: true,
+      });
+      adapter.branchSha = candidateCommit;
+      await expect(
+        reconcileDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "OPERATOR_CANCELLED" });
+      expect(adapter).toMatchObject({ createCalls: 0, pullRequest: null });
     } finally {
       await fixture.cleanup();
     }
@@ -585,8 +684,8 @@ describe("exact-candidate GitHub draft delivery", () => {
       await writeFile(
         configPath,
         (await readFile(configPath, "utf8")).replace(
-          "allowedMergeMethods: [squash]",
-          "allowedMergeMethods: [rebase]",
+          "allowedMergeMethods: [linear_tree_preserving]",
+          "allowedMergeMethods: [merge]",
         ),
       );
       await expect(
@@ -619,6 +718,16 @@ describe("exact-candidate GitHub draft delivery", () => {
           path: "src/value.js",
           line: 1,
           url: "https://github.com/example/app/pull/41#discussion_r12",
+          commitId: candidateCommit,
+        },
+        {
+          id: "review-13",
+          actorLogin: "codex-review",
+          priority: "P2",
+          body: "[P2] Address the top-level review finding",
+          path: null,
+          line: null,
+          url: "https://github.com/example/app/pull/41#pullrequestreview-13",
           commitId: candidateCommit,
         },
       ];
@@ -656,14 +765,20 @@ describe("exact-candidate GitHub draft delivery", () => {
       adapter.feedback = [];
       adapter.reviews = [
         {
+          id: "21",
           actorLogin: "codex-review",
           state: "COMMENTED",
           commitId: reviewed.run.candidateCommit,
+          body: "",
+          url: "https://github.com/example/app/pull/41#pullrequestreview-21",
         },
         {
+          id: "22",
           actorLogin: "codex-review",
           state: "CHANGES_REQUESTED",
           commitId: reviewed.run.candidateCommit,
+          body: "",
+          url: "https://github.com/example/app/pull/41#pullrequestreview-22",
         },
       ];
       const planned = await planDraftPr({
@@ -689,9 +804,12 @@ describe("exact-candidate GitHub draft delivery", () => {
       });
       expect(changesRequested.run.status).toBe("awaiting_ci");
       adapter.reviews.push({
+        id: "23",
         actorLogin: "codex-review",
         state: "COMMENTED",
         commitId: reviewed.run.candidateCommit,
+        body: "",
+        url: "https://github.com/example/app/pull/41#pullrequestreview-23",
       });
       const ready = await observeDraftPr({
         root: fixture.root,

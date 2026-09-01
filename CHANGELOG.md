@@ -96,3 +96,6 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   helper boundary. Exact actor/repository/remote binding, expiring approval,
   expected-head push leases, immutable PR markers, effect journaling, and
   authoritative readback prevent builder access and blind duplicate mutation.
+  Durable cancellation is polled before and during mutations; top-level and
+  inline review findings, exact merger identity, provable merge shape, and
+  non-false-green post-merge results remain fail-closed.

@@ -204,11 +204,12 @@ propose:
   baseBranch: main
   branchPrefix: mill/
   allowedActors: [package-operator]
+  allowedMergerLogins: [package-operator]
   requiredChecks: [validate]
   reviewPolicy:
     mode: local_only
     requiredReviewerLogins: []
-  allowedMergeMethods: [squash]
+  allowedMergeMethods: [linear_tree_preserving]
   approvalTtlSeconds: 900
   pollTimeoutSeconds: 30
 commands:
@@ -362,7 +363,7 @@ const field=(name)=>{for(let index=0;index<args.length-1;index+=1){if(args[index
 if(endpoint==="user")console.log(JSON.stringify({login:"package-operator",id:9}));
 else if(endpoint==="repos/example/app")console.log(JSON.stringify({node_id:"R_package_canary",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:false}));
 else if(args.includes("--method")&&endpoint==="repos/example/app/pulls"){
-  const value={number:41,node_id:"PR_package_canary",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:field("body")??"",head:{ref:field("head")??"",sha:remoteHead()},base:{ref:field("base")??"main"},merged:false,merge_commit_sha:null,merged_at:null};
+  const value={number:41,node_id:"PR_package_canary",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:field("body")??"",head:{ref:field("head")??"",sha:remoteHead()},base:{ref:field("base")??"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
   writeFileSync(pullPath,JSON.stringify(value),{mode:0o600});console.log(JSON.stringify(value));
 }
 else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${"d".repeat(40)}"}}));

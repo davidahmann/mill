@@ -108,7 +108,8 @@ const samples = {
       mode: "local_only",
       requiredReviewerLogins: [],
     },
-    allowedMergeMethods: ["squash"],
+    allowedMergerLogins: ["operator"],
+    allowedMergeMethods: ["linear_tree_preserving"],
     effects: [],
     remoteHeadCommit: null,
     pullRequest: null,
@@ -366,12 +367,13 @@ describe("compact schemas", () => {
         baseBranch: "main",
         branchPrefix: "mill/",
         allowedActors: ["operator"],
+        allowedMergerLogins: ["operator"],
         requiredChecks: ["validate"],
         reviewPolicy: {
           mode: "local_only",
           requiredReviewerLogins: [],
         },
-        allowedMergeMethods: ["squash"],
+        allowedMergeMethods: ["linear_tree_preserving"],
       },
     } as const;
     expect(validate(localReview)).toBe(true);

@@ -595,11 +595,40 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         taskPath: options.task,
         runId: options.run,
       });
+      const closed = result.run.status === "closed";
+      const reasonCode =
+        result.run.status === "blocked"
+          ? (result.run.blockCode ?? "POST_MERGE_CHECKS_FAILED")
+          : "POST_MERGE_CHECKS_PENDING";
       emit(
         io,
         global.json === true,
-        commandResult({ command: "pr.finalize", ok: true, data: result }),
+        commandResult({
+          command: "pr.finalize",
+          ok: closed,
+          status: closed ? "ok" : "blocked",
+          data: result,
+          reasons: closed
+            ? []
+            : [
+                {
+                  code: reasonCode,
+                  message:
+                    "Post-merge required checks have not produced passing exact-commit evidence.",
+                },
+              ],
+        }),
       );
+      if (!closed) {
+        throw new MillError(
+          reasonCode,
+          "Post-merge verification is not complete.",
+          result.run.status === "blocked"
+            ? ExitCode.configuration
+            : ExitCode.temporary,
+          { resultAlreadyEmitted: true },
+        );
+      }
     });
 
   program

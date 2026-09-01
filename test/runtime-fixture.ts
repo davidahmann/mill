@@ -82,11 +82,12 @@ export async function runtimeFixture(
   baseBranch: main
   branchPrefix: mill/
   allowedActors: [operator]
+  allowedMergerLogins: [operator]
   requiredChecks: [validate]
   reviewPolicy:
     mode: ${reviewMode}
     requiredReviewerLogins: ${reviewers}
-  allowedMergeMethods: [squash]
+  allowedMergeMethods: [linear_tree_preserving]
   approvalTtlSeconds: 900
   pollTimeoutSeconds: 30
 `

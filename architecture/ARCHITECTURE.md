@@ -68,9 +68,11 @@ identity while updating that same PR. Required checks are evaluated on the exact
 current head; missing, pending, conflicting, cancelled, neutral, skipped,
 timed-out, or failed results do not pass. Mill never changes draft readiness or
 merge state. Finalization requires GitHub to prove the PR head, merge commit,
-tree, containment in the configured default branch, allowed merge shape, and
-successful required checks on the exact merge commit. A tree-changing merge
-requires separate revalidation rather than inferred closure.
+tree, authorized merger identity, containment in the configured default branch,
+allowed merge shape, and successful required checks on the exact merge commit.
+One-parent tree-preserving history is classified only as
+`linear_tree_preserving`, never guessed to be squash or rebase from policy. A
+tree-changing merge requires separate revalidation rather than inferred closure.
 
 In Wave 2, the qualification approval digest binds a passing baseline's exact
 base commit, canonical task and repository configuration, selected command
@@ -107,17 +109,19 @@ deadline and output cap. The persisted absolute run deadline is reused for
 verification, review, retry, repair, and resume; no checkpoint grants a fresh
 budget. An attempt ID plus PID, PGID, and process-start digest is diagnostic
 state, not signalling authority. Cancellation is durable state polled by the
-foreground lease owner, which terminates its own in-memory child; no command
-signals a stored PID. If the lease is free but a recorded process may still
-exist, resume and terminal cancellation fail closed for attended reconciliation.
-State events are append-only, backup restore validates SQLite integrity, schema,
-and required objects before atomic replacement. Restoring older state moves
-newer unreferenced Mill worktrees into a mode-restricted quarantine with a
-durable prepared/completed manifest; it never silently deletes them. Purge
-requires every run to be terminal. A failed pre-build context setup removes its
-provisional worktree and branch. Review attempt budgets are scoped to an exact
-candidate generation, and repair reasserts the reviewed commit/tree before
-allowing writes. There is no background daemon or implicit retry.
+foreground lease owner, which terminates its own in-memory child, including a
+GitHub mutation process; no command signals a stored PID. Cancellation is
+rechecked before each external effect, and an interrupted effect remains unknown
+until authoritative readback. If the lease is free but a recorded process may
+still exist, resume and terminal cancellation fail closed for attended
+reconciliation. State events are append-only, backup restore validates SQLite
+integrity, schema, and required objects before atomic replacement. Restoring
+older state moves newer unreferenced Mill worktrees into a mode-restricted
+quarantine with a durable prepared/completed manifest; it never silently deletes
+them. Purge requires every run to be terminal. A failed pre-build context setup
+removes its provisional worktree and branch. Review attempt budgets are scoped
+to an exact candidate generation, and repair reasserts the reviewed commit/tree
+before allowing writes. There is no background daemon or implicit retry.
 
 ## Core modules
 

@@ -108,6 +108,7 @@ export const millConfigSchema = z
         baseBranch: z.string().regex(/^(?!-)(?!.*\.\.)[^\s~^:?*[\\]+$/u),
         branchPrefix: z.literal("mill/"),
         allowedActors: z.array(z.string().min(1)).min(1),
+        allowedMergerLogins: z.array(z.string().min(1)).min(1),
         requiredChecks: z.array(z.string().min(1)),
         reviewPolicy: z
           .strictObject({
@@ -128,7 +129,7 @@ export const millConfigSchema = z
             }
           }),
         allowedMergeMethods: z
-          .array(z.enum(["merge", "squash", "rebase"]))
+          .array(z.enum(["merge", "linear_tree_preserving"]))
           .min(1),
         approvalTtlSeconds: z.number().int().min(60).max(3600).default(900),
         pollTimeoutSeconds: z.number().int().min(1).max(1800).default(600),
@@ -302,6 +303,7 @@ export const deliveryRecordSchema = z.strictObject({
     "merged",
     "post_merge_verified",
     "closed",
+    "cancelled",
     "blocked",
   ]),
   target: z.strictObject({
@@ -324,7 +326,10 @@ export const deliveryRecordSchema = z.strictObject({
     mode: z.enum(["local_only", "github_required"]),
     requiredReviewerLogins: z.array(z.string().min(1)),
   }),
-  allowedMergeMethods: z.array(z.enum(["merge", "squash", "rebase"])).min(1),
+  allowedMergerLogins: z.array(z.string().min(1)).min(1),
+  allowedMergeMethods: z
+    .array(z.enum(["merge", "linear_tree_preserving"]))
+    .min(1),
   effects: z.array(remoteEffectSchema),
   remoteHeadCommit: z
     .string()
@@ -342,7 +347,8 @@ export const deliveryRecordSchema = z.strictObject({
     .strictObject({
       commit: z.string().regex(/^[a-f0-9]{40}$/u),
       tree: z.string().regex(/^[a-f0-9]{40}$/u),
-      method: z.enum(["merge", "squash", "rebase", "linear_tree_preserving"]),
+      method: z.enum(["merge", "linear_tree_preserving"]),
+      mergedByLogin: z.string().min(1),
       mergedAt: z.iso.datetime(),
       defaultBranchHead: z.string().regex(/^[a-f0-9]{40}$/u),
     })

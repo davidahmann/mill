@@ -65,8 +65,10 @@ job with personal credentials. The realistic scenario set covers:
   review identity checks;
 - remote delivery through wrong-actor/fork/remote denial, stale approvals,
   expected-head pushes, effect-before-receipt recovery, unknown-effect blocking,
-  paginated exact-head checks/reviews, one aggregated repair, disallowed merge
-  rejection, merge-tree binding, and post-merge checks;
+  cancellation before and during mutations, paginated exact-head inline and
+  top-level review feedback, one aggregated repair, unauthorized merger and
+  disallowed merge-shape rejection, merge-tree binding, and non-false-green
+  post-merge checks;
 - hostile filesystem coverage for Docker bind paths containing commas without
   weakening read-only/no-network verification;
 - packaging through installation of the generated tarball and execution of its

@@ -17,6 +17,7 @@
     "candidateTree",
     "requiredChecks",
     "reviewPolicy",
+    "allowedMergerLogins",
     "allowedMergeMethods",
     "effects",
     "remoteHeadCommit",
@@ -43,6 +44,7 @@
         "merged",
         "post_merge_verified",
         "closed",
+        "cancelled",
         "blocked"
       ]
     },
@@ -109,10 +111,15 @@
         }
       ]
     },
+    "allowedMergerLogins": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
     "allowedMergeMethods": {
       "type": "array",
       "minItems": 1,
-      "items": { "enum": ["merge", "squash", "rebase"] }
+      "items": { "enum": ["merge", "linear_tree_preserving"] }
     },
     "effects": {
       "type": "array",
@@ -146,6 +153,7 @@
             "commit",
             "tree",
             "method",
+            "mergedByLogin",
             "mergedAt",
             "defaultBranchHead"
           ],
@@ -153,8 +161,9 @@
             "commit": { "$ref": "#/$defs/sha" },
             "tree": { "$ref": "#/$defs/sha" },
             "method": {
-              "enum": ["merge", "squash", "rebase", "linear_tree_preserving"]
+              "enum": ["merge", "linear_tree_preserving"]
             },
+            "mergedByLogin": { "type": "string", "minLength": 1 },
             "mergedAt": { "type": "string", "format": "date-time" },
             "defaultBranchHead": { "$ref": "#/$defs/sha" }
           }

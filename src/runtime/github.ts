@@ -29,6 +29,7 @@ export interface GitHubPullRequest {
   baseRef: string;
   merged: boolean;
   mergeCommitSha: string | null;
+  mergedByLogin: string | null;
   mergedAt: string | null;
 }
 
@@ -39,9 +40,12 @@ export interface GitHubCheck {
 }
 
 export interface GitHubReview {
+  id: string;
   actorLogin: string;
   state: string;
   commitId: string | null;
+  body: string;
+  url: string;
 }
 
 export interface GitHubFeedback {
@@ -49,7 +53,7 @@ export interface GitHubFeedback {
   actorLogin: string;
   priority: "P0" | "P1" | "P2" | "P3" | "unclassified";
   body: string;
-  path: string;
+  path: string | null;
   line: number | null;
   url: string;
   commitId: string;
@@ -94,6 +98,7 @@ export interface GitHubAdapter {
     expectedOldCommit: string | null;
     deadlineMs: number;
     signal?: AbortSignal;
+    cancellationRequested?: () => boolean;
   }): Promise<void>;
   findPullRequests(input: {
     config: ProposeConfig;
@@ -108,6 +113,7 @@ export interface GitHubAdapter {
     body: string;
     deadlineMs: number;
     signal?: AbortSignal;
+    cancellationRequested?: () => boolean;
   }): Promise<GitHubPullRequest>;
   observe(input: {
     config: ProposeConfig;
@@ -120,6 +126,7 @@ export interface GitHubAdapter {
 interface ProcessLifecycle {
   deadlineMs: number;
   signal?: AbortSignal;
+  cancellationRequested?: () => boolean;
 }
 
 function commandEnvironment(): NodeJS.ProcessEnv {
@@ -213,6 +220,13 @@ function parsePullRequest(value: unknown): GitHubPullRequest {
       item.merge_commit_sha === null
         ? null
         : assertSha(item.merge_commit_sha, "merge commit SHA"),
+    mergedByLogin:
+      item.merged_by === null || item.merged_by === undefined
+        ? null
+        : text(
+            object(item.merged_by, "merge actor").login,
+            "merge actor login",
+          ),
     mergedAt:
       item.merged_at === null || item.merged_at === undefined
         ? null
@@ -339,6 +353,9 @@ class GhGitHubAdapter implements GitHubAdapter {
       deadlineMs: lifecycle.deadlineMs,
       maxOutputBytes: 4 * 1024 * 1024,
       ...(lifecycle.signal === undefined ? {} : { signal: lifecycle.signal }),
+      ...(lifecycle.cancellationRequested === undefined
+        ? {}
+        : { cancellationRequested: lifecycle.cancellationRequested }),
     });
     if (
       allowNotFound &&
@@ -447,6 +464,7 @@ class GhGitHubAdapter implements GitHubAdapter {
     expectedOldCommit: string | null;
     deadlineMs: number;
     signal?: AbortSignal;
+    cancellationRequested?: () => boolean;
   }): Promise<void> {
     if (!/^mill\/[A-Za-z0-9._-]+$/u.test(input.branch)) {
       throw new MillError(
@@ -507,6 +525,9 @@ class GhGitHubAdapter implements GitHubAdapter {
       deadlineMs: input.deadlineMs,
       maxOutputBytes: 1024 * 1024,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
+      ...(input.cancellationRequested === undefined
+        ? {}
+        : { cancellationRequested: input.cancellationRequested }),
     });
     if (
       result.exitCode !== 0 ||
@@ -561,6 +582,7 @@ class GhGitHubAdapter implements GitHubAdapter {
     body: string;
     deadlineMs: number;
     signal?: AbortSignal;
+    cancellationRequested?: () => boolean;
   }): Promise<GitHubPullRequest> {
     const value = await this.#ghJson(
       [
@@ -584,6 +606,9 @@ class GhGitHubAdapter implements GitHubAdapter {
       {
         deadlineMs: input.deadlineMs,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
+        ...(input.cancellationRequested === undefined
+          ? {}
+          : { cancellationRequested: input.cancellationRequested }),
       },
     );
     return parsePullRequest(value);
@@ -687,16 +712,19 @@ class GhGitHubAdapter implements GitHubAdapter {
         const item = object(raw, "review");
         const user = object(item.user, "review actor");
         return {
+          id: String(integer(item.id, "review ID")),
           actorLogin: text(user.login, "review actor login"),
           state: text(item.state, "review state").toUpperCase(),
           commitId:
             item.commit_id === null || item.commit_id === undefined
               ? null
               : assertSha(item.commit_id, "review commit ID"),
+          body: typeof item.body === "string" ? item.body : "",
+          url: text(item.html_url, "review URL"),
         };
       },
     );
-    const feedback = paginatedArray(commentsValue, "review comments").map(
+    const inlineFeedback = paginatedArray(commentsValue, "review comments").map(
       (raw): GitHubFeedback => {
         const item = object(raw, "review comment");
         const user = object(item.user, "review comment actor");
@@ -713,6 +741,29 @@ class GhGitHubAdapter implements GitHubAdapter {
         };
       },
     );
+    const reviewFeedback = reviews.flatMap((review): GitHubFeedback[] => {
+      const reviewPriority = priority(review.body);
+      if (
+        review.body.trim().length === 0 ||
+        review.commitId === null ||
+        reviewPriority === "unclassified"
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: `review-${review.id}`,
+          actorLogin: review.actorLogin,
+          priority: reviewPriority,
+          body: review.body,
+          path: null,
+          line: null,
+          url: review.url,
+          commitId: review.commitId,
+        },
+      ];
+    });
+    const feedback = [...reviewFeedback, ...inlineFeedback];
     const defaultBranchHead = assertSha(
       object(
         object(defaultRefValue, "default branch ref").object,

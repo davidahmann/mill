@@ -10,7 +10,9 @@ After the Wave 1 checks have run at least once, configure:
 - conversation resolution required;
 - no force pushes or default-branch deletion;
 - merge queue disabled initially;
-- squash merge as the only merge method;
+- squash merge as the only GitHub UI method; Mill records the independently
+  provable result as `linear_tree_preserving` because one-commit squash and
+  rebase are not distinguishable from post-merge topology alone;
 - automatic branch deletion after merge;
 - zero required approving human reviews, because David is the sole maintainer;
 - maintainer bypass allowed only for emergencies and recorded as repair/audit

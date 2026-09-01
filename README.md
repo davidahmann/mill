@@ -103,11 +103,12 @@ propose:
   baseBranch: main
   branchPrefix: mill/
   allowedActors: [founder]
+  allowedMergerLogins: [founder]
   requiredChecks: [validate, CodeQL]
   reviewPolicy:
     mode: local_only
     requiredReviewerLogins: []
-  allowedMergeMethods: [squash]
+  allowedMergeMethods: [linear_tree_preserving]
 ```
 
 ```sh
@@ -127,7 +128,12 @@ GitHub back before claiming an effect. An uncertain outcome becomes
 retry. Required checks pass only when every latest exact-head result is
 successful. A configured `github_required` reviewer may complete a current-head
 `APPROVED` or `COMMENTED` review, but any current-head actionable finding still
-blocks. Mill stops at `awaiting_human`; it never marks ready or merges.
+blocks, including a severity-tagged top-level review body. Mill stops at
+`awaiting_human`; it never marks ready or merges. Finalization verifies the
+recorded merger against `allowedMergerLogins`. Because GitHub does not expose an
+authoritative distinction between a one-commit squash and rebase, the provable
+policy is `linear_tree_preserving`; Mill never guesses a specific linear method
+from its allowlist.
 
 Use `--json` before the command for the stable machine-readable envelope.
 `--json --version` is machine-readable; help is human-only and combining it with

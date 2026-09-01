@@ -14,7 +14,7 @@ support_decision:
   actor_mode: interactive-delegated-operator
   credential_mode: operator-owned-gh-session
   builder_forge_credentials: forbidden
-  merge_authority: David only
+  merge_authority: exact configured human login; David only for Mill
 design_decisions:
   - local exact-candidate review remains mandatory; a GitHub reviewer is
     optional unless the repository configuration explicitly requires one
@@ -106,17 +106,20 @@ acceptance_items:
   - W3-A6 draft-PR intent is durable before the call; the immutable delivery
     marker and authoritative readback prevent duplicate PR creation
   - W3-A7 crash before a call, after effect before receipt, and after receipt
-    before response reconcile truthfully without duplicate mutation
+    before response reconcile truthfully without duplicate mutation; durable
+    cancellation is polled before and during each remote mutation and never
+    permits a subsequent effect
   - W3-A8 latest-head required checks and configured remote-review policy are
     observed with bounded polling; pending, skipped, stale, neutral, cancelled,
     timed-out, or failed required evidence never passes
   - W3-A9 one aggregated attended remote-feedback repair may create a new local
     candidate, invalidates old evidence and approval, and updates the same PR
     only after revalidation, local review, and a new exact approval
-  - W3-A10 Mill stops at awaiting_human; only David marks ready and uses an
-    allowed merge method
-  - W3-A11 finalize reads back PR head, merge method/result SHA/tree, and exact
-    default-branch checks before post_merge_verified and closed
+  - W3-A10 Mill stops at awaiting_human; only an exact configured human login
+    marks ready and merges using an independently provable allowed merge shape
+  - W3-A11 finalize reads back PR head, merger identity, merge shape/result
+    SHA/tree, and exact default-branch checks before post_merge_verified and
+    closed; pending or failed post-merge evidence is never reported as success
   - W3-A12 ambiguous or conflicting branch, PR, merge, or check identity blocks
     and emits typed reconciliation evidence rather than retrying blindly
   - W3-A13 OCI validation supports repository/state paths containing commas

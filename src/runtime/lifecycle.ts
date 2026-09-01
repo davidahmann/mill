@@ -992,6 +992,12 @@ export async function cancelRun(input: {
     if (isTerminalRun(current.status)) {
       return publicRunRecord(current);
     }
+    if (current.status === "effect_unknown") {
+      store.recordEvent(current.id, "run.cancellation_pending", {
+        code: "GITHUB_RECONCILIATION_REQUIRED",
+      });
+      return publicRunRecord(current);
+    }
     const active = storedActiveProcess(current);
     if (active !== undefined && processIdentityStatus(active) !== "mismatch") {
       store.recordEvent(current.id, "run.cancellation_pending", {
