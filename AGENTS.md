@@ -31,6 +31,9 @@ Read these files before editing:
   but are not product behavior.
 - Keep the builder unable to push, merge, deploy, or rewrite its own acceptance
   oracle. The shipper may push only an already committed, verified candidate.
+- Keep forge credentials behind the attended shipper boundary. Persist external
+  intent before a call, treat provider readback as authoritative, and block
+  mutation while an effect outcome is unknown.
 - Do not claim hostile-code containment for attended host execution.
 - No ambient credentials, implicit network, auto-merge, deployment, parallel
   writers, daemon, hosted control plane, or self-modification in v1.

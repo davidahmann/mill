@@ -516,6 +516,27 @@ describe("runtime authority and repository boundaries", () => {
     }
   });
 
+  it("verifies repositories whose absolute path contains a comma", async () => {
+    const fixture = await runtimeFixture({
+      repositoryPrefix: "mill-runtime,repo-",
+    });
+    process.env.MILL_DOCKER_PATH = fixture.dockerPath;
+    try {
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const evidence = await verifyDeclaredCommands({
+        root: fixture.root,
+        candidateCommit: "a".repeat(40),
+        config: inputs.config,
+        task: inputs.task,
+        deadlineMs: Date.now() + 30_000,
+        maxOutputBytes: 1024 * 1024,
+      });
+      expect(evidence.passed).toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("fails closed when the OCI verifier contract or image is unavailable", async () => {
     const fixture = await runtimeFixture();
     const tools = await temporaryDirectory("mill-verifier-unavailable-");

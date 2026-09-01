@@ -22,6 +22,9 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   terminal-only purge, and redacted support export.
 - Executable task-packet, context-manifest, validation-evidence, and
   review-result contracts with aligned runtime and JSON Schema validation.
+- Exact-candidate draft-PR planning, attended push/open, unknown-effect
+  reconciliation, paginated GitHub policy observation, human merge gating, and
+  exact post-merge closure with an executable delivery-record contract.
 
 ### Changed
 
@@ -67,6 +70,9 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   active attempts only through compare-and-swap.
 - Named OCI verifier containers are force-removed under an independent cleanup
   deadline after success, failure, timeout, output exhaustion, or cancellation.
+- OCI verification safely aliases comma-bearing bind paths, and restoring an
+  older state backup quarantines newer unreferenced worktrees with durable
+  recovery evidence rather than deleting them.
 
 ### Security
 
@@ -86,3 +92,7 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Codex invocations ignore ambient execution rules, and OCI verification uses a
   clean read-only candidate workspace so uncommitted ignored artifacts cannot
   affect promotion evidence.
+- GitHub credentials stay behind the operator-owned `gh` and Git credential
+  helper boundary. Exact actor/repository/remote binding, expiring approval,
+  expected-head push leases, immutable PR markers, effect journaling, and
+  authoritative readback prevent builder access and blind duplicate mutation.

@@ -1,5 +1,5 @@
 task_id: mill-wave-2-local-delivery
-status: active
+status: complete
 objective: >-
   Turn one explicitly approved task packet into an exact lifecycle-owned local
   commit in a disposable worktree, validate it through declared OCI commands,

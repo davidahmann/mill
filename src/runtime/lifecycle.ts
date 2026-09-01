@@ -189,9 +189,16 @@ function storedManifest(run: RunRecord): ContextManifest {
 function storedReviewFindings(
   run: RunRecord,
 ): ReturnType<typeof reviewResultSchema.parse>["findings"] | undefined {
-  if (run.reviewJson === undefined) return undefined;
+  const source =
+    run.blockCode === "REMOTE_REVIEW_FINDINGS"
+      ? run.remoteFeedbackJson
+      : run.blockCode === "REVIEW_FINDINGS" ||
+          run.blockCode === "REVIEW_NON_CONVERGENCE"
+        ? run.reviewJson
+        : undefined;
+  if (source === undefined) return undefined;
   try {
-    const parsed = reviewResultSchema.safeParse(JSON.parse(run.reviewJson));
+    const parsed = reviewResultSchema.safeParse(JSON.parse(source));
     if (
       !parsed.success ||
       parsed.data.candidateCommit !== run.candidateCommit
@@ -204,7 +211,7 @@ function storedReviewFindings(
   } catch (error) {
     throw new MillError(
       "REVIEW_EVIDENCE_INVALID",
-      "Stored review evidence is invalid or bound to another candidate.",
+      "Stored local or remote review evidence is invalid or bound to another candidate.",
       ExitCode.data,
       { cause: String(error) },
     );
@@ -242,7 +249,7 @@ function storedGitControl(run: RunRecord): GitControlSnapshot {
   }
 }
 
-async function assertRunBindings(
+export async function assertRunBindings(
   root: string,
   run: RunRecord,
   inputs: RuntimeInputs,
@@ -1080,7 +1087,7 @@ export async function stateBackup(input: { root: string }): Promise<string> {
 export async function stateRestore(input: {
   root: string;
   backupPath: string;
-}): Promise<void> {
+}): Promise<Awaited<ReturnType<typeof restoreStateBackup>>> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
   const store = await StateStore.open(config.repositoryId, commonDirectory);
@@ -1088,7 +1095,7 @@ export async function stateRestore(input: {
   try {
     lease = await acquireWriterLease(store);
     store.close();
-    await restoreStateBackup(
+    return await restoreStateBackup(
       config.repositoryId,
       commonDirectory,
       input.backupPath,

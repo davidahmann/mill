@@ -6,8 +6,10 @@ import {
   copyFile,
   lstat,
   mkdir,
+  readdir,
   rename,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -23,6 +25,13 @@ export type RunStatus =
   | "committed"
   | "verified"
   | "reviewed"
+  | "proposing"
+  | "effect_unknown"
+  | "awaiting_ci"
+  | "awaiting_human"
+  | "merged"
+  | "post_merge_verified"
+  | "closed"
   | "blocked"
   | "cancelled"
   | "failed"
@@ -53,6 +62,8 @@ export interface RunRecord {
   blockCode?: string;
   validationJson?: string;
   reviewJson?: string;
+  deliveryJson?: string;
+  remoteFeedbackJson?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +76,8 @@ export type PublicRunRecord = Omit<
   | "activeProcessId"
   | "activeProcessGroup"
   | "activeProcessIdentity"
+  | "deliveryJson"
+  | "remoteFeedbackJson"
 >;
 
 export function publicRunRecord(run: RunRecord): PublicRunRecord {
@@ -75,6 +88,8 @@ export function publicRunRecord(run: RunRecord): PublicRunRecord {
   delete publicRun.activeProcessId;
   delete publicRun.activeProcessGroup;
   delete publicRun.activeProcessIdentity;
+  delete publicRun.deliveryJson;
+  delete publicRun.remoteFeedbackJson;
   return publicRun;
 }
 
@@ -103,12 +118,15 @@ interface RunRow {
   block_code: string | null;
   validation_json: string | null;
   review_json: string | null;
+  delivery_json: string | null;
+  remote_feedback_json: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const terminal = new Set<RunStatus>([
   "reviewed",
+  "closed",
   "cancelled",
   "failed",
   "stale",
@@ -124,12 +142,45 @@ const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   running: ["committed", "blocked", "cancelled", "failed", "stale"],
   committed: ["verified", "blocked", "cancelled", "failed", "stale"],
   verified: ["reviewed", "blocked", "cancelled", "failed", "stale"],
-  reviewed: ["stale"],
+  reviewed: ["proposing", "stale"],
+  proposing: [
+    "effect_unknown",
+    "awaiting_ci",
+    "blocked",
+    "cancelled",
+    "failed",
+    "stale",
+  ],
+  effect_unknown: [
+    "proposing",
+    "awaiting_ci",
+    "blocked",
+    "cancelled",
+    "failed",
+    "stale",
+  ],
+  awaiting_ci: [
+    "awaiting_human",
+    "blocked",
+    "effect_unknown",
+    "cancelled",
+    "failed",
+    "stale",
+  ],
+  awaiting_human: ["merged", "blocked", "failed", "stale"],
+  merged: ["post_merge_verified", "blocked", "failed", "stale"],
+  post_merge_verified: ["closed", "blocked", "failed", "stale"],
+  closed: [],
   blocked: [
     "ready",
     "running",
     "committed",
     "verified",
+    "proposing",
+    "awaiting_ci",
+    "awaiting_human",
+    "merged",
+    "post_merge_verified",
     "cancelled",
     "failed",
     "stale",
@@ -217,6 +268,10 @@ function fromRow(row: RunRow): RunRecord {
       ? {}
       : { validationJson: row.validation_json }),
     ...(row.review_json === null ? {} : { reviewJson: row.review_json }),
+    ...(row.delivery_json === null ? {} : { deliveryJson: row.delivery_json }),
+    ...(row.remote_feedback_json === null
+      ? {}
+      : { remoteFeedbackJson: row.remote_feedback_json }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -288,6 +343,8 @@ export class StateStore {
         block_code TEXT,
         validation_json TEXT,
         review_json TEXT,
+        delivery_json TEXT,
+        remote_feedback_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       ) STRICT;
@@ -319,6 +376,8 @@ export class StateStore {
       "active_process_id TEXT",
       "active_process_group INTEGER",
       "active_process_identity TEXT",
+      "delivery_json TEXT",
+      "remote_feedback_json TEXT",
     ]) {
       const name = column.split(" ")[0];
       if (!runColumns.some((candidate) => candidate.name === name)) {
@@ -513,7 +572,8 @@ export class StateStore {
       this.#database
         .prepare(
           `UPDATE runs SET candidate_commit = ?, candidate_tree = ?,
-           validation_json = NULL, review_json = NULL, status = 'committed',
+           validation_json = NULL, review_json = NULL,
+           remote_feedback_json = NULL, status = 'committed',
            block_code = NULL, updated_at = ? WHERE id = ?`,
         )
         .run(commit, tree, new Date().toISOString(), id);
@@ -600,6 +660,37 @@ export class StateStore {
         findings,
         ...(code === null ? {} : { code }),
       });
+    });
+    return this.getRun(id);
+  }
+
+  setDelivery(
+    id: string,
+    deliveryJson: string,
+    eventType: string,
+    details: Record<string, string | number | boolean | null> = {},
+  ): RunRecord {
+    this.#transaction(() => {
+      this.getRun(id);
+      this.#database
+        .prepare(
+          "UPDATE runs SET delivery_json = ?, updated_at = ? WHERE id = ?",
+        )
+        .run(deliveryJson, new Date().toISOString(), id);
+      this.#event(id, eventType, details);
+    });
+    return this.getRun(id);
+  }
+
+  setRemoteFeedback(id: string, feedbackJson: string): RunRecord {
+    this.#transaction(() => {
+      this.getRun(id);
+      this.#database
+        .prepare(
+          "UPDATE runs SET remote_feedback_json = ?, updated_at = ? WHERE id = ?",
+        )
+        .run(feedbackJson, new Date().toISOString(), id);
+      this.#event(id, "remote.feedback_recorded", {});
     });
     return this.getRun(id);
   }
@@ -1006,7 +1097,7 @@ export async function restoreStateBackup(
   repositoryId: string,
   commonDirectory: string,
   backupPath: string,
-): Promise<void> {
+): Promise<StateRestoreReport> {
   const directory = repositoryStateDirectory(repositoryId, commonDirectory);
   const resolvedBackup = path.resolve(backupPath);
   if (!isWithin(directory, resolvedBackup)) {
@@ -1026,6 +1117,9 @@ export async function restoreStateBackup(
   }
   const databasePath = path.join(directory, "state.sqlite3");
   const temporaryPath = path.join(directory, `restore-${randomUUID()}.sqlite3`);
+  const expectedWorktrees = new Set<string>();
+  let quarantineManifest: string | undefined;
+  const moved: { original: string; quarantined: string }[] = [];
   try {
     await copyFile(resolvedBackup, temporaryPath, constants.COPYFILE_EXCL);
     await chmod(temporaryPath, 0o600);
@@ -1050,12 +1144,25 @@ export async function restoreStateBackup(
               OR (type = 'trigger' AND name IN ('run_events_no_update', 'run_events_no_delete'))`,
         )
         .all() as unknown as { name: string }[];
+      const worktrees = candidate
+        .prepare(
+          "SELECT worktree_path FROM runs WHERE worktree_path IS NOT NULL",
+        )
+        .all() as unknown as { worktree_path: string }[];
       if (
         integrity?.integrity_check !== "ok" ||
         version?.value !== "1" ||
         new Set(requiredObjects.map((object) => object.name)).size !== 6
       ) {
         throw new Error("backup integrity, schema version, or objects invalid");
+      }
+      const worktreesDirectory = path.join(directory, "worktrees");
+      for (const row of worktrees) {
+        const resolved = path.resolve(row.worktree_path);
+        if (!isWithin(worktreesDirectory, resolved)) {
+          throw new Error("backup references a worktree outside Mill state");
+        }
+        expectedWorktrees.add(resolved);
       }
     } catch (error) {
       throw new MillError(
@@ -1067,12 +1174,101 @@ export async function restoreStateBackup(
     } finally {
       candidate?.close();
     }
+    const worktreesDirectory = path.join(directory, "worktrees");
+    const entries = await readdir(worktreesDirectory, { withFileTypes: true });
+    const orphaned = entries
+      .map((entry) => ({
+        entry,
+        original: path.join(worktreesDirectory, entry.name),
+      }))
+      .filter(({ original }) => !expectedWorktrees.has(path.resolve(original)));
+    if (orphaned.length > 0) {
+      for (const { entry } of orphaned) {
+        if (!entry.isDirectory() || entry.isSymbolicLink()) {
+          throw new MillError(
+            "UNSAFE_ORPHANED_WORKTREE",
+            "Restore found an unclassified entry in the Mill worktree directory.",
+            ExitCode.configuration,
+            { name: entry.name },
+          );
+        }
+      }
+      const quarantineId = `restore-${new Date()
+        .toISOString()
+        .replaceAll(/[:.]/gu, "-")}-${randomUUID()}`;
+      const quarantineDirectory = path.join(
+        directory,
+        "quarantine",
+        quarantineId,
+      );
+      await mkdir(quarantineDirectory, { recursive: true, mode: 0o700 });
+      await chmod(quarantineDirectory, 0o700);
+      quarantineManifest = path.join(quarantineDirectory, "manifest.json");
+      const planned = orphaned.map(({ entry, original }) => ({
+        original,
+        quarantined: path.join(quarantineDirectory, entry.name),
+      }));
+      await writeFile(
+        quarantineManifest,
+        `${JSON.stringify(
+          {
+            schemaVersion: "1",
+            repositoryId,
+            backupPath: resolvedBackup,
+            status: "prepared",
+            worktrees: planned,
+          },
+          null,
+          2,
+        )}\n`,
+        { encoding: "utf8", mode: 0o600, flag: "wx" },
+      );
+      for (const item of planned) {
+        await rename(item.original, item.quarantined);
+        moved.push(item);
+      }
+    }
     await rm(`${databasePath}-wal`, { force: true });
     await rm(`${databasePath}-shm`, { force: true });
     await rename(temporaryPath, databasePath);
+    if (quarantineManifest !== undefined) {
+      await writeFile(
+        quarantineManifest,
+        `${JSON.stringify(
+          {
+            schemaVersion: "1",
+            repositoryId,
+            backupPath: resolvedBackup,
+            status: "completed",
+            worktrees: moved,
+          },
+          null,
+          2,
+        )}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+    }
+    return {
+      quarantinedCount: moved.length,
+      ...(quarantineManifest === undefined ? {} : { quarantineManifest }),
+    };
+  } catch (error) {
+    for (const item of moved.toReversed()) {
+      try {
+        await rename(item.quarantined, item.original);
+      } catch {
+        // The prepared manifest preserves attended recovery evidence.
+      }
+    }
+    throw error;
   } finally {
     await rm(temporaryPath, { force: true });
   }
+}
+
+export interface StateRestoreReport {
+  quarantinedCount: number;
+  quarantineManifest?: string;
 }
 
 export async function purgeRepositoryState(

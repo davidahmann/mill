@@ -188,6 +188,40 @@ export async function resolveCommit(
   return value;
 }
 
+export async function repositoryRemoteUrl(
+  root: string,
+  remoteName: string,
+): Promise<string> {
+  if (!/^[A-Za-z0-9._-]+$/u.test(remoteName)) {
+    throw new MillError(
+      "INVALID_REMOTE_NAME",
+      "The configured Git remote name is invalid.",
+      ExitCode.configuration,
+    );
+  }
+  const values = (await git(root, ["remote", "get-url", "--all", remoteName]))
+    .split("\n")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (values.length !== 1) {
+    throw new MillError(
+      "AMBIGUOUS_REMOTE_URL",
+      "The configured Git remote must resolve to exactly one URL.",
+      ExitCode.configuration,
+      { remoteName, count: values.length },
+    );
+  }
+  const remoteUrl = values[0];
+  if (remoteUrl === undefined) {
+    throw new MillError(
+      "AMBIGUOUS_REMOTE_URL",
+      "The configured Git remote did not resolve to a URL.",
+      ExitCode.configuration,
+    );
+  }
+  return remoteUrl;
+}
+
 async function assertNoDangerousAttributes(
   root: string,
   baseCommit: string,

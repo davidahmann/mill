@@ -70,6 +70,8 @@ try {
     "README.md",
     "LICENSE",
     "schemas/context-manifest.schema.json",
+    "schemas/delivery-record.schema.json",
+    "schemas/mill-config.schema.json",
     "schemas/review-result.schema.json",
     "schemas/task-packet.schema.json",
     "schemas/validation-evidence.schema.json",
@@ -143,6 +145,7 @@ try {
     "status",
     "verify",
     "review",
+    "pr",
     "resume",
     "cancel",
     "state",
@@ -186,11 +189,28 @@ try {
       path.join(consumer, "mill.yaml"),
       `schemaVersion: "1"
 repositoryId: "22222222-2222-4222-8222-222222222222"
-trustCeiling: build
+trustCeiling: propose
 sensitivePaths: [.env]
 verifier:
   image: "node@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e"
   network: none
+propose:
+  forge: github
+  host: github.com
+  owner: example
+  repository: app
+  repositoryNodeId: R_package_canary
+  remoteName: origin
+  baseBranch: main
+  branchPrefix: mill/
+  allowedActors: [package-operator]
+  requiredChecks: [validate]
+  reviewPolicy:
+    mode: local_only
+    requiredReviewerLogins: []
+  allowedMergeMethods: [squash]
+  approvalTtlSeconds: 900
+  pollTimeoutSeconds: 30
 commands:
   test:
     argv: ["node", "--test"]
@@ -238,6 +258,11 @@ budget:
     ),
   ]);
   command("/usr/bin/git", ["init", "--initial-branch=main"], consumer);
+  command(
+    "/usr/bin/git",
+    ["remote", "add", "origin", "https://github.com/example/app.git"],
+    consumer,
+  );
   command("/usr/bin/git", ["add", "."], consumer);
   command(
     "/usr/bin/git",
@@ -262,6 +287,8 @@ budget:
   ]);
   const codex = path.join(tools, "codex");
   const docker = path.join(tools, "docker");
+  const gh = path.join(tools, "gh");
+  const git = path.join(tools, "git");
   await writeFile(
     codex,
     `#!${process.execPath}
@@ -305,7 +332,57 @@ process.exit(/value = [1-9]/u.test(value)?0:1);
 `,
     { mode: 0o700 },
   );
-  await Promise.all([chmod(codex, 0o700), chmod(docker, 0o700)]);
+  await writeFile(
+    git,
+    `#!${process.execPath}
+import {spawnSync} from "node:child_process";
+import {writeFileSync} from "node:fs";
+const args=process.argv.slice(2);
+if(args.includes("push")){
+  const refspec=args.at(-1)??"";const candidate=refspec.split(":",1)[0]??"";
+  if(!/^[a-f0-9]{40}$/.test(candidate))process.exit(2);
+  writeFileSync(new URL("./remote-head",import.meta.url),candidate+"\\n",{mode:0o600});
+  console.log("done");process.exit(0);
+}
+const result=spawnSync("/usr/bin/git",args,{cwd:process.cwd(),env:process.env,encoding:"utf8"});
+process.stdout.write(result.stdout??"");process.stderr.write(result.stderr??"");process.exit(result.status??1);
+`,
+    { mode: 0o700 },
+  );
+  await writeFile(
+    gh,
+    `#!${process.execPath}
+import {readFileSync,writeFileSync} from "node:fs";
+const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
+const read=(name)=>{try{return readFileSync(new URL(name,import.meta.url),"utf8").trim()}catch{return null}};
+const remoteHead=()=>read("./remote-head");
+const pullPath=new URL("./pull-request.json",import.meta.url);
+const pull=()=>{const value=read("./pull-request.json");return value===null?null:JSON.parse(value)};
+const field=(name)=>{for(let index=0;index<args.length-1;index+=1){if(args[index]==="--field"&&args[index+1]?.startsWith(name+"="))return args[index+1].slice(name.length+1)}return null};
+if(endpoint==="user")console.log(JSON.stringify({login:"package-operator",id:9}));
+else if(endpoint==="repos/example/app")console.log(JSON.stringify({node_id:"R_package_canary",full_name:"example/app",clone_url:"https://github.com/example/app.git",default_branch:"main",fork:false}));
+else if(args.includes("--method")&&endpoint==="repos/example/app/pulls"){
+  const value={number:41,node_id:"PR_package_canary",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:field("body")??"",head:{ref:field("head")??"",sha:remoteHead()},base:{ref:field("base")??"main"},merged:false,merge_commit_sha:null,merged_at:null};
+  writeFileSync(pullPath,JSON.stringify(value),{mode:0o600});console.log(JSON.stringify(value));
+}
+else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${"d".repeat(40)}"}}));
+else if(endpoint.includes("/git/ref/heads/")){const head=remoteHead();if(head===null){console.error("HTTP 404");process.exit(1)}console.log(JSON.stringify({object:{sha:head}}))}
+else if(endpoint.includes("/pulls?")){const value=pull();console.log(JSON.stringify(value===null?[[]]:[[value]]))}
+else if(endpoint.endsWith("/pulls/41")){const value=pull();if(value===null)process.exit(2);console.log(JSON.stringify(value))}
+else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{name:"validate",status:"completed",conclusion:"success"}]}]));
+else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[]}]))
+else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[]]));
+else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[]]));
+else process.exit(2);
+`,
+    { mode: 0o700 },
+  );
+  await Promise.all([
+    chmod(codex, 0o700),
+    chmod(docker, 0o700),
+    chmod(gh, 0o700),
+    chmod(git, 0o700),
+  ]);
   const canaryEnvironment = {
     ...process.env,
     MILL_CODEX_PATH: codex,
@@ -347,8 +424,55 @@ process.exit(/value = [1-9]/u.test(value)?0:1);
   if (reviewed.data.run.status !== "reviewed") {
     throw new Error("packed lifecycle did not reach reviewed state");
   }
+  const proposalEnvironment = {
+    ...canaryEnvironment,
+    MILL_GH_PATH: gh,
+    MILL_GIT_PATH: git,
+  };
+  const proposalMill = (args) =>
+    JSON.parse(
+      command(
+        bin,
+        ["--json", "--cwd", consumer, ...args],
+        consumer,
+        proposalEnvironment,
+      ),
+    );
+  const proposal = proposalMill([
+    "pr",
+    "plan",
+    "--task",
+    "product/tasks/canary.yaml",
+    "--run",
+    runId,
+  ]);
+  const opened = proposalMill([
+    "pr",
+    "open",
+    "--task",
+    "product/tasks/canary.yaml",
+    "--run",
+    runId,
+    "--approve",
+    proposal.data.delivery.proposalDigest,
+    "--attended",
+  ]);
+  if (opened.data.run.status !== "awaiting_ci") {
+    throw new Error("packed lifecycle did not open one draft pull request");
+  }
+  const observed = proposalMill([
+    "pr",
+    "observe",
+    "--task",
+    "product/tasks/canary.yaml",
+    "--run",
+    runId,
+  ]);
+  if (observed.data.run.status !== "awaiting_human") {
+    throw new Error("packed lifecycle did not reach the human merge gate");
+  }
   process.stdout.write(
-    `package lifecycle canary passed: ${packResult.filename}\n`,
+    `package draft-PR lifecycle canary passed: ${packResult.filename}\n`,
   );
 } finally {
   await rm(temporary, { force: true, recursive: true });

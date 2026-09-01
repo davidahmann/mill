@@ -1,6 +1,6 @@
 # Mill architecture
 
-Status: approved foundation decision Last updated: 2026-08-31
+Status: approved v1 decision Last updated: 2026-09-01
 
 ## Form
 
@@ -11,7 +11,7 @@ and exits to resumable state for long waits—there is no daemon.
 
 ## Boundaries
 
-The implemented Wave 2 boundary is:
+The implemented Wave 3 boundary is:
 
 ```text
 exact human-authored task + product/scenario/policy digests
@@ -22,6 +22,11 @@ exact human-authored task + product/scenario/policy digests
         -> selected digest-pinned OCI commands without network
         -> fresh read-only Codex review of the exact verified commit
         -> reviewed local candidate or one repair-and-revalidate cycle
+        -> exact actor/repository/remote proposal digest
+        -> expected-head push + immutable-marker draft PR
+        -> exact-head CI and optional GitHub-review observation
+        -> human readiness and merge
+        -> exact merge/tree/default-branch check readback and closure
 ```
 
 The complete planned v1 boundary extends that path:
@@ -44,6 +49,28 @@ untrusted PRD/repo/web inputs
 The builder never receives forge/deployment authority. The shipper cannot create
 or amend the candidate commit. Product/oracle changes invalidate the candidate.
 Provider state is authoritative for external effects.
+
+The GitHub adapter is isolated behind the delivery coordinator. Planning reads
+the live delegated actor, repository node identity, clone URL, fork status and
+default branch, then binds them with the candidate commit/tree, task/config,
+branch, required checks, review policy, allowed merge methods, approval expiry,
+and intended effects. Only `pr open` mutates. Its effect journal records intent
+and call start before each push or PR request, caps each effect at one attempt,
+and makes ambiguous results enter `effect_unknown`. Reconciliation performs
+authoritative branch/marker/PR readback without mutation. GitHub API collections
+are paginated under one deadline and output budget. Tokens remain behind the
+operator-owned `gh` and Git credential-helper boundary and are not passed to
+Codex or stored in state.
+
+One stable delivery key and branch identify the PR across the single allowed
+repair. A new candidate gets new validation, review, approval, and push-effect
+identity while updating that same PR. Required checks are evaluated on the exact
+current head; missing, pending, conflicting, cancelled, neutral, skipped,
+timed-out, or failed results do not pass. Mill never changes draft readiness or
+merge state. Finalization requires GitHub to prove the PR head, merge commit,
+tree, containment in the configured default branch, allowed merge shape, and
+successful required checks on the exact merge commit. A tree-changing merge
+requires separate revalidation rather than inferred closure.
 
 In Wave 2, the qualification approval digest binds a passing baseline's exact
 base commit, canonical task and repository configuration, selected command
@@ -84,11 +111,13 @@ foreground lease owner, which terminates its own in-memory child; no command
 signals a stored PID. If the lease is free but a recorded process may still
 exist, resume and terminal cancellation fail closed for attended reconciliation.
 State events are append-only, backup restore validates SQLite integrity, schema,
-and required objects before atomic replacement, and purge requires every run to
-be terminal. A failed pre-build context setup removes its provisional worktree
-and branch. Review attempt budgets are scoped to an exact candidate generation,
-and repair reasserts the reviewed commit/tree before allowing writes. There is
-no background daemon or implicit retry.
+and required objects before atomic replacement. Restoring older state moves
+newer unreferenced Mill worktrees into a mode-restricted quarantine with a
+durable prepared/completed manifest; it never silently deletes them. Purge
+requires every run to be terminal. A failed pre-build context setup removes its
+provisional worktree and branch. Review attempt budgets are scoped to an exact
+candidate generation, and repair reasserts the reviewed commit/tree before
+allowing writes. There is no background daemon or implicit retry.
 
 ## Core modules
 
@@ -118,11 +147,14 @@ digest-pinned OCI environment with no network, a read-only root and workspace,
 dropped capabilities, no-new-privileges, resource bounds, and no implicit image
 pull. Every command receives an opaque Mill-owned container name and evidence is
 withheld until an unconditional, separately bounded `docker rm --force`
-succeeds. Codex runs in attended trusted-host mode using workspace-write
-sandboxing and promotion-time Git scope and identity checks. Mill does not claim
-this prevents all host access. Stronger containment requires a separately
-qualified container/VM worker with controlled model authentication and no
-host-home, Docker-socket, keychain, or forge credential access.
+succeeds. If a canonical workspace path contains a comma, Mill mounts it through
+a mode-restricted, exact-realpath temporary alias so Docker's comma-delimited
+long syntax does not truncate the source. Codex runs in attended trusted-host
+mode using workspace-write sandboxing and promotion-time Git scope and identity
+checks. Mill does not claim this prevents all host access. Stronger containment
+requires a separately qualified container/VM worker with controlled model
+authentication and no host-home, Docker-socket, keychain, or forge credential
+access.
 
 ## Release trust
 

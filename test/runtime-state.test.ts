@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { once } from "node:events";
 import path from "node:path";
 
@@ -351,6 +358,44 @@ describe("operational state", () => {
       await expect(
         restoreStateBackup(repositoryId, temporary.path, linked),
       ).rejects.toMatchObject({ code: "INVALID_STATE_BACKUP" });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("quarantines worktrees absent from an older restored backup", async () => {
+    const temporary = await temporaryDirectory("mill-state-restore-orphan-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const backup = await store.backup();
+    const newerWorktree = path.join(store.worktreesDirectory, "newer-run");
+    await mkdir(newerWorktree);
+    store.close();
+    try {
+      const result = await restoreStateBackup(
+        repositoryId,
+        temporary.path,
+        backup,
+      );
+      expect(result.quarantinedCount).toBe(1);
+      expect(result.quarantineManifest).toBeDefined();
+      await expect(access(newerWorktree)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      const manifestPath = result.quarantineManifest;
+      expect(manifestPath).toBeDefined();
+      if (manifestPath === undefined) throw new Error("manifest missing");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+        worktrees: { original: string; quarantined: string }[];
+      };
+      expect(manifest.worktrees).toHaveLength(1);
+      expect(manifest.worktrees[0]?.original).toBe(newerWorktree);
+      const quarantined = manifest.worktrees[0]?.quarantined;
+      expect(quarantined).toBeDefined();
+      if (quarantined === undefined) throw new Error("worktree missing");
+      const quarantineStat = await stat(quarantined);
+      expect(quarantineStat.mode).toEqual(expect.any(Number));
     } finally {
       await temporary.cleanup();
     }

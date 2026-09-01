@@ -1,0 +1,213 @@
+task_id: mill-wave-3-draft-pr
+status: active
+objective: >-
+  Publish one already committed, locally verified, locally reviewed candidate as
+  a draft GitHub pull request through the operator's own authenticated gh
+  session, reconcile ambiguous effects without duplication, observe exact-head
+  policy, and close truthfully only after David merges and main checks settle.
+risk_class: high
+support_decision:
+  host: macOS-arm64
+  git_observed: 2.50.0
+  gh_observed: 2.74.2
+  forge: github.com
+  actor_mode: interactive-delegated-operator
+  credential_mode: operator-owned-gh-session
+  builder_forge_credentials: forbidden
+  merge_authority: David only
+design_decisions:
+  - local exact-candidate review remains mandatory; a GitHub reviewer is
+    optional unless the repository configuration explicitly requires one
+  - propose authority is an exact digest over the run, candidate, target
+    repository identity, base branch, delivery branch, required checks, review
+    policy, and intended effects
+  - read, plan, push, create-PR, observe, reconcile, and finalize are distinct
+    operations; a plan or successful preflight never grants an external effect
+  - the shipper persists intent before each external call, records unknown
+    outcomes, and requires authoritative GitHub readback before any retry or
+    completion claim
+  - a stable delivery key identifies one intended PR across retries and one
+    stable branch; every candidate generation receives a distinct push effect
+    identity and exact expected-old-head precondition
+  - the shipper can publish only the candidate commit and tree already bound to
+    passing validation and local review; it cannot create or amend a commit
+  - forks, lookalike remotes, changed owners, changed repository node IDs,
+    changed operator identities, or changed policy invalidate propose authority
+  - Mill reports locally ready and waits; it never marks a draft ready, merges,
+    deploys, reruns GitHub checks, or infers success from command text
+  - paths containing commas use a protected temporary bind alias for OCI
+    verification rather than Docker's comma-delimited source syntax
+  - state restore quarantines newer unreferenced Mill worktrees with a durable
+    recovery manifest and never silently deletes them
+action_boundary:
+  disclosures:
+    - exact repository owner/name/node ID, actor login/ID, branch, candidate
+      SHA, task title, delivery marker, required-check names, and review state
+  effects:
+    - read GitHub actor, repository, refs, pull requests, checks, reviews, and
+      merge state
+    - push one exact candidate SHA to one Mill-owned branch with an expected-old
+      remote-head precondition
+    - create one draft pull request identified by an immutable delivery marker
+  authority_owner: repository mill.yaml plus explicit operator approval digest
+  credential_owner: operator; credentials remain behind gh/git credential helper
+  source_of_truth: GitHub API readback
+  idempotency: stable delivery key plus per-candidate effect IDs
+  unknown_effect:
+    block mutation and reconcile by exact branch, marker, target, candidate, and
+    PR identity
+  controls:
+    - TOL-001
+    - TOL-003
+    - TOL-004
+    - TOL-005
+    - IAM-001
+    - IAM-002
+    - IAM-003
+    - SEC-001
+    - SEC-002
+    - SEC-004
+    - SEC-006
+    - REL-001
+    - REL-003
+    - REL-005
+allowed_paths:
+  - architecture/**
+  - docs/**
+  - product/**
+  - schemas/**
+  - scripts/**
+  - src/**
+  - test/**
+  - AGENTS.md
+  - CHANGELOG.md
+  - README.md
+  - WORKFLOW.md
+  - package.json
+  - package-lock.json
+  - vitest.config.ts
+forbidden_paths:
+  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - .env*
+  - .mill/**
+  - .github/workflows/release.yml
+acceptance_items:
+  - W3-A1 propose configuration binds the exact GitHub host, repository node
+    identity, owner/name, remote, base branch, required checks, allowed merge
+    methods, and optional remote-review policy
+  - W3-A2 plan is read-only and returns an approval digest bound to the exact
+    reviewed candidate, actor, target, policy, delivery branch, and effects
+  - W3-A3 missing, stale, mismatched, inspect/build-only, fork, lookalike,
+    changed-account, or changed-repository authority produces zero mutations
+  - W3-A4 builder and reviewer processes never receive GitHub credentials or
+    remote-mutation capability; only the attended shipper invokes gh or push
+  - W3-A5 push intent is durable before the call and only the exact reviewed
+    commit is published under an expected-old-head precondition
+  - W3-A6 draft-PR intent is durable before the call; the immutable delivery
+    marker and authoritative readback prevent duplicate PR creation
+  - W3-A7 crash before a call, after effect before receipt, and after receipt
+    before response reconcile truthfully without duplicate mutation
+  - W3-A8 latest-head required checks and configured remote-review policy are
+    observed with bounded polling; pending, skipped, stale, neutral, cancelled,
+    timed-out, or failed required evidence never passes
+  - W3-A9 one aggregated attended remote-feedback repair may create a new local
+    candidate, invalidates old evidence and approval, and updates the same PR
+    only after revalidation, local review, and a new exact approval
+  - W3-A10 Mill stops at awaiting_human; only David marks ready and uses an
+    allowed merge method
+  - W3-A11 finalize reads back PR head, merge method/result SHA/tree, and exact
+    default-branch checks before post_merge_verified and closed
+  - W3-A12 ambiguous or conflicting branch, PR, merge, or check identity blocks
+    and emits typed reconciliation evidence rather than retrying blindly
+  - W3-A13 OCI validation supports repository/state paths containing commas
+    without weakening the read-only/no-network verifier boundary
+  - W3-A14 restoring older state quarantines newer unreferenced worktrees with
+    recoverable evidence and never silently deletes them
+  - W3-A15 fake-provider, delivered-package, fault-injection, and one attended
+    disposable GitHub canary prove the lifecycle; no normal closure-only PR is
+    produced
+commands_in_scope:
+  - doctor --mode propose
+  - pr plan
+  - pr open
+  - pr reconcile
+  - pr observe
+  - pr finalize
+  - resume
+  - status
+  - state restore
+validation_commands:
+  - npm run format:check
+  - npm run lint
+  - npm run typecheck
+  - npm test
+  - npm run test:coverage
+  - npm run test:package
+final_validation_commands:
+  - npm run check
+  - packed CLI disposable-repository draft-PR lifecycle canary with fake gh
+  - attended disposable GitHub canary with no merge automation
+required_worker_chain:
+  - task-executor
+  - validation-gate
+  - code-review
+  - commit-push
+lifecycle_gates:
+  architecture_review_required: true
+  security_review_required: true
+  code_review_required: true
+  required_pr_ci: true
+  human_merge_required: true
+evidence_required:
+  - red-first tests for denied authority, duplicate effects, unknown outcomes,
+    path-safe OCI mounting, and restore reconciliation
+  - visible command results and item-level acceptance results
+  - exact committed candidate validation and local review
+  - fake-provider external-effect fault matrix
+  - clean-checkout packed-CLI canary
+  - attended disposable GitHub canary and authoritative readback
+scope_exclusions:
+  - automatic merge, draft-ready transition, deployment, check rerun, issue or
+    tracker projection, repository provisioning, or branch-protection mutation
+  - daemon, parallel workers, hosted state, shared credentials, GitHub App, or
+    unattended workload identity
+  - generalized PRD compiler, stack research, bootstrap recipe, or retrofit
+  - automated upgrade, detach, rollback, release, or npm publication
+  - hostile-host containment claim for Codex or gh
+stop_conditions:
+  - repository, actor, credential, remote destination, base branch, required
+    checks, review policy, or merge method cannot be bound exactly
+  - a model-visible process can access forge credentials or invoke a remote
+    effect
+  - state cannot persist intent before a call or authoritative readback cannot
+    classify an unknown outcome
+  - the shipper can publish a commit/tree other than the reviewed candidate
+  - a retry can create a duplicate branch or pull request
+  - the same subsystem produces recurring P0/P1 review findings
+retry_budget: 1
+runtime_pins:
+  node: 24.20.0
+  npm: 11.x
+  typescript: 6.0.3
+  git_observed: 2.50.0
+  gh_observed: 2.74.2
+  github_api: v3
+alignment_gate_ref: product/PRD.md
+plan_drift_policy_ref: WORKFLOW.md
+test_matrix_refs:
+  - docs/development.md#testing-matrix
+engineering_policy_refs:
+  - AGENTS.md#engineering-rules
+architecture_guidance_refs:
+  - architecture/ARCHITECTURE.md
+changelog_intent: add exact-candidate draft-PR delivery and truthful closure
+versioning_impact: pre-alpha additive CLI, config, state, and result contracts
+migration_impact:
+  additive operational-state tables and run transitions with validated restore
+  compatibility
+docs_sync_refs:
+  - README.md
+  - product/PLAN.md
+  - product/PRD.md
+  - architecture/ARCHITECTURE.md
+  - docs/development.md

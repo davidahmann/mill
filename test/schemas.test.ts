@@ -81,6 +81,43 @@ const samples = {
       },
     },
   },
+  deliveryRecord: {
+    schemaVersion: "1",
+    runId: "123e4567-e89b-42d3-a456-426614174000",
+    deliveryKey: digest,
+    proposalDigest: digest,
+    approvalExpiresAt: "2026-09-01T12:15:00.000Z",
+    state: "planned",
+    target: {
+      forge: "github",
+      host: "github.com",
+      owner: "example",
+      repository: "app",
+      repositoryNodeId: "R_example",
+      cloneUrl: "https://github.com/example/app.git",
+      remoteName: "origin",
+      baseBranch: "main",
+      actorLogin: "operator",
+      actorId: 1,
+    },
+    branchName: "mill/task-123e4567",
+    candidateCommit: "a".repeat(40),
+    candidateTree: "b".repeat(40),
+    requiredChecks: ["validate"],
+    reviewPolicy: {
+      mode: "local_only",
+      requiredReviewerLogins: [],
+    },
+    allowedMergeMethods: ["squash"],
+    effects: [],
+    remoteHeadCommit: null,
+    pullRequest: null,
+    observation: null,
+    merge: null,
+    lastErrorCode: null,
+    createdAt: "2026-09-01T12:00:00.000Z",
+    updatedAt: "2026-09-01T12:00:00.000Z",
+  },
   millLock: {
     schemaVersion: "1",
     mill: { package: "@davidahmann/mill", version: "0.0.0-development" },
@@ -158,6 +195,7 @@ const schemaFiles = {
   scenarioSet: "scenario-set.schema.json",
   outcomePlan: "outcome-plan.schema.json",
   millConfig: "mill-config.schema.json",
+  deliveryRecord: "delivery-record.schema.json",
   millLock: "mill-lock.schema.json",
   taskPacket: "task-packet.schema.json",
   contextManifest: "context-manifest.schema.json",
@@ -181,6 +219,7 @@ describe("compact schemas", () => {
       }
     });
     ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
+    ajv.addFormat("date-time", (value) => Number.isFinite(Date.parse(value)));
     for (const kind of Object.keys(
       schemaFiles,
     ) as (keyof typeof schemaFiles)[]) {
@@ -288,6 +327,71 @@ describe("compact schemas", () => {
     expect(contractSchemas.millLock.safeParse(lockWithEmptyKey).success).toBe(
       false,
     );
+  });
+
+  it("requires an exact GitHub proposal boundary at the propose trust ceiling", async () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    ajv.addFormat(
+      "uuid",
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+    );
+    ajv.addFormat("uri", (value) => {
+      try {
+        void new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    const validate = ajv.compile(
+      JSON.parse(
+        await readFile(path.join("schemas", "mill-config.schema.json"), "utf8"),
+      ),
+    );
+    const base = {
+      ...samples.millConfig,
+      trustCeiling: "propose" as const,
+    };
+    expect(validate(base)).toBe(false);
+    expect(contractSchemas.millConfig.safeParse(base).success).toBe(false);
+    const localReview = {
+      ...base,
+      propose: {
+        forge: "github",
+        host: "github.com",
+        owner: "example",
+        repository: "app",
+        repositoryNodeId: "R_example",
+        remoteName: "origin",
+        baseBranch: "main",
+        branchPrefix: "mill/",
+        allowedActors: ["operator"],
+        requiredChecks: ["validate"],
+        reviewPolicy: {
+          mode: "local_only",
+          requiredReviewerLogins: [],
+        },
+        allowedMergeMethods: ["squash"],
+      },
+    } as const;
+    expect(validate(localReview)).toBe(true);
+    expect(contractSchemas.millConfig.safeParse(localReview).success).toBe(
+      true,
+    );
+    const emptyRequiredReview = {
+      ...localReview,
+      propose: {
+        ...localReview.propose,
+        reviewPolicy: {
+          mode: "github_required",
+          requiredReviewerLogins: [],
+        },
+      },
+    } as const;
+    expect(validate(emptyRequiredReview)).toBe(false);
+    expect(
+      contractSchemas.millConfig.safeParse(emptyRequiredReview).success,
+    ).toBe(false);
   });
 
   it("rejects option-like and whitespace-bearing Git base references", async () => {

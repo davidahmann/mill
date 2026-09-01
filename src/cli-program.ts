@@ -10,6 +10,13 @@ import { asMillError, ExitCode, MillError } from "./errors.js";
 import { inspectPrd } from "./intake/prd.js";
 import { scanRepository } from "./repository/scan.js";
 import {
+  finalizeDraftPr,
+  observeDraftPr,
+  openDraftPr,
+  planDraftPr,
+  reconcileDraftPr,
+} from "./runtime/delivery.js";
+import {
   cancelRun,
   codexAuthStatus,
   qualifyBaseline,
@@ -464,6 +471,137 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       );
     });
 
+  const pr = program
+    .command("pr")
+    .description("deliver an exact reviewed candidate through a draft PR");
+  pr.command("plan")
+    .description("read live GitHub identity and create a local approval plan")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await planDraftPr({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "pr.plan", ok: true, data: result }),
+      );
+    });
+  pr.command("open")
+    .description("push and open the explicitly approved draft PR")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .requiredOption(
+      "--approve <digest>",
+      "exact, unexpired proposal digest returned by pr plan",
+    )
+    .requiredOption(
+      "--attended",
+      "acknowledge attended use of the operator-owned GitHub session",
+    )
+    .action(async (options: { task: string; run: string; approve: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await openDraftPr({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+        approvalDigest: options.approve,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "pr.open", ok: true, data: result }),
+      );
+    });
+  pr.command("reconcile")
+    .description("classify one unknown GitHub effect through readback only")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await reconcileDraftPr({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "pr.reconcile", ok: true, data: result }),
+      );
+    });
+  pr.command("observe")
+    .description("read exact-head checks and configured GitHub review policy")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await observeDraftPr({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      const blocked = result.run.status === "blocked";
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "pr.observe",
+          ok: !blocked,
+          status: blocked ? "blocked" : "ok",
+          data: result,
+          reasons: blocked
+            ? [
+                {
+                  code: result.run.blockCode ?? "REMOTE_POLICY_BLOCKED",
+                  message:
+                    "GitHub checks or configured review policy blocked this exact candidate.",
+                },
+              ]
+            : [],
+        }),
+      );
+      if (blocked) {
+        throw new MillError(
+          result.run.blockCode ?? "REMOTE_POLICY_BLOCKED",
+          "GitHub policy blocked this exact candidate.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+  pr.command("finalize")
+    .description("read back human merge and exact main checks before closure")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const result = await finalizeDraftPr({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "pr.finalize", ok: true, data: result }),
+      );
+    });
+
   program
     .command("cancel")
     .description("persist cancellation for the exact foreground controller")
@@ -509,11 +647,11 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
-      await stateRestore({ root, backupPath: options.from });
+      const report = await stateRestore({ root, backupPath: options.from });
       emit(
         io,
         global.json === true,
-        commandResult({ command: "state.restore", ok: true, data: {} }),
+        commandResult({ command: "state.restore", ok: true, data: report }),
       );
     });
   state
