@@ -973,6 +973,29 @@ describe("exact-candidate GitHub draft delivery", () => {
         runId,
         adapter,
       });
+      if (adapter.pullRequest === null) throw new Error("fake PR missing");
+      const priorPullRequest = adapter.pullRequest;
+      adapter.branchSha = reviewed.run.candidateCommit;
+      adapter.pullRequest = {
+        ...priorPullRequest,
+        number: 42,
+        nodeId: "PR_replacement",
+        headSha: reviewed.run.candidateCommit,
+      };
+      const pushCallsBeforeResume = adapter.pushCalls;
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "PULL_REQUEST_IDENTITY_MISMATCH" });
+      expect(adapter.pushCalls).toBe(pushCallsBeforeResume);
+      adapter.branchSha = candidateCommit;
+      adapter.pullRequest = priorPullRequest;
       adapter.pushFailure = "before";
       await expect(
         openDraftPr({
@@ -984,9 +1007,7 @@ describe("exact-candidate GitHub draft delivery", () => {
           adapter,
         }),
       ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
-      expect(adapter.pullRequest?.headSha).toBe(candidateCommit);
-      if (adapter.pullRequest === null) throw new Error("fake PR missing");
-      const priorPullRequest = adapter.pullRequest;
+      expect(adapter.pullRequest.headSha).toBe(candidateCommit);
       for (const conflictingPullRequest of [
         { ...priorPullRequest, draft: false },
         { ...priorPullRequest, state: "closed" as const, draft: false },

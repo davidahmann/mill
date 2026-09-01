@@ -406,8 +406,12 @@ function assertExactPullRequest(
   delivery: DeliveryRecord,
   requireDraft: boolean,
 ): void {
+  const recorded = delivery.pullRequest;
   if (
     !exactPullRequest(pullRequest, delivery) ||
+    (recorded !== null &&
+      (pullRequest.number !== recorded.number ||
+        pullRequest.nodeId !== recorded.nodeId)) ||
     pullRequest.headSha !== delivery.candidateCommit ||
     pullRequest.state !== "open" ||
     (requireDraft && !pullRequest.draft)
@@ -831,6 +835,11 @@ export async function openDraftPr(input: {
       deadlineMs,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
+    assertPushBoundaryPullRequest(
+      readback.pullRequest,
+      delivery,
+      readback.branchSha,
+    );
     let push = effect(delivery, "push", candidate.commit);
     if (readback.branchSha !== candidate.commit) {
       if (
@@ -951,6 +960,11 @@ export async function openDraftPr(input: {
         deadlineMs,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
+      assertPushBoundaryPullRequest(
+        readback.pullRequest,
+        delivery,
+        readback.branchSha,
+      );
       if (readback.branchSha !== candidate.commit) {
         markUnknown(
           store,
