@@ -15,6 +15,14 @@ export { MillError, ExitCode } from "./errors.js";
 export { inspectPrd, type PrdInspection } from "./intake/prd.js";
 export { scanRepository, type RepositoryScan } from "./repository/scan.js";
 export {
+  finalizeDraftPr,
+  observeDraftPr,
+  openDraftPr,
+  planDraftPr,
+  reconcileDraftPr,
+  type DeliveryRecord,
+} from "./runtime/delivery.js";
+export {
   cancelRun,
   codexAuthStatus,
   qualifyBaseline,

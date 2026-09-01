@@ -85,30 +85,81 @@ const repositoryPathPatternSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+(?:\/\*\*)?$/u);
 
-export const millConfigSchema = z.strictObject({
-  schemaVersion: z.literal("1"),
-  repositoryId: z.uuid(),
-  trustCeiling: z.enum(["inspect", "build", "propose"]),
-  sensitivePaths: z.array(repositoryPathPatternSchema).default([]),
-  verifier: z
-    .strictObject({
-      image: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
-      network: z.literal("none"),
-    })
-    .optional(),
-  commands: z.record(
-    z.string().min(1),
-    z.strictObject({
-      argv: z.array(z.string().min(1)).min(1),
-      cwd: z.string().min(1),
-      controlPaths: z.array(repositoryPathPatternSchema).min(1),
-      capability: z.enum(["read", "build", "test", "package"]),
-      required: z.boolean().default(true),
-      timeoutSeconds: z.number().int().min(1).max(3600).default(600),
-      execution: z.enum(["oci", "host"]).default("oci"),
-    }),
-  ),
-});
+const githubReviewPolicySchema = z
+  .strictObject({
+    mode: z.enum(["local_only", "github_required"]),
+    requiredReviewerLogins: z.array(z.string().min(1)),
+  })
+  .superRefine((policy, context) => {
+    if (
+      policy.mode === "github_required" &&
+      policy.requiredReviewerLogins.length === 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["requiredReviewerLogins"],
+        message:
+          "github_required review policy needs at least one reviewer login",
+      });
+    }
+  });
+
+export const millConfigSchema = z
+  .strictObject({
+    schemaVersion: z.literal("1"),
+    repositoryId: z.uuid(),
+    trustCeiling: z.enum(["inspect", "build", "propose"]),
+    sensitivePaths: z.array(repositoryPathPatternSchema).default([]),
+    verifier: z
+      .strictObject({
+        image: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
+        network: z.literal("none"),
+      })
+      .optional(),
+    propose: z
+      .strictObject({
+        forge: z.literal("github"),
+        host: z.literal("github.com"),
+        owner: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
+        repository: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
+        repositoryNodeId: z.string().min(1),
+        remoteName: z.string().regex(/^[A-Za-z0-9._-]+$/u),
+        baseBranch: z.string().regex(/^(?!-)(?!.*\.\.)[^\s~^:?*[\\]+$/u),
+        branchPrefix: z.literal("mill/"),
+        allowedActors: z.array(z.string().min(1)).min(1),
+        allowedMergerLogins: z.array(z.string().min(1)).min(1),
+        requiredChecks: z.array(z.string().min(1)),
+        reviewPolicy: githubReviewPolicySchema,
+        allowedMergeMethods: z
+          .array(z.enum(["merge", "linear_tree_preserving"]))
+          .min(1),
+        approvalTtlSeconds: z.number().int().min(60).max(3600).default(900),
+        pollTimeoutSeconds: z.number().int().min(1).max(1800).default(600),
+      })
+      .optional(),
+    commands: z.record(
+      z.string().min(1),
+      z.strictObject({
+        argv: z.array(z.string().min(1)).min(1),
+        cwd: z.string().min(1),
+        controlPaths: z.array(repositoryPathPatternSchema).min(1),
+        capability: z.enum(["read", "build", "test", "package"]),
+        required: z.boolean().default(true),
+        timeoutSeconds: z.number().int().min(1).max(3600).default(600),
+        execution: z.enum(["oci", "host"]).default("oci"),
+      }),
+    ),
+  })
+  .superRefine((value, context) => {
+    if (value.trustCeiling === "propose" && value.propose === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["propose"],
+        message:
+          "propose configuration is required at the propose trust ceiling",
+      });
+    }
+  });
 
 const authorityReferenceSchema = z.strictObject({
   path: z.string().min(1),
@@ -219,6 +270,94 @@ export const validationEvidenceSchema = z.strictObject({
   passed: z.boolean(),
 });
 
+const remoteEffectSchema = z.strictObject({
+  id: digestSchema,
+  kind: z.enum(["push", "pull_request"]),
+  candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  status: z.enum([
+    "intent",
+    "call_started",
+    "effect_unknown",
+    "retryable_absent",
+    "verified",
+    "blocked",
+  ]),
+  attemptCount: z.number().int().min(0).max(2),
+  expectedOldCommit: z
+    .string()
+    .regex(/^[a-f0-9]{40}$/u)
+    .nullable(),
+  errorCode: z.string().min(1).nullable(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const deliveryRecordSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  runId: z.uuid(),
+  deliveryKey: digestSchema,
+  proposalDigest: digestSchema,
+  approvalExpiresAt: z.iso.datetime(),
+  state: z.enum([
+    "planned",
+    "proposing",
+    "effect_unknown",
+    "awaiting_ci",
+    "awaiting_human",
+    "merged",
+    "post_merge_verified",
+    "closed",
+    "cancelled",
+    "blocked",
+  ]),
+  target: z.strictObject({
+    forge: z.literal("github"),
+    host: z.literal("github.com"),
+    owner: z.string().min(1),
+    repository: z.string().min(1),
+    repositoryNodeId: z.string().min(1),
+    cloneUrl: z.url(),
+    remoteName: z.string().min(1),
+    baseBranch: z.string().min(1),
+    actorLogin: z.string().min(1),
+    actorId: z.number().int().positive(),
+  }),
+  branchName: z.string().min(1),
+  candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
+  requiredChecks: z.array(z.string().min(1)),
+  reviewPolicy: githubReviewPolicySchema,
+  allowedMergerLogins: z.array(z.string().min(1)).min(1),
+  allowedMergeMethods: z
+    .array(z.enum(["merge", "linear_tree_preserving"]))
+    .min(1),
+  effects: z.array(remoteEffectSchema),
+  remoteHeadCommit: z
+    .string()
+    .regex(/^[a-f0-9]{40}$/u)
+    .nullable(),
+  pullRequest: z
+    .strictObject({
+      number: z.number().int().positive(),
+      nodeId: z.string().min(1),
+      url: z.url(),
+    })
+    .nullable(),
+  observation: z.record(z.string(), z.unknown()).nullable(),
+  merge: z
+    .strictObject({
+      commit: z.string().regex(/^[a-f0-9]{40}$/u),
+      tree: z.string().regex(/^[a-f0-9]{40}$/u),
+      method: z.enum(["merge", "linear_tree_preserving"]),
+      mergedByLogin: z.string().min(1),
+      mergedAt: z.iso.datetime(),
+      defaultBranchHead: z.string().regex(/^[a-f0-9]{40}$/u),
+    })
+    .nullable(),
+  lastErrorCode: z.string().min(1).nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
 export const millLockSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   mill: z.strictObject({
@@ -248,6 +387,7 @@ export const contractSchemas = {
   scenarioSet: scenarioSetSchema,
   taskPacket: taskPacketSchema,
   validationEvidence: validationEvidenceSchema,
+  deliveryRecord: deliveryRecordSchema,
 } as const;
 
 export type ContractKind = keyof typeof contractSchemas;

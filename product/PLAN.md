@@ -20,6 +20,7 @@ Each item is one vertical delivery wave, not a bucket of microtasks. Later-wave
 choices close only before their wave. The current detailed task is in
 `product/tasks/`.
 
-Wave 1 is landed. Wave 2 is implemented and remains active until its packed CLI
-and attended real-provider canaries, exact-candidate review, PR CI, human merge,
-and resulting-main checks are complete.
+Waves 1 and 2 are landed. Wave 3 is active: its implementation, fake-provider
+fault matrix, and packed draft-PR canary live in the same candidate change.
+Exact-candidate review, PR CI, human merge, resulting-main checks, and the
+explicitly authorized disposable real-GitHub canary remain its promotion gates.

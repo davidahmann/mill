@@ -6,9 +6,11 @@ approved product outcome into a tested, reviewed draft pull request.
 The project is pre-alpha. Wave 1 provides the installable source package,
 compact schemas, static PRD/repository inspection, and readiness diagnostics.
 Wave 2 adds an attended local path from one explicit task approval to an exact
-committed, OCI-validated, independently reviewed candidate. The CLI is
-`millctl`, published eventually as `@davidahmann/mill` to avoid collision with
-the existing `mill` command and npm package.
+committed, OCI-validated, independently reviewed candidate. Wave 3 adds an
+attended, exact-candidate path to one draft GitHub pull request, bounded
+CI/review observation, human merge, and truthful closure. The CLI is `millctl`,
+published eventually as `@davidahmann/mill` to avoid collision with the existing
+`mill` command and npm package.
 
 Mill's v1 boundary is deliberately narrow:
 
@@ -80,6 +82,61 @@ transient or invalid provider review; the durable per-candidate attempt budget
 prevents an unbounded token loop while still allowing the one reviewed repair
 generation.
 
+## Open one attended draft pull request
+
+The downstream repository must explicitly raise `trustCeiling` to `propose` and
+bind its immutable GitHub repository node ID, target branch, accepted operators,
+required checks, review policy, and allowed human merge methods. Mill reads the
+live actor, repository, remote, and default branch before it returns an approval
+digest. That plan performs no remote mutation. The separate `pr open` command
+requires the exact unexpired digest and an attended operator:
+
+```yaml
+trustCeiling: propose
+propose:
+  forge: github
+  host: github.com
+  owner: example
+  repository: app
+  repositoryNodeId: R_kgDOExample
+  remoteName: origin
+  baseBranch: main
+  branchPrefix: mill/
+  allowedActors: [founder]
+  allowedMergerLogins: [founder]
+  requiredChecks: [validate, CodeQL]
+  reviewPolicy:
+    mode: local_only
+    requiredReviewerLogins: []
+  allowedMergeMethods: [linear_tree_preserving]
+```
+
+```sh
+node dist/cli.js --json pr plan --task product/tasks/TASK.yaml --run <run-id>
+node dist/cli.js --json pr open --task product/tasks/TASK.yaml --run <run-id> \
+  --approve sha256:<digest-from-pr-plan> --attended
+node dist/cli.js --json pr observe --task product/tasks/TASK.yaml --run <run-id>
+# A human may mark ready; a configured merger merges in GitHub.
+node dist/cli.js --json pr finalize --task product/tasks/TASK.yaml --run <run-id>
+```
+
+Only the shipper reads the operator-owned `gh` session. Builder and reviewer
+processes receive neither GitHub credentials nor mutation tools. Mill journals
+intent before push and PR creation, uses an expected-old-head lease, and reads
+GitHub back before claiming an effect. An uncertain outcome becomes
+`effect_unknown`; `pr reconcile` is read-only and must classify it before any
+retry. Exact readback proving absence authorizes one retry; a second absent
+outcome blocks. Required checks pass only when every latest exact-head result is
+successful. A configured `github_required` reviewer may complete a current-head
+`APPROVED` or `COMMENTED` review, but any current-head actionable finding still
+blocks, including a severity-tagged top-level review body. Mill stops at
+`awaiting_human`; draft readiness is not closure authority and Mill never
+changes it or merges. Finalization verifies the recorded merger against
+`allowedMergerLogins`. Because GitHub does not expose an authoritative
+distinction between a one-commit squash and rebase, the provable policy is
+`linear_tree_preserving`; Mill never guesses a specific linear method from its
+allowlist.
+
 Use `--json` before the command for the stable machine-readable envelope.
 `--json --version` is machine-readable; help is human-only and combining it with
 `--json` returns a typed usage error. `doctor` and static adoption never execute
@@ -124,9 +181,10 @@ the repository.
 
 ## Status
 
-Not published. Local attended delivery is implemented, but no GitHub mutation,
-hostile-host containment, release, or generalized stack-compatibility claim
-exists until its corresponding later-wave canary passes.
+Not published. Local attended delivery and the bounded draft-PR lifecycle are
+implemented and covered by fake-provider and packed-package canaries. The first
+attended disposable real-GitHub canary, hostile-host containment, release, and
+generalized stack-compatibility claims remain pending their explicit gates.
 
 ## License
 

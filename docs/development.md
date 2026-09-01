@@ -42,9 +42,10 @@ Only applicable tiers are active. A skipped required lane blocks promotion.
 | Scenario     | active                     | normal, exception, degradation, recovery, adversarial |
 | Cross-system | Wave 3+                    | Codex, OCI and GitHub canaries                        |
 
-Wave 2 keeps a deterministic fake-adapter suite in CI and requires an attended
-real Codex/OCI canary before the wave is accepted. The realistic scenario set
-covers:
+Wave 3 keeps deterministic fake Codex, OCI, GitHub, and Git adapters in CI and
+runs the packed CLI through the human-merge gate in a disposable repository. A
+real Codex/OCI or GitHub canary remains attended maintainer evidence, never a CI
+job with personal credentials. The realistic scenario set covers:
 
 - normal approval, build, lifecycle commit, verification, and clean review;
 - negative controls for failed, stale, inspect-only, or interrupted baseline
@@ -58,15 +59,31 @@ covers:
 - recovery through crash-released writer leases, PID-reuse-safe orphan
   reconciliation, explicit OCI container cleanup, provisional workspace cleanup,
   exact-candidate repair revalidation, per-candidate review budgets, validated
-  state backup/restore, and terminal-only purge;
+  state backup/restore, quarantine of worktrees newer than a restored backup,
+  external-effect readback, one readback-authorized retry, retry exhaustion,
+  coordinator-level attendance enforcement, changing blocker identity, and purge
+  only after a locally reviewed or terminal state;
 - provenance through exact base, context, candidate commit/tree, validation, and
   review identity checks;
+- remote delivery through wrong-actor/fork/remote denial, stale approvals,
+  expected-head pushes, effect-before-receipt recovery, unknown-effect blocking,
+  cancellation before and during mutations, paginated exact-head inline and
+  top-level review feedback, one aggregated repair, stable PR identity and
+  open-draft preflight before retry whether an ambiguous push is absent or
+  landed, unauthorized merger and disallowed merge-shape rejection, merge-tree
+  binding, and non-false-green post-merge checks;
+- hostile filesystem coverage for Docker bind paths containing commas without
+  weakening read-only/no-network verification;
+- restore recovery through an immutable pre-commit quarantine manifest and a
+  database swap as the final fallible commit point;
 - packaging through installation of the generated tarball and execution of its
   public CLI and schema exports.
 
-The real provider canary is maintainer evidence, not a deterministic CI job: it
-uses the maintainer's personal Codex account and a pre-pulled digest-pinned
-image, and it must never push or create a pull request in Wave 2.
+The real-provider canaries use the maintainer's personal Codex and GitHub
+accounts, a pre-pulled digest-pinned image, and an explicitly named disposable
+repository. They may exercise only the wave's approved effects and must preserve
+authoritative readback evidence. No test may provision a repository, mark a PR
+ready, merge, deploy, or rerun remote checks.
 
 ## Architecture questions
 

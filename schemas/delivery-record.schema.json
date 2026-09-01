@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidahmann/mill/schemas/delivery-record.schema.json",
+  "title": "DeliveryRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "deliveryKey",
+    "proposalDigest",
+    "approvalExpiresAt",
+    "state",
+    "target",
+    "branchName",
+    "candidateCommit",
+    "candidateTree",
+    "requiredChecks",
+    "reviewPolicy",
+    "allowedMergerLogins",
+    "allowedMergeMethods",
+    "effects",
+    "remoteHeadCommit",
+    "pullRequest",
+    "observation",
+    "merge",
+    "lastErrorCode",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "runId": { "type": "string", "format": "uuid" },
+    "deliveryKey": { "$ref": "#/$defs/digest" },
+    "proposalDigest": { "$ref": "#/$defs/digest" },
+    "approvalExpiresAt": { "type": "string", "format": "date-time" },
+    "state": {
+      "enum": [
+        "planned",
+        "proposing",
+        "effect_unknown",
+        "awaiting_ci",
+        "awaiting_human",
+        "merged",
+        "post_merge_verified",
+        "closed",
+        "cancelled",
+        "blocked"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forge",
+        "host",
+        "owner",
+        "repository",
+        "repositoryNodeId",
+        "cloneUrl",
+        "remoteName",
+        "baseBranch",
+        "actorLogin",
+        "actorId"
+      ],
+      "properties": {
+        "forge": { "const": "github" },
+        "host": { "const": "github.com" },
+        "owner": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "minLength": 1 },
+        "repositoryNodeId": { "type": "string", "minLength": 1 },
+        "cloneUrl": { "type": "string", "format": "uri" },
+        "remoteName": { "type": "string", "minLength": 1 },
+        "baseBranch": { "type": "string", "minLength": 1 },
+        "actorLogin": { "type": "string", "minLength": 1 },
+        "actorId": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "branchName": { "type": "string", "minLength": 1 },
+    "candidateCommit": { "$ref": "#/$defs/sha" },
+    "candidateTree": { "$ref": "#/$defs/sha" },
+    "requiredChecks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "reviewPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "requiredReviewerLogins"],
+      "properties": {
+        "mode": { "enum": ["local_only", "github_required"] },
+        "requiredReviewerLogins": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "mode": { "const": "github_required" } },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "requiredReviewerLogins": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "allowedMergerLogins": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "allowedMergeMethods": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["merge", "linear_tree_preserving"] }
+    },
+    "effects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/effect" }
+    },
+    "remoteHeadCommit": {
+      "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
+    },
+    "pullRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["number", "nodeId", "url"],
+          "properties": {
+            "number": { "type": "integer", "minimum": 1 },
+            "nodeId": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "format": "uri" }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "observation": { "type": ["object", "null"] },
+    "merge": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "tree",
+            "method",
+            "mergedByLogin",
+            "mergedAt",
+            "defaultBranchHead"
+          ],
+          "properties": {
+            "commit": { "$ref": "#/$defs/sha" },
+            "tree": { "$ref": "#/$defs/sha" },
+            "method": {
+              "enum": ["merge", "linear_tree_preserving"]
+            },
+            "mergedByLogin": { "type": "string", "minLength": 1 },
+            "mergedAt": { "type": "string", "format": "date-time" },
+            "defaultBranchHead": { "$ref": "#/$defs/sha" }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "lastErrorCode": { "type": ["string", "null"], "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "candidateCommit",
+        "status",
+        "attemptCount",
+        "expectedOldCommit",
+        "errorCode",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/digest" },
+        "kind": { "enum": ["push", "pull_request"] },
+        "candidateCommit": { "$ref": "#/$defs/sha" },
+        "status": {
+          "enum": [
+            "intent",
+            "call_started",
+            "effect_unknown",
+            "retryable_absent",
+            "verified",
+            "blocked"
+          ]
+        },
+        "attemptCount": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "expectedOldCommit": {
+          "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
+        },
+        "errorCode": { "type": ["string", "null"], "minLength": 1 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

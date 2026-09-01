@@ -41,6 +41,7 @@ import {
 } from "./repository.js";
 import {
   acquireWriterLease,
+  isPurgeSafeRun,
   isTerminalRun,
   purgeRepositoryState,
   publicRunRecord,
@@ -189,9 +190,16 @@ function storedManifest(run: RunRecord): ContextManifest {
 function storedReviewFindings(
   run: RunRecord,
 ): ReturnType<typeof reviewResultSchema.parse>["findings"] | undefined {
-  if (run.reviewJson === undefined) return undefined;
+  const source =
+    run.blockCode === "REMOTE_REVIEW_FINDINGS"
+      ? run.remoteFeedbackJson
+      : run.blockCode === "REVIEW_FINDINGS" ||
+          run.blockCode === "REVIEW_NON_CONVERGENCE"
+        ? run.reviewJson
+        : undefined;
+  if (source === undefined) return undefined;
   try {
-    const parsed = reviewResultSchema.safeParse(JSON.parse(run.reviewJson));
+    const parsed = reviewResultSchema.safeParse(JSON.parse(source));
     if (
       !parsed.success ||
       parsed.data.candidateCommit !== run.candidateCommit
@@ -204,7 +212,7 @@ function storedReviewFindings(
   } catch (error) {
     throw new MillError(
       "REVIEW_EVIDENCE_INVALID",
-      "Stored review evidence is invalid or bound to another candidate.",
+      "Stored local or remote review evidence is invalid or bound to another candidate.",
       ExitCode.data,
       { cause: String(error) },
     );
@@ -242,7 +250,7 @@ function storedGitControl(run: RunRecord): GitControlSnapshot {
   }
 }
 
-async function assertRunBindings(
+export async function assertRunBindings(
   root: string,
   run: RunRecord,
   inputs: RuntimeInputs,
@@ -300,7 +308,7 @@ function safeBlock(store: StateStore, runId: string, error: MillError): void {
     const run = store.getRun(runId);
     if (isTerminalRun(run.status)) return;
     if (run.status === "blocked") {
-      store.recordEvent(runId, "run.blocked_again", { code: error.code });
+      store.replaceBlocker(runId, error.code, "run.blocker_replaced");
       return;
     }
     store.transition(runId, "blocked", "run.blocked", { code: error.code });
@@ -317,6 +325,12 @@ function settleFailure(
   try {
     const run = store.getRun(runId);
     if (isTerminalRun(run.status)) return;
+    if (run.status === "effect_unknown") {
+      store.recordEvent(runId, "run.reconciliation_required", {
+        code: error.code,
+      });
+      return;
+    }
     if (run.cancelRequested) {
       store.transition(runId, "cancelled", "run.cancelled", {
         code: error.code,
@@ -831,6 +845,13 @@ export async function resumeRun(input: {
     }
     store.setActiveProcess(run.id, null);
     run = store.getRun(run.id);
+    if (run.status === "effect_unknown") {
+      throw new MillError(
+        "GITHUB_RECONCILIATION_REQUIRED",
+        "An unknown GitHub effect must be reconciled before cancellation or local resume.",
+        ExitCode.temporary,
+      );
+    }
     if (run.cancelRequested && !isTerminalRun(run.status)) {
       return publicRunRecord(
         store.transition(run.id, "cancelled", "run.cancelled", {
@@ -985,6 +1006,12 @@ export async function cancelRun(input: {
     if (isTerminalRun(current.status)) {
       return publicRunRecord(current);
     }
+    if (current.status === "effect_unknown") {
+      store.recordEvent(current.id, "run.cancellation_pending", {
+        code: "GITHUB_RECONCILIATION_REQUIRED",
+      });
+      return publicRunRecord(current);
+    }
     const active = storedActiveProcess(current);
     if (active !== undefined && processIdentityStatus(active) !== "mismatch") {
       store.recordEvent(current.id, "run.cancellation_pending", {
@@ -1024,7 +1051,7 @@ export async function runStatus(input: {
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
     if (run === undefined) return {};
     let interrupted = false;
-    let reconciliationRequired = false;
+    let reconciliationRequired = run.status === "effect_unknown";
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
     if (
@@ -1080,7 +1107,7 @@ export async function stateBackup(input: { root: string }): Promise<string> {
 export async function stateRestore(input: {
   root: string;
   backupPath: string;
-}): Promise<void> {
+}): Promise<Awaited<ReturnType<typeof restoreStateBackup>>> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
   const store = await StateStore.open(config.repositoryId, commonDirectory);
@@ -1088,7 +1115,7 @@ export async function stateRestore(input: {
   try {
     lease = await acquireWriterLease(store);
     store.close();
-    await restoreStateBackup(
+    return await restoreStateBackup(
       config.repositoryId,
       commonDirectory,
       input.backupPath,
@@ -1118,10 +1145,10 @@ export async function statePurge(input: {
   try {
     lease = await acquireWriterLease(store);
     const runs = store.runs();
-    if (runs.some((run) => !isTerminalRun(run.status))) {
+    if (runs.some((run) => !isPurgeSafeRun(run.status))) {
       throw new MillError(
         "ACTIVE_RUNS_BLOCK_PURGE",
-        "All runs must be terminal before state can be purged.",
+        "All runs must be locally reviewed or terminal before state can be purged.",
         ExitCode.configuration,
       );
     }

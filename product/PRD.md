@@ -1,7 +1,6 @@
 # Mill product requirements
 
-Status: approved foundation contract Owner: David Ahmann Last updated:
-2026-08-31
+Status: approved v1 contract Owner: David Ahmann Last updated: 2026-09-01
 
 ## Problem
 

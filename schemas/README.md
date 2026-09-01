@@ -15,9 +15,11 @@ documents use the same data model.
 - `context-manifest.schema.json`
 - `validation-evidence.schema.json`
 - `review-result.schema.json`
+- `delivery-record.schema.json`
 
 Task packets are Git-owned approval contracts. Context manifests, validation
-evidence, and review results are schema-versioned operational artifacts bound to
-an exact task/base/candidate. SQLite runs and events, credentials, prompts, raw
-model streams, and raw command output are deliberately not repository contracts
-and are never accepted as authority.
+evidence, review results, and delivery records are schema-versioned operational
+artifacts bound to an exact task/base/candidate and external-effect identity.
+SQLite runs and events, credentials, prompts, raw model streams, and raw command
+output are deliberately not repository contracts and are never accepted as
+authority.

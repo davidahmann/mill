@@ -29,6 +29,103 @@
         "network": { "const": "none" }
       }
     },
+    "propose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forge",
+        "host",
+        "owner",
+        "repository",
+        "repositoryNodeId",
+        "remoteName",
+        "baseBranch",
+        "branchPrefix",
+        "allowedActors",
+        "allowedMergerLogins",
+        "requiredChecks",
+        "reviewPolicy",
+        "allowedMergeMethods"
+      ],
+      "properties": {
+        "forge": { "const": "github" },
+        "host": { "const": "github.com" },
+        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "repositoryNodeId": { "type": "string", "minLength": 1 },
+        "remoteName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "baseBranch": {
+          "type": "string",
+          "pattern": "^(?!-)(?!.*\\.\\.)[^\\s~^:?*[\\\\]+$"
+        },
+        "branchPrefix": { "const": "mill/" },
+        "allowedActors": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowedMergerLogins": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "requiredChecks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "reviewPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "requiredReviewerLogins"],
+          "properties": {
+            "mode": { "enum": ["local_only", "github_required"] },
+            "requiredReviewerLogins": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "mode": { "const": "github_required" } },
+                "required": ["mode"]
+              },
+              "then": {
+                "properties": {
+                  "requiredReviewerLogins": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "allowedMergeMethods": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["merge", "linear_tree_preserving"] }
+        },
+        "approvalTtlSeconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 3600,
+          "default": 900
+        },
+        "pollTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1800,
+          "default": 600
+        }
+      }
+    },
     "commands": {
       "type": "object",
       "propertyNames": { "minLength": 1 },
@@ -66,5 +163,17 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "trustCeiling": { "const": "propose" } },
+        "required": ["trustCeiling"]
+      },
+      "then": {
+        "properties": { "propose": true },
+        "required": ["propose"]
+      }
+    }
+  ]
 }

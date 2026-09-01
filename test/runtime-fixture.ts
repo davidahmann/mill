@@ -24,7 +24,13 @@ async function git(root: string, args: readonly string[]): Promise<string> {
 }
 
 export async function runtimeFixture(
-  options: { reviewRepair?: boolean; retryCount?: number } = {},
+  options: {
+    reviewRepair?: boolean;
+    retryCount?: number;
+    repositoryPrefix?: string;
+    propose?: boolean;
+    githubReviewer?: string;
+  } = {},
 ): Promise<{
   root: string;
   stateHome: string;
@@ -34,7 +40,9 @@ export async function runtimeFixture(
   dockerPath: string;
   cleanup(): Promise<void>;
 }> {
-  const repository = await temporaryDirectory("mill-runtime-repo-");
+  const repository = await temporaryDirectory(
+    options.repositoryPrefix ?? "mill-runtime-repo-",
+  );
   const state = await temporaryDirectory("mill-runtime-state-");
   const tools = await temporaryDirectory("mill-runtime-tools-");
   const root = repository.path;
@@ -58,17 +66,43 @@ export async function runtimeFixture(
       'import assert from "node:assert/strict";\nimport test from "node:test";\nimport { value } from "../src/value.js";\ntest("value stays positive", () => assert.ok(value > 0));\n',
     ),
   ]);
+  const reviewMode =
+    options.githubReviewer === undefined ? "local_only" : "github_required";
+  const reviewers =
+    options.githubReviewer === undefined ? "[]" : `[${options.githubReviewer}]`;
+  const proposalConfiguration =
+    options.propose === true
+      ? `propose:
+  forge: github
+  host: github.com
+  owner: example
+  repository: app
+  repositoryNodeId: R_example
+  remoteName: origin
+  baseBranch: main
+  branchPrefix: mill/
+  allowedActors: [operator]
+  allowedMergerLogins: [operator]
+  requiredChecks: [validate]
+  reviewPolicy:
+    mode: ${reviewMode}
+    requiredReviewerLogins: ${reviewers}
+  allowedMergeMethods: [linear_tree_preserving]
+  approvalTtlSeconds: 900
+  pollTimeoutSeconds: 30
+`
+      : "";
   await writeFile(
     path.join(root, "mill.yaml"),
     `schemaVersion: "1"
 repositoryId: "11111111-1111-4111-8111-111111111111"
-trustCeiling: build
+trustCeiling: ${options.propose === true ? "propose" : "build"}
 sensitivePaths:
   - .env
 verifier:
   image: "node@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e"
   network: none
-commands:
+${proposalConfiguration}commands:
   test:
     argv: ["node", "--test"]
     cwd: "."
@@ -120,6 +154,12 @@ budget:
 `,
   );
   await git(root, ["init", "--initial-branch=main"]);
+  await git(root, [
+    "remote",
+    "add",
+    "origin",
+    "https://github.com/example/app.git",
+  ]);
   await git(root, ["add", "."]);
   await git(root, [
     "commit",
