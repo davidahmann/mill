@@ -204,7 +204,10 @@ function boolean(value: unknown, label: string): boolean {
   return value;
 }
 
-function parsePullRequest(value: unknown): GitHubPullRequest {
+function parsePullRequest(
+  value: unknown,
+  requireMergedFlag: boolean,
+): GitHubPullRequest {
   const item = object(value, "pull request");
   const head = object(item.head, "pull request head");
   const base = object(item.base, "pull request base");
@@ -226,7 +229,10 @@ function parsePullRequest(value: unknown): GitHubPullRequest {
     headRef: text(head.ref, "pull request head ref"),
     headSha: assertSha(head.sha, "pull request head SHA"),
     baseRef: text(base.ref, "pull request base ref"),
-    merged: boolean(item.merged, "pull request merged flag"),
+    merged:
+      item.merged === undefined && !requireMergedFlag
+        ? false
+        : boolean(item.merged, "pull request merged flag"),
     mergeCommitSha:
       item.merge_commit_sha === null
         ? null
@@ -581,8 +587,8 @@ class GhGitHubAdapter implements GitHubAdapter {
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
     );
-    return paginatedArray(value, "pull request collection").map(
-      parsePullRequest,
+    return paginatedArray(value, "pull request collection").map((item) =>
+      parsePullRequest(item, false),
     );
   }
 
@@ -622,7 +628,7 @@ class GhGitHubAdapter implements GitHubAdapter {
           : { cancellationRequested: input.cancellationRequested }),
       },
     );
-    return parsePullRequest(value);
+    return parsePullRequest(value, true);
   }
 
   async observe(input: {
@@ -645,7 +651,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       ],
       lifecycle,
     );
-    const pullRequest = parsePullRequest(pullValue);
+    const pullRequest = parsePullRequest(pullValue, true);
     const [
       branchSha,
       checkValue,

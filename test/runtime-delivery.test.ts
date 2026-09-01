@@ -985,6 +985,38 @@ describe("exact-candidate GitHub draft delivery", () => {
         }),
       ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
       expect(adapter.pullRequest?.headSha).toBe(candidateCommit);
+      if (adapter.pullRequest === null) throw new Error("fake PR missing");
+      const priorPullRequest = adapter.pullRequest;
+      for (const conflictingPullRequest of [
+        { ...priorPullRequest, draft: false },
+        { ...priorPullRequest, state: "closed" as const, draft: false },
+        {
+          ...priorPullRequest,
+          state: "closed" as const,
+          draft: false,
+          merged: true,
+          mergeCommitSha: "c".repeat(40),
+          mergedByLogin: "operator",
+          mergedAt: "2026-09-01T17:00:00.000Z",
+        },
+      ]) {
+        adapter.pullRequest = conflictingPullRequest;
+        await expect(
+          reconcileDraftPr({
+            root: fixture.root,
+            taskPath: fixture.taskPath,
+            runId,
+            adapter,
+          }),
+        ).rejects.toMatchObject({ code: "PULL_REQUEST_IDENTITY_MISMATCH" });
+        await expect(
+          runStatus({ root: fixture.root, runId }),
+        ).resolves.toMatchObject({
+          run: { status: "effect_unknown" },
+          reconciliationRequired: true,
+        });
+      }
+      adapter.pullRequest = priorPullRequest;
       const reconciled = await reconcileDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,

@@ -420,6 +420,39 @@ function assertExactPullRequest(
   }
 }
 
+function assertPushRetryPullRequest(
+  pullRequest: GitHubPullRequest | null,
+  delivery: DeliveryRecord,
+  expectedOldCommit: string | null,
+): void {
+  const recorded = delivery.pullRequest;
+  if (recorded === null) {
+    if (pullRequest !== null) {
+      throw new MillError(
+        "PULL_REQUEST_IDENTITY_MISMATCH",
+        "An unrecorded pull request conflicts with the absent push readback.",
+        ExitCode.configuration,
+      );
+    }
+    return;
+  }
+  if (
+    pullRequest === null ||
+    !exactPullRequest(pullRequest, delivery) ||
+    pullRequest.number !== recorded.number ||
+    pullRequest.nodeId !== recorded.nodeId ||
+    pullRequest.headSha !== expectedOldCommit ||
+    pullRequest.state !== "open" ||
+    !pullRequest.draft
+  ) {
+    throw new MillError(
+      "PULL_REQUEST_IDENTITY_MISMATCH",
+      "The recorded pull request is no longer the expected open draft at the prior candidate head.",
+      ExitCode.configuration,
+    );
+  }
+}
+
 function assertDeliveryContinuity(input: {
   run: RunRecord;
   inputs: RuntimeInputs;
@@ -1155,11 +1188,19 @@ export async function reconcileDraftPr(input: {
         ExitCode.data,
       );
     }
-    const effectAbsent =
-      unknownEffect.kind === "pull_request"
-        ? readback.pullRequest === null &&
-          readback.branchSha === delivery.candidateCommit
-        : readback.branchSha === unknownEffect.expectedOldCommit;
+    let effectAbsent = false;
+    if (unknownEffect.kind === "pull_request") {
+      effectAbsent =
+        readback.pullRequest === null &&
+        readback.branchSha === delivery.candidateCommit;
+    } else if (readback.branchSha === unknownEffect.expectedOldCommit) {
+      assertPushRetryPullRequest(
+        readback.pullRequest,
+        delivery,
+        unknownEffect.expectedOldCommit,
+      );
+      effectAbsent = true;
+    }
     if (effectAbsent) {
       return reconcileAbsentEffect(store, run, delivery, unknownEffect);
     }
