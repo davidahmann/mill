@@ -30,6 +30,7 @@ import {
 
 export type DeliveryRecord = z.infer<typeof deliveryRecordSchema>;
 type RemoteEffect = DeliveryRecord["effects"][number];
+const maximumRemoteEffectAttempts = 2;
 
 interface DeliveryContext {
   inputs: RuntimeInputs;
@@ -142,6 +143,76 @@ function assertRemoteMutationNotCancelled(
   if (cancellationRequested(store, runId)) {
     stopCancelledDelivery(store, runId, delivery);
   }
+}
+
+function setRunBlocker(
+  store: StateStore,
+  run: RunRecord,
+  code: string,
+  eventType: string,
+  details: Record<string, string | number | boolean | null> = {},
+): RunRecord {
+  return run.status === "blocked"
+    ? store.replaceBlocker(run.id, code, eventType, details)
+    : store.transition(run.id, "blocked", eventType, { code, ...details });
+}
+
+function reconcileAbsentEffect(
+  store: StateStore,
+  run: RunRecord,
+  delivery: DeliveryRecord,
+  effectValue: RemoteEffect,
+): { run: PublicRunRecord; delivery: DeliveryRecord } {
+  if (cancellationRequested(store, run.id)) {
+    stopCancelledDelivery(store, run.id, delivery);
+  }
+  if (effectValue.attemptCount >= maximumRemoteEffectAttempts) {
+    const blocked = persistDelivery(
+      store,
+      run.id,
+      {
+        ...upsertEffect(delivery, {
+          ...effectValue,
+          status: "blocked",
+          errorCode: "REMOTE_EFFECT_RETRY_EXHAUSTED",
+          updatedAt: new Date().toISOString(),
+        }),
+        state: "blocked",
+        lastErrorCode: "REMOTE_EFFECT_RETRY_EXHAUSTED",
+      },
+      "delivery.retry_exhausted",
+      { effectId: effectValue.id },
+    );
+    const blockedRun = setRunBlocker(
+      store,
+      run,
+      "REMOTE_EFFECT_RETRY_EXHAUSTED",
+      "delivery.blocked",
+    );
+    return { run: publicRunRecord(blockedRun), delivery: blocked };
+  }
+  const retryable = persistDelivery(
+    store,
+    run.id,
+    {
+      ...upsertEffect(delivery, {
+        ...effectValue,
+        status: "retryable_absent",
+        errorCode: null,
+        updatedAt: new Date().toISOString(),
+      }),
+      state: "proposing",
+      lastErrorCode: null,
+    },
+    "delivery.effect_absent",
+    { effectId: effectValue.id, attemptCount: effectValue.attemptCount },
+  );
+  const retryableRun = store.transition(
+    run.id,
+    "proposing",
+    "delivery.retry_authorized",
+  );
+  return { run: publicRunRecord(retryableRun), delivery: retryable };
 }
 
 async function assertReviewedCandidate(
@@ -652,9 +723,17 @@ export async function openDraftPr(input: {
   taskPath: string;
   runId: string;
   approvalDigest: string;
+  attended: boolean;
   adapter?: GitHubAdapter;
   signal?: AbortSignal;
 }): Promise<{ run: PublicRunRecord; delivery: DeliveryRecord }> {
+  if (!input.attended) {
+    throw new MillError(
+      "ATTENDED_ACKNOWLEDGEMENT_REQUIRED",
+      "Draft-PR mutation requires an explicit attended acknowledgement.",
+      ExitCode.configuration,
+    );
+  }
   const context = await openDeliveryContext(input.root, input.taskPath);
   const { inputs, config, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
@@ -731,16 +810,35 @@ export async function openDraftPr(input: {
           ExitCode.configuration,
         );
       }
-      if (push?.attemptCount === 1) {
+      if (
+        push !== undefined &&
+        (push.status === "call_started" || push.status === "effect_unknown")
+      ) {
         markUnknown(store, run, delivery, push, "GITHUB_PUSH_OUTCOME_UNKNOWN");
       }
+      if (push?.status === "verified") {
+        throw new MillError(
+          "REMOTE_BRANCH_CONFLICT",
+          "A previously verified Mill branch no longer has its bound candidate head.",
+          ExitCode.configuration,
+        );
+      }
+      if ((push?.attemptCount ?? 0) >= maximumRemoteEffectAttempts) {
+        throw new MillError(
+          "REMOTE_EFFECT_RETRY_EXHAUSTED",
+          "The exact push retry budget is exhausted.",
+          ExitCode.configuration,
+        );
+      }
       push = {
-        id: effectId(delivery.deliveryKey, "push", candidate.commit),
-        kind: "push",
-        candidateCommit: candidate.commit,
+        ...(push ?? {
+          id: effectId(delivery.deliveryKey, "push", candidate.commit),
+          kind: "push" as const,
+          candidateCommit: candidate.commit,
+          attemptCount: 0,
+          expectedOldCommit: delivery.remoteHeadCommit,
+        }),
         status: "intent",
-        attemptCount: 0,
-        expectedOldCommit: delivery.remoteHeadCommit,
         errorCode: null,
         updatedAt: new Date().toISOString(),
       };
@@ -754,7 +852,7 @@ export async function openDraftPr(input: {
       push = {
         ...push,
         status: "call_started",
-        attemptCount: 1,
+        attemptCount: push.attemptCount + 1,
         updatedAt: new Date().toISOString(),
       };
       delivery = persistDelivery(
@@ -849,9 +947,7 @@ export async function openDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     let pullRequest = readback.pullRequest;
-    let prEffect = delivery.effects.find(
-      (item) => item.kind === "pull_request",
-    );
+    let prEffect = effect(delivery, "pull_request", candidate.commit);
     if (pullRequest === null && delivery.pullRequest !== null) {
       throw new MillError(
         "PULL_REQUEST_DISAPPEARED",
@@ -860,7 +956,11 @@ export async function openDraftPr(input: {
       );
     }
     if (pullRequest === null) {
-      if (prEffect?.attemptCount === 1) {
+      if (
+        prEffect !== undefined &&
+        (prEffect.status === "call_started" ||
+          prEffect.status === "effect_unknown")
+      ) {
         markUnknown(
           store,
           run,
@@ -869,13 +969,29 @@ export async function openDraftPr(input: {
           "GITHUB_PR_OUTCOME_UNKNOWN",
         );
       }
+      if (prEffect?.status === "verified" || delivery.pullRequest !== null) {
+        throw new MillError(
+          "PULL_REQUEST_DISAPPEARED",
+          "A previously verified pull request cannot be found by immutable delivery identity.",
+          ExitCode.configuration,
+        );
+      }
+      if ((prEffect?.attemptCount ?? 0) >= maximumRemoteEffectAttempts) {
+        throw new MillError(
+          "REMOTE_EFFECT_RETRY_EXHAUSTED",
+          "The draft pull-request retry budget is exhausted.",
+          ExitCode.configuration,
+        );
+      }
       prEffect = {
-        id: effectId(delivery.deliveryKey, "pull_request", candidate.commit),
-        kind: "pull_request",
-        candidateCommit: candidate.commit,
+        ...(prEffect ?? {
+          id: effectId(delivery.deliveryKey, "pull_request", candidate.commit),
+          kind: "pull_request" as const,
+          candidateCommit: candidate.commit,
+          attemptCount: 0,
+          expectedOldCommit: null,
+        }),
         status: "intent",
-        attemptCount: 0,
-        expectedOldCommit: null,
         errorCode: null,
         updatedAt: new Date().toISOString(),
       };
@@ -889,7 +1005,7 @@ export async function openDraftPr(input: {
       prEffect = {
         ...prEffect,
         status: "call_started",
-        attemptCount: 1,
+        attemptCount: prEffect.attemptCount + 1,
         updatedAt: new Date().toISOString(),
       };
       delivery = persistDelivery(
@@ -905,7 +1021,7 @@ export async function openDraftPr(input: {
           config,
           branch: delivery.branchName,
           title: inputs.task.commit.message.slice(0, 240),
-          body: `${deliveryMarker(delivery.deliveryKey)}\n\nCandidate: \`${candidate.commit}\`\n\nGenerated by Mill from an attended, locally validated and reviewed run. David remains the readiness and merge authority.`,
+          body: `${deliveryMarker(delivery.deliveryKey)}\n\nGenerated by Mill from an attended, locally validated and reviewed run. The current candidate identity is the pull-request head; configured human merge authority remains external.`,
           deadlineMs,
           ...(input.signal === undefined ? {} : { signal: input.signal }),
           cancellationRequested: () => cancellationRequested(store, run.id),
@@ -1039,6 +1155,14 @@ export async function reconcileDraftPr(input: {
         ExitCode.data,
       );
     }
+    const effectAbsent =
+      readback.pullRequest === null &&
+      (unknownEffect.kind === "pull_request"
+        ? readback.branchSha === delivery.candidateCommit
+        : readback.branchSha === unknownEffect.expectedOldCommit);
+    if (effectAbsent) {
+      return reconcileAbsentEffect(store, run, delivery, unknownEffect);
+    }
     if (
       unknownEffect.kind === "push" &&
       readback.branchSha === delivery.candidateCommit &&
@@ -1065,14 +1189,18 @@ export async function reconcileDraftPr(input: {
       run = store.transition(run.id, "proposing", "delivery.reconciled");
       return { run: publicRunRecord(run), delivery };
     }
-    if (
-      readback.branchSha !== delivery.candidateCommit ||
-      readback.pullRequest === null
-    ) {
+    if (readback.branchSha !== delivery.candidateCommit) {
       throw new MillError(
-        "GITHUB_RECONCILIATION_REQUIRED",
-        "Authoritative readback cannot yet prove both the exact branch and draft pull request effects.",
-        ExitCode.temporary,
+        "REMOTE_BRANCH_CONFLICT",
+        "Authoritative readback found a branch head outside the reconciled effect precondition.",
+        ExitCode.configuration,
+      );
+    }
+    if (readback.pullRequest === null) {
+      throw new MillError(
+        "GITHUB_RECONCILIATION_STATE_INVALID",
+        "Reconciliation could not classify the pull-request effect.",
+        ExitCode.data,
       );
     }
     assertExactPullRequest(readback.pullRequest, delivery, true);
@@ -1225,11 +1353,12 @@ export async function observeDraftPr(input: {
         "delivery.remote_review_blocked",
         { findings: feedback.length },
       );
-      if (run.status !== "blocked") {
-        run = store.transition(run.id, "blocked", "delivery.blocked", {
-          code: "REMOTE_REVIEW_FINDINGS",
-        });
-      }
+      run = setRunBlocker(
+        store,
+        run,
+        "REMOTE_REVIEW_FINDINGS",
+        "delivery.blocked",
+      );
       return { run: publicRunRecord(run), delivery };
     }
     if (checks.status === "failed") {
@@ -1245,11 +1374,12 @@ export async function observeDraftPr(input: {
         "delivery.remote_checks_failed",
         { failed: checks.failed.length },
       );
-      if (run.status !== "blocked") {
-        run = store.transition(run.id, "blocked", "delivery.blocked", {
-          code: "REMOTE_CHECKS_FAILED",
-        });
-      }
+      run = setRunBlocker(
+        store,
+        run,
+        "REMOTE_CHECKS_FAILED",
+        "delivery.blocked",
+      );
       return { run: publicRunRecord(run), delivery };
     }
     const ready =
@@ -1469,9 +1599,12 @@ export async function finalizeDraftPr(input: {
         "delivery.post_merge_checks_failed",
         { failed: checks.failed.length },
       );
-      run = store.transition(run.id, "blocked", "delivery.blocked", {
-        code: "POST_MERGE_CHECKS_FAILED",
-      });
+      run = setRunBlocker(
+        store,
+        run,
+        "POST_MERGE_CHECKS_FAILED",
+        "delivery.blocked",
+      );
       return { run: publicRunRecord(run), delivery };
     }
     if (run.status !== "post_merge_verified") {

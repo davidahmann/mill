@@ -124,16 +124,14 @@ interface RunRow {
   updated_at: string;
 }
 
-const terminal = new Set<RunStatus>([
-  "reviewed",
-  "closed",
-  "cancelled",
-  "failed",
-  "stale",
-]);
+const terminal = new Set<RunStatus>(["closed", "cancelled", "failed", "stale"]);
 
 export function isTerminalRun(status: RunStatus): boolean {
   return terminal.has(status);
+}
+
+export function isPurgeSafeRun(status: RunStatus): boolean {
+  return status === "reviewed" || isTerminalRun(status);
 }
 
 const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
@@ -142,7 +140,7 @@ const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   running: ["committed", "blocked", "cancelled", "failed", "stale"],
   committed: ["verified", "blocked", "cancelled", "failed", "stale"],
   verified: ["reviewed", "blocked", "cancelled", "failed", "stale"],
-  reviewed: ["proposing", "stale"],
+  reviewed: ["proposing", "cancelled", "failed", "stale"],
   proposing: [
     "effect_unknown",
     "awaiting_ci",
@@ -695,6 +693,33 @@ export class StateStore {
     return this.getRun(id);
   }
 
+  replaceBlocker(
+    id: string,
+    code: string,
+    eventType: string,
+    details: Record<string, string | number | boolean | null> = {},
+  ): RunRecord {
+    this.#transaction(() => {
+      const current = this.getRun(id);
+      if (current.status !== "blocked") {
+        throw new MillError(
+          "INVALID_RUN_TRANSITION",
+          `Cannot replace a blocker while run is ${current.status}.`,
+          ExitCode.configuration,
+        );
+      }
+      this.#database
+        .prepare("UPDATE runs SET block_code = ?, updated_at = ? WHERE id = ?")
+        .run(code, new Date().toISOString(), id);
+      this.#event(id, eventType, {
+        from: current.blockCode ?? null,
+        to: code,
+        ...details,
+      });
+    });
+    return this.getRun(id);
+  }
+
   beginRepair(id: string): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
@@ -1215,7 +1240,7 @@ export async function restoreStateBackup(
             schemaVersion: "1",
             repositoryId,
             backupPath: resolvedBackup,
-            status: "prepared",
+            protocol: "database_swap_commit_point",
             worktrees: planned,
           },
           null,
@@ -1231,23 +1256,6 @@ export async function restoreStateBackup(
     await rm(`${databasePath}-wal`, { force: true });
     await rm(`${databasePath}-shm`, { force: true });
     await rename(temporaryPath, databasePath);
-    if (quarantineManifest !== undefined) {
-      await writeFile(
-        quarantineManifest,
-        `${JSON.stringify(
-          {
-            schemaVersion: "1",
-            repositoryId,
-            backupPath: resolvedBackup,
-            status: "completed",
-            worktrees: moved,
-          },
-          null,
-          2,
-        )}\n`,
-        { encoding: "utf8", mode: 0o600 },
-      );
-    }
     return {
       quarantinedCount: moved.length,
       ...(quarantineManifest === undefined ? {} : { quarantineManifest }),
@@ -1257,7 +1265,7 @@ export async function restoreStateBackup(
       try {
         await rename(item.quarantined, item.original);
       } catch {
-        // The prepared manifest preserves attended recovery evidence.
+        // The recovery manifest preserves attended recovery evidence.
       }
     }
     throw error;

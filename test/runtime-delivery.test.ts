@@ -27,6 +27,7 @@ import {
   qualifyBaseline,
   resumeRun,
   reviewRun,
+  runStatus,
   startLocalRun,
   verifyRun,
 } from "../src/runtime/lifecycle.js";
@@ -163,10 +164,6 @@ class FakeGitHub implements GitHubAdapter {
     };
     this.pullRequest = pullRequest;
     return pullRequest;
-  }
-
-  materializeDelayedPullRequest(): void {
-    this.#materializePullRequest();
   }
 
   async createDraftPullRequest(input: {
@@ -314,6 +311,7 @@ async function planAndOpen(input: {
     taskPath: input.fixture.taskPath,
     runId: input.runId,
     approvalDigest: planned.delivery.proposalDigest,
+    attended: true,
     adapter: input.adapter,
   });
 }
@@ -337,6 +335,7 @@ describe("exact-candidate GitHub draft delivery", () => {
           taskPath: fixture.taskPath,
           runId,
           approvalDigest: `sha256:${"0".repeat(64)}`,
+          attended: true,
           adapter,
         }),
       ).rejects.toMatchObject({ code: "DELIVERY_APPROVAL_MISMATCH" });
@@ -346,6 +345,7 @@ describe("exact-candidate GitHub draft delivery", () => {
         taskPath: fixture.taskPath,
         runId,
         approvalDigest: planned.delivery.proposalDigest,
+        attended: true,
         adapter,
       });
       expect(opened.run.status).toBe("awaiting_ci");
@@ -423,6 +423,59 @@ describe("exact-candidate GitHub draft delivery", () => {
     }
   });
 
+  it("enforces attendance inside the exported mutation boundary", async () => {
+    const { fixture, runId } = await reviewedFixture();
+    const adapter = new FakeGitHub();
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          attended: false,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "ATTENDED_ACKNOWLEDGEMENT_REQUIRED" });
+      expect(adapter).toMatchObject({
+        inspectCalls: 1,
+        pushCalls: 0,
+        createCalls: 0,
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("makes cancellation durable before proposal planning", async () => {
+    const { fixture, runId } = await reviewedFixture();
+    const adapter = new FakeGitHub();
+    try {
+      const cancelled = await cancelRun({ root: fixture.root, runId });
+      expect(cancelled).toMatchObject({
+        status: "cancelled",
+        cancelRequested: true,
+      });
+      await expect(
+        planDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "RUN_NOT_REVIEWED" });
+      expect(adapter.inspectCalls).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("honors durable cancellation before a subsequent remote effect", async () => {
     const { fixture, runId } = await reviewedFixture();
     const adapter = new FakeGitHub();
@@ -443,6 +496,7 @@ describe("exact-candidate GitHub draft delivery", () => {
           taskPath: fixture.taskPath,
           runId,
           approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
           adapter,
         }),
       ).rejects.toMatchObject({ code: "OPERATOR_CANCELLED" });
@@ -473,6 +527,7 @@ describe("exact-candidate GitHub draft delivery", () => {
           taskPath: fixture.taskPath,
           runId,
           approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
           adapter,
         }),
       ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
@@ -480,6 +535,18 @@ describe("exact-candidate GitHub draft delivery", () => {
       expect(pending).toMatchObject({
         status: "effect_unknown",
         cancelRequested: true,
+      });
+      await expect(
+        resumeRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+        }),
+      ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
+      await expect(
+        runStatus({ root: fixture.root, runId }),
+      ).resolves.toMatchObject({
+        run: { status: "effect_unknown", cancelRequested: true },
       });
       adapter.branchSha = candidateCommit;
       await expect(
@@ -519,8 +586,8 @@ describe("exact-candidate GitHub draft delivery", () => {
     }
   });
 
-  it("blocks unknown effects and reconciles readback before any retry", async () => {
-    const { fixture, runId, candidateCommit } = await reviewedFixture();
+  it("authorizes one retry only after readback proves the effect absent", async () => {
+    const { fixture, runId } = await reviewedFixture();
     const adapter = new FakeGitHub();
     adapter.pushFailure = "before";
     try {
@@ -536,43 +603,44 @@ describe("exact-candidate GitHub draft delivery", () => {
           taskPath: fixture.taskPath,
           runId,
           approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
           adapter,
         }),
       ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
       expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 0 });
-      await expect(
-        reconcileDraftPr({
-          root: fixture.root,
-          taskPath: fixture.taskPath,
-          runId,
-          adapter,
-        }),
-      ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
-      expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 0 });
-
-      adapter.branchSha = candidateCommit;
-      const reconciled = await reconcileDraftPr({
+      const absent = await reconcileDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,
         runId,
         adapter,
       });
-      expect(reconciled.run.status).toBe("proposing");
+      expect(absent.run.status).toBe("proposing");
+      expect(absent.delivery.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "push",
+            status: "retryable_absent",
+            attemptCount: 1,
+          }),
+        ]),
+      );
+      expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 0 });
       const opened = await openDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,
         runId,
         approvalDigest: planned.delivery.proposalDigest,
+        attended: true,
         adapter,
       });
       expect(opened.run.status).toBe("awaiting_ci");
-      expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 1 });
+      expect(adapter).toMatchObject({ pushCalls: 2, createCalls: 1 });
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it("reconciles a delayed pull-request effect without creating a duplicate", async () => {
+  it("retries one pull-request call only after readback proves absence", async () => {
     const { fixture, runId } = await reviewedFixture();
     const adapter = new FakeGitHub();
     adapter.prFailure = "before";
@@ -589,27 +657,86 @@ describe("exact-candidate GitHub draft delivery", () => {
           taskPath: fixture.taskPath,
           runId,
           approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
           adapter,
         }),
       ).rejects.toMatchObject({ code: "FAKE_PR_INTERRUPTED" });
       expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 1 });
-      await expect(
-        reconcileDraftPr({
-          root: fixture.root,
-          taskPath: fixture.taskPath,
-          runId,
-          adapter,
-        }),
-      ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
-      adapter.materializeDelayedPullRequest();
-      const reconciled = await reconcileDraftPr({
+      const absent = await reconcileDraftPr({
         root: fixture.root,
         taskPath: fixture.taskPath,
         runId,
         adapter,
       });
-      expect(reconciled.run.status).toBe("awaiting_ci");
-      expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 1 });
+      expect(absent.run.status).toBe("proposing");
+      const opened = await openDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        approvalDigest: planned.delivery.proposalDigest,
+        attended: true,
+        adapter,
+      });
+      expect(opened.run.status).toBe("awaiting_ci");
+      expect(adapter).toMatchObject({ pushCalls: 1, createCalls: 2 });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("blocks after the single readback-authorized remote retry is exhausted", async () => {
+    const { fixture, runId } = await reviewedFixture();
+    const adapter = new FakeGitHub();
+    adapter.pushFailure = "before";
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
+      await reconcileDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      adapter.pushFailure = "before";
+      await expect(
+        openDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          approvalDigest: planned.delivery.proposalDigest,
+          attended: true,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "FAKE_PUSH_INTERRUPTED" });
+      const exhausted = await reconcileDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(exhausted.run).toMatchObject({
+        status: "blocked",
+        blockCode: "REMOTE_EFFECT_RETRY_EXHAUSTED",
+      });
+      expect(exhausted.delivery).toMatchObject({
+        state: "blocked",
+        lastErrorCode: "REMOTE_EFFECT_RETRY_EXHAUSTED",
+      });
+      expect(adapter).toMatchObject({ pushCalls: 2, createCalls: 0 });
     } finally {
       await fixture.cleanup();
     }
@@ -696,6 +823,64 @@ describe("exact-candidate GitHub draft delivery", () => {
           adapter,
         }),
       ).rejects.toMatchObject({ code: "DELIVERY_AUTHORITY_DRIFT" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("replaces stale blocker identity when remote observations change", async () => {
+    const { fixture, runId, candidateCommit } = await reviewedFixture({
+      githubReviewer: "codex-review",
+    });
+    const adapter = new FakeGitHub();
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [completedCheck("failure")];
+      const checksBlocked = await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(checksBlocked.run.blockCode).toBe("REMOTE_CHECKS_FAILED");
+
+      adapter.checks = [completedCheck("success")];
+      adapter.feedback = [
+        {
+          id: "blocker-change",
+          actorLogin: "codex-review",
+          priority: "P1",
+          body: "[P1] Current-head repair required",
+          path: "src/value.js",
+          line: 1,
+          url: "https://github.com/example/app/pull/41#discussion_blocker-change",
+          commitId: candidateCommit,
+        },
+      ];
+      const reviewBlocked = await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(reviewBlocked.run.blockCode).toBe("REMOTE_REVIEW_FINDINGS");
+
+      adapter.feedback = [];
+      adapter.checks = [completedCheck("failure")];
+      const checksBlockedAgain = await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(checksBlockedAgain.run.blockCode).toBe("REMOTE_CHECKS_FAILED");
+      await expect(
+        resumeRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+        }),
+      ).rejects.toMatchObject({ code: "RUN_REQUIRES_HUMAN_DISPOSITION" });
     } finally {
       await fixture.cleanup();
     }
@@ -792,6 +977,7 @@ describe("exact-candidate GitHub draft delivery", () => {
         taskPath: fixture.taskPath,
         runId,
         approvalDigest: planned.delivery.proposalDigest,
+        attended: true,
         adapter,
       });
       expect(reopened.delivery.pullRequest?.number).toBe(41);

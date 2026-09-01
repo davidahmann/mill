@@ -33,8 +33,9 @@ design_decisions:
     passing validation and local review; it cannot create or amend a commit
   - forks, lookalike remotes, changed owners, changed repository node IDs,
     changed operator identities, or changed policy invalidate propose authority
-  - Mill reports locally ready and waits; it never marks a draft ready, merges,
-    deploys, reruns GitHub checks, or infers success from command text
+  - Mill reports policy evidence and waits; it never marks a draft ready,
+    merges, deploys, reruns GitHub checks, or infers human authority from the
+    draft-ready transition
   - paths containing commas use a protected temporary bind alias for OCI
     verification rather than Docker's comma-delimited source syntax
   - state restore quarantines newer unreferenced Mill worktrees with a durable
@@ -106,7 +107,8 @@ acceptance_items:
   - W3-A6 draft-PR intent is durable before the call; the immutable delivery
     marker and authoritative readback prevent duplicate PR creation
   - W3-A7 crash before a call, after effect before receipt, and after receipt
-    before response reconcile truthfully without duplicate mutation; durable
+    before response reconcile truthfully without duplicate mutation; exact
+    readback proving absence authorizes at most one retry, while durable
     cancellation is polled before and during each remote mutation and never
     permits a subsequent effect
   - W3-A8 latest-head required checks and configured remote-review policy are
@@ -115,8 +117,9 @@ acceptance_items:
   - W3-A9 one aggregated attended remote-feedback repair may create a new local
     candidate, invalidates old evidence and approval, and updates the same PR
     only after revalidation, local review, and a new exact approval
-  - W3-A10 Mill stops at awaiting_human; only an exact configured human login
-    marks ready and merges using an independently provable allowed merge shape
+  - W3-A10 Mill stops at awaiting_human and never changes draft readiness; only
+    an exact configured human login may close delivery by merging with an
+    independently provable allowed merge shape
   - W3-A11 finalize reads back PR head, merger identity, merge shape/result
     SHA/tree, and exact default-branch checks before post_merge_verified and
     closed; pending or failed post-merge evidence is never reported as success

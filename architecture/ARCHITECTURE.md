@@ -55,24 +55,26 @@ the live delegated actor, repository node identity, clone URL, fork status and
 default branch, then binds them with the candidate commit/tree, task/config,
 branch, required checks, review policy, allowed merge methods, approval expiry,
 and intended effects. Only `pr open` mutates. Its effect journal records intent
-and call start before each push or PR request, caps each effect at one attempt,
+and call start before each push or PR request, caps each effect at two attempts,
 and makes ambiguous results enter `effect_unknown`. Reconciliation performs
-authoritative branch/marker/PR readback without mutation. GitHub API collections
-are paginated under one deadline and output budget. Tokens remain behind the
-operator-owned `gh` and Git credential-helper boundary and are not passed to
-Codex or stored in state.
+authoritative branch/marker/PR readback without mutation. Exact absence permits
+one retry; a second absent outcome blocks for human disposition. GitHub API
+collections are paginated under one deadline and output budget. Tokens remain
+behind the operator-owned `gh` and Git credential-helper boundary and are not
+passed to Codex or stored in state.
 
 One stable delivery key and branch identify the PR across the single allowed
 repair. A new candidate gets new validation, review, approval, and push-effect
 identity while updating that same PR. Required checks are evaluated on the exact
 current head; missing, pending, conflicting, cancelled, neutral, skipped,
 timed-out, or failed results do not pass. Mill never changes draft readiness or
-merge state. Finalization requires GitHub to prove the PR head, merge commit,
-tree, authorized merger identity, containment in the configured default branch,
-allowed merge shape, and successful required checks on the exact merge commit.
-One-parent tree-preserving history is classified only as
-`linear_tree_preserving`, never guessed to be squash or rebase from policy. A
-tree-changing merge requires separate revalidation rather than inferred closure.
+merge state, and readiness is not treated as closure authority. Finalization
+requires GitHub to prove the PR head, merge commit, tree, authorized merger
+identity, containment in the configured default branch, allowed merge shape, and
+successful required checks on the exact merge commit. One-parent tree-preserving
+history is classified only as `linear_tree_preserving`, never guessed to be
+squash or rebase from policy. A tree-changing merge requires separate
+revalidation rather than inferred closure.
 
 In Wave 2, the qualification approval digest binds a passing baseline's exact
 base commit, canonical task and repository configuration, selected command

@@ -387,8 +387,10 @@ describe("operational state", () => {
       expect(manifestPath).toBeDefined();
       if (manifestPath === undefined) throw new Error("manifest missing");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+        protocol: string;
         worktrees: { original: string; quarantined: string }[];
       };
+      expect(manifest.protocol).toBe("database_swap_commit_point");
       expect(manifest.worktrees).toHaveLength(1);
       expect(manifest.worktrees[0]?.original).toBe(newerWorktree);
       const quarantined = manifest.worktrees[0]?.quarantined;

@@ -203,11 +203,12 @@
             "intent",
             "call_started",
             "effect_unknown",
+            "retryable_absent",
             "verified",
             "blocked"
           ]
         },
-        "attemptCount": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "attemptCount": { "type": "integer", "minimum": 0, "maximum": 2 },
         "expectedOldCommit": {
           "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
         },

@@ -60,7 +60,9 @@ job with personal credentials. The realistic scenario set covers:
   reconciliation, explicit OCI container cleanup, provisional workspace cleanup,
   exact-candidate repair revalidation, per-candidate review budgets, validated
   state backup/restore, quarantine of worktrees newer than a restored backup,
-  external-effect readback, and terminal-only purge;
+  external-effect readback, one readback-authorized retry, retry exhaustion,
+  coordinator-level attendance enforcement, changing blocker identity, and purge
+  only after a locally reviewed or terminal state;
 - provenance through exact base, context, candidate commit/tree, validation, and
   review identity checks;
 - remote delivery through wrong-actor/fork/remote denial, stale approvals,
@@ -71,6 +73,8 @@ job with personal credentials. The realistic scenario set covers:
   post-merge checks;
 - hostile filesystem coverage for Docker bind paths containing commas without
   weakening read-only/no-network verification;
+- restore recovery through an immutable pre-commit quarantine manifest and a
+  database swap as the final fallible commit point;
 - packaging through installation of the generated tarball and execution of its
   public CLI and schema exports.
 

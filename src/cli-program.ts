@@ -505,22 +505,30 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       "--attended",
       "acknowledge attended use of the operator-owned GitHub session",
     )
-    .action(async (options: { task: string; run: string; approve: string }) => {
-      const global = globals(program);
-      const root = await findRepositoryRoot(global.cwd);
-      await enforceExactVersion(root);
-      const result = await openDraftPr({
-        root,
-        taskPath: options.task,
-        runId: options.run,
-        approvalDigest: options.approve,
-      });
-      emit(
-        io,
-        global.json === true,
-        commandResult({ command: "pr.open", ok: true, data: result }),
-      );
-    });
+    .action(
+      async (options: {
+        task: string;
+        run: string;
+        approve: string;
+        attended: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const result = await openDraftPr({
+          root,
+          taskPath: options.task,
+          runId: options.run,
+          approvalDigest: options.approve,
+          attended: options.attended,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "pr.open", ok: true, data: result }),
+        );
+      },
+    );
   pr.command("reconcile")
     .description("classify one unknown GitHub effect through readback only")
     .requiredOption("--task <path>", "approved task packet path")

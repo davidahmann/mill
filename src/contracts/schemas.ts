@@ -85,6 +85,25 @@ const repositoryPathPatternSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+(?:\/\*\*)?$/u);
 
+const githubReviewPolicySchema = z
+  .strictObject({
+    mode: z.enum(["local_only", "github_required"]),
+    requiredReviewerLogins: z.array(z.string().min(1)),
+  })
+  .superRefine((policy, context) => {
+    if (
+      policy.mode === "github_required" &&
+      policy.requiredReviewerLogins.length === 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["requiredReviewerLogins"],
+        message:
+          "github_required review policy needs at least one reviewer login",
+      });
+    }
+  });
+
 export const millConfigSchema = z
   .strictObject({
     schemaVersion: z.literal("1"),
@@ -110,24 +129,7 @@ export const millConfigSchema = z
         allowedActors: z.array(z.string().min(1)).min(1),
         allowedMergerLogins: z.array(z.string().min(1)).min(1),
         requiredChecks: z.array(z.string().min(1)),
-        reviewPolicy: z
-          .strictObject({
-            mode: z.enum(["local_only", "github_required"]),
-            requiredReviewerLogins: z.array(z.string().min(1)),
-          })
-          .superRefine((policy, context) => {
-            if (
-              policy.mode === "github_required" &&
-              policy.requiredReviewerLogins.length === 0
-            ) {
-              context.addIssue({
-                code: "custom",
-                path: ["requiredReviewerLogins"],
-                message:
-                  "github_required review policy needs at least one reviewer login",
-              });
-            }
-          }),
+        reviewPolicy: githubReviewPolicySchema,
         allowedMergeMethods: z
           .array(z.enum(["merge", "linear_tree_preserving"]))
           .min(1),
@@ -276,10 +278,11 @@ const remoteEffectSchema = z.strictObject({
     "intent",
     "call_started",
     "effect_unknown",
+    "retryable_absent",
     "verified",
     "blocked",
   ]),
-  attemptCount: z.number().int().min(0).max(1),
+  attemptCount: z.number().int().min(0).max(2),
   expectedOldCommit: z
     .string()
     .regex(/^[a-f0-9]{40}$/u)
@@ -322,10 +325,7 @@ export const deliveryRecordSchema = z.strictObject({
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
   requiredChecks: z.array(z.string().min(1)),
-  reviewPolicy: z.strictObject({
-    mode: z.enum(["local_only", "github_required"]),
-    requiredReviewerLogins: z.array(z.string().min(1)),
-  }),
+  reviewPolicy: githubReviewPolicySchema,
   allowedMergerLogins: z.array(z.string().min(1)).min(1),
   allowedMergeMethods: z
     .array(z.enum(["merge", "linear_tree_preserving"]))

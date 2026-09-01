@@ -41,6 +41,7 @@ import {
 } from "./repository.js";
 import {
   acquireWriterLease,
+  isPurgeSafeRun,
   isTerminalRun,
   purgeRepositoryState,
   publicRunRecord,
@@ -307,7 +308,7 @@ function safeBlock(store: StateStore, runId: string, error: MillError): void {
     const run = store.getRun(runId);
     if (isTerminalRun(run.status)) return;
     if (run.status === "blocked") {
-      store.recordEvent(runId, "run.blocked_again", { code: error.code });
+      store.replaceBlocker(runId, error.code, "run.blocker_replaced");
       return;
     }
     store.transition(runId, "blocked", "run.blocked", { code: error.code });
@@ -324,6 +325,12 @@ function settleFailure(
   try {
     const run = store.getRun(runId);
     if (isTerminalRun(run.status)) return;
+    if (run.status === "effect_unknown") {
+      store.recordEvent(runId, "run.reconciliation_required", {
+        code: error.code,
+      });
+      return;
+    }
     if (run.cancelRequested) {
       store.transition(runId, "cancelled", "run.cancelled", {
         code: error.code,
@@ -838,6 +845,13 @@ export async function resumeRun(input: {
     }
     store.setActiveProcess(run.id, null);
     run = store.getRun(run.id);
+    if (run.status === "effect_unknown") {
+      throw new MillError(
+        "GITHUB_RECONCILIATION_REQUIRED",
+        "An unknown GitHub effect must be reconciled before cancellation or local resume.",
+        ExitCode.temporary,
+      );
+    }
     if (run.cancelRequested && !isTerminalRun(run.status)) {
       return publicRunRecord(
         store.transition(run.id, "cancelled", "run.cancelled", {
@@ -1131,10 +1145,10 @@ export async function statePurge(input: {
   try {
     lease = await acquireWriterLease(store);
     const runs = store.runs();
-    if (runs.some((run) => !isTerminalRun(run.status))) {
+    if (runs.some((run) => !isPurgeSafeRun(run.status))) {
       throw new MillError(
         "ACTIVE_RUNS_BLOCK_PURGE",
-        "All runs must be terminal before state can be purged.",
+        "All runs must be locally reviewed or terminal before state can be purged.",
         ExitCode.configuration,
       );
     }

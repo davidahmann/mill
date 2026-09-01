@@ -116,7 +116,7 @@ node dist/cli.js --json pr plan --task product/tasks/TASK.yaml --run <run-id>
 node dist/cli.js --json pr open --task product/tasks/TASK.yaml --run <run-id> \
   --approve sha256:<digest-from-pr-plan> --attended
 node dist/cli.js --json pr observe --task product/tasks/TASK.yaml --run <run-id>
-# David marks ready and merges in GitHub.
+# A human may mark ready; a configured merger merges in GitHub.
 node dist/cli.js --json pr finalize --task product/tasks/TASK.yaml --run <run-id>
 ```
 
@@ -125,15 +125,17 @@ processes receive neither GitHub credentials nor mutation tools. Mill journals
 intent before push and PR creation, uses an expected-old-head lease, and reads
 GitHub back before claiming an effect. An uncertain outcome becomes
 `effect_unknown`; `pr reconcile` is read-only and must classify it before any
-retry. Required checks pass only when every latest exact-head result is
+retry. Exact readback proving absence authorizes one retry; a second absent
+outcome blocks. Required checks pass only when every latest exact-head result is
 successful. A configured `github_required` reviewer may complete a current-head
 `APPROVED` or `COMMENTED` review, but any current-head actionable finding still
 blocks, including a severity-tagged top-level review body. Mill stops at
-`awaiting_human`; it never marks ready or merges. Finalization verifies the
-recorded merger against `allowedMergerLogins`. Because GitHub does not expose an
-authoritative distinction between a one-commit squash and rebase, the provable
-policy is `linear_tree_preserving`; Mill never guesses a specific linear method
-from its allowlist.
+`awaiting_human`; draft readiness is not closure authority and Mill never
+changes it or merges. Finalization verifies the recorded merger against
+`allowedMergerLogins`. Because GitHub does not expose an authoritative
+distinction between a one-commit squash and rebase, the provable policy is
+`linear_tree_preserving`; Mill never guesses a specific linear method from its
+allowlist.
 
 Use `--json` before the command for the stable machine-readable envelope.
 `--json --version` is machine-readable; help is human-only and combining it with

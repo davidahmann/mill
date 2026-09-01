@@ -219,8 +219,8 @@ describe("compact schemas", () => {
         return false;
       }
     });
-    ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
     ajv.addFormat("date-time", (value) => Number.isFinite(Date.parse(value)));
+    ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
     for (const kind of Object.keys(
       schemaFiles,
     ) as (keyof typeof schemaFiles)[]) {
@@ -344,6 +344,7 @@ describe("compact schemas", () => {
         return false;
       }
     });
+    ajv.addFormat("date-time", (value) => Number.isFinite(Date.parse(value)));
     const validate = ajv.compile(
       JSON.parse(
         await readFile(path.join("schemas", "mill-config.schema.json"), "utf8"),
@@ -393,6 +394,25 @@ describe("compact schemas", () => {
     expect(validate(emptyRequiredReview)).toBe(false);
     expect(
       contractSchemas.millConfig.safeParse(emptyRequiredReview).success,
+    ).toBe(false);
+    const deliveryValidate = ajv.compile(
+      JSON.parse(
+        await readFile(
+          path.join("schemas", "delivery-record.schema.json"),
+          "utf8",
+        ),
+      ),
+    );
+    const invalidDeliveryReview = {
+      ...samples.deliveryRecord,
+      reviewPolicy: {
+        mode: "github_required",
+        requiredReviewerLogins: [],
+      },
+    } as const;
+    expect(deliveryValidate(invalidDeliveryReview)).toBe(false);
+    expect(
+      contractSchemas.deliveryRecord.safeParse(invalidDeliveryReview).success,
     ).toBe(false);
   });
 

@@ -19,12 +19,14 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   and exact-candidate read-only Codex review.
 - Repository-namespaced SQLite state with append-only events, exclusive writer
   leases, cancellation, interruption recovery, backup/validated restore,
-  terminal-only purge, and redacted support export.
+  reviewed-or-terminal purge, and redacted support export.
 - Executable task-packet, context-manifest, validation-evidence, and
   review-result contracts with aligned runtime and JSON Schema validation.
 - Exact-candidate draft-PR planning, attended push/open, unknown-effect
   reconciliation, paginated GitHub policy observation, human merge gating, and
   exact post-merge closure with an executable delivery-record contract.
+- Coordinator-enforced remote attendance, one readback-authorized effect retry,
+  changing-blocker replacement, and database-swap state-restore recovery.
 
 ### Changed
 
