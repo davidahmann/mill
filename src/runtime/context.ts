@@ -66,6 +66,15 @@ export async function buildContextManifest(
 ): Promise<{ manifest: ContextManifest; digest: string }> {
   const included: { path: string; digest: string }[] = [];
   const instructions = await effectiveInstructionPaths(worktree);
+  for (const instruction of instructions) {
+    if (sensitive(instruction, task.allowedPaths)) {
+      throw new MillError(
+        "BOUND_INPUT_SCOPE_OVERLAP",
+        `Allowed output scope overlaps an effective repository instruction: ${instruction}`,
+        ExitCode.configuration,
+      );
+    }
+  }
   const authorityPaths = Object.values(task.authority).map(
     (reference) => reference.path,
   );

@@ -298,8 +298,13 @@ export function assessImpactManifest(input: {
   const proposalDigest = canonicalDigest(proposal);
   if (input.manifest.approval === null) {
     blockers.push("impact manifest is not human approved");
-  } else if (input.manifest.approval.proposalDigest !== proposalDigest) {
-    blockers.push("impact approval is not bound to the exact proposal");
+  } else {
+    if (Date.parse(input.manifest.approval.approvedAt) > now.getTime()) {
+      blockers.push("impact approval is not active yet");
+    }
+    if (input.manifest.approval.proposalDigest !== proposalDigest) {
+      blockers.push("impact approval is not bound to the exact proposal");
+    }
   }
   return {
     proposalDigest,
@@ -436,9 +441,7 @@ export function buildSemanticEvidence(input: {
       const attestation = claimedBy(
         "acceptance",
         id,
-        semanticClaimDigest("acceptance", id, {
-          statement: acceptance.statement,
-        }),
+        semanticClaimDigest("acceptance", id, acceptance),
         acceptance.evidence.attestationId,
       );
       const valid = attestation !== undefined;
@@ -500,10 +503,7 @@ export function buildSemanticEvidence(input: {
       claimedBy(
         "invariant",
         id,
-        semanticClaimDigest("invariant", id, {
-          statement: invariant.statement,
-          verificationRef: invariant.verification.ref,
-        }),
+        semanticClaimDigest("invariant", id, invariant),
       ) !== undefined;
     const passed = linkedPassed && (commandPassed || humanPassed);
     items.push({

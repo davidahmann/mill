@@ -862,15 +862,32 @@ describe("impact and semantic evidence", () => {
               kind: "acceptance",
               id: "ACC-HUMAN",
               digest: semanticClaimDigest("acceptance", "ACC-HUMAN", {
+                id: "ACC-HUMAN",
                 statement: "HUMAN evidence statement",
+                invariantIds: ["INV-HUMAN"],
+                scenarioIds: ["SCN-HUMAN"],
+                coverage: "new_behavior",
+                evidence: {
+                  mode: "human",
+                  attestationId: "ATT-HUMAN",
+                },
               }),
             },
             {
               kind: "invariant",
               id: "INV-HUMAN",
               digest: semanticClaimDigest("invariant", "INV-HUMAN", {
+                id: "INV-HUMAN",
                 statement: "A human verifies this invariant.",
-                verificationRef: "operator-attestation",
+                owner: "operator",
+                criticality: "high",
+                surfaceRefs: ["approval"],
+                verification: {
+                  mode: "human",
+                  ref: "operator-attestation",
+                },
+                sourceRefs: ["SRC-PRD"],
+                unknowns: [],
               }),
             },
             {
@@ -894,7 +911,15 @@ describe("impact and semantic evidence", () => {
               kind: "acceptance",
               id: "ACC-FUTURE",
               digest: semanticClaimDigest("acceptance", "ACC-FUTURE", {
+                id: "ACC-FUTURE",
                 statement: "FUTURE evidence statement",
+                invariantIds: [],
+                scenarioIds: [],
+                coverage: "new_behavior",
+                evidence: {
+                  mode: "human",
+                  attestationId: "ATT-FUTURE",
+                },
               }),
             },
           ],
@@ -978,6 +1003,50 @@ describe("impact and semantic evidence", () => {
           id: "SCN-REPOSITORY-NO-ORACLE",
           status: "blocked",
         }),
+      ]),
+    );
+    const changedAcceptance = taskPacketSchema.parse({
+      ...task,
+      acceptance: task.acceptance.map((acceptance) =>
+        acceptance.id === "ACC-HUMAN"
+          ? { ...acceptance, coverage: "both" }
+          : acceptance,
+      ),
+    });
+    expect(
+      buildSemanticEvidence({
+        task: changedAcceptance,
+        manifest,
+        product,
+        scenarios,
+        commandResults: [{ commandId: "test", status: "passed" }],
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      }).items,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ACC-HUMAN", status: "blocked" }),
+      ]),
+    );
+    const changedInvariant = productContractSchema.parse({
+      ...product,
+      invariants: product.invariants.map((invariant) =>
+        invariant.id === "INV-HUMAN"
+          ? { ...invariant, owner: "replacement-owner" }
+          : invariant,
+      ),
+    });
+    expect(
+      buildSemanticEvidence({
+        task,
+        manifest,
+        product: changedInvariant,
+        scenarios,
+        commandResults: [{ commandId: "test", status: "passed" }],
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      }).items,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "INV-HUMAN", status: "blocked" }),
       ]),
     );
     if (task.schemaVersion !== "2") throw new Error("expected version 2 task");
@@ -1108,6 +1177,22 @@ describe("impact and semantic evidence", () => {
         "uncertain invariant lacks an approved exception: INV-HUMAN-MERGE",
       ]),
     );
+    const futureApproval = impactManifestSchema.parse({
+      ...manifest,
+      approval: {
+        approvedBy: "operator",
+        approvedAt: "2026-09-03T00:00:00.000Z",
+        proposalDigest: digest(proposal),
+      },
+    });
+    expect(
+      assessImpactManifest({
+        manifest: futureApproval,
+        product,
+        scenarios,
+        now: new Date("2026-09-02T12:00:00.000Z"),
+      }).blockers,
+    ).toContain("impact approval is not active yet");
   });
 
   it("fails closed on stale, duplicate, unresolved, and under-tested impact", () => {

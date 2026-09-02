@@ -172,7 +172,8 @@ export function decodeCodexEvents(
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let providerErrorCode: string | undefined;
-  let terminalCount = 0;
+  let completedTerminalCount = 0;
+  let failedTerminalCount = 0;
   let agentMessageCount = 0;
   for (const line of output.split(/\r?\n/u)) {
     if (line.trim().length === 0) continue;
@@ -221,7 +222,16 @@ export function decodeCodexEvents(
         }
       }
     }
-    if (record.type === "turn.completed") terminalCount += 1;
+    if (record.type === "turn.completed") completedTerminalCount += 1;
+    if (
+      record.type === "error" ||
+      (typeof record.type === "string" &&
+        record.type.startsWith("turn.") &&
+        record.type !== "turn.started" &&
+        record.type !== "turn.completed")
+    ) {
+      failedTerminalCount += 1;
+    }
     const usage = record.usage;
     if (typeof usage === "object" && usage !== null) {
       const usageRecord = usage as Record<string, unknown>;
@@ -233,14 +243,15 @@ export function decodeCodexEvents(
       }
     }
   }
-  if (terminalCount !== 1) {
+  const terminalCount = completedTerminalCount + failedTerminalCount;
+  if (completedTerminalCount !== 1 || failedTerminalCount !== 0) {
     throw new MillError(
       terminalCount === 0
         ? "WORKER_SETTLEMENT_MISSING"
         : "WORKER_SETTLEMENT_CONFLICT",
-      "Codex did not emit exactly one terminal turn settlement.",
+      "Codex did not emit exactly one successful, non-conflicting terminal turn settlement.",
       ExitCode.data,
-      { terminalCount },
+      { completedTerminalCount, failedTerminalCount, terminalCount },
     );
   }
   if (role === "reviewer" && agentMessageCount !== 1) {

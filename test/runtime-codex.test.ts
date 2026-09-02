@@ -64,6 +64,20 @@ describe("Codex adapter boundaries", () => {
     expect(() =>
       decodeCodexEvents(`${terminal}\n${terminal}\n`, "builder"),
     ).toThrow(expect.objectContaining({ code: "WORKER_SETTLEMENT_CONFLICT" }));
+    const failed = JSON.stringify({
+      type: "turn.failed",
+      error: { message: "provider failure" },
+    });
+    expect(() =>
+      decodeCodexEvents(`${failed}\n${terminal}\n`, "builder"),
+    ).toThrow(expect.objectContaining({ code: "WORKER_SETTLEMENT_CONFLICT" }));
+    const providerError = JSON.stringify({
+      type: "error",
+      message: JSON.stringify({ error: { code: "provider_failure" } }),
+    });
+    expect(() =>
+      decodeCodexEvents(`${providerError}\n${terminal}\n`, "builder"),
+    ).toThrow(expect.objectContaining({ code: "WORKER_SETTLEMENT_CONFLICT" }));
     expect(() => decodeCodexEvents(`${terminal}\n`, "reviewer")).toThrow(
       expect.objectContaining({ code: "WORKER_RESULT_MISSING" }),
     );

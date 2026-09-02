@@ -79,9 +79,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   command-control inputs cannot overlap candidate output scope or be rewritten
   into a validated commit.
 - Legacy context manifests retain their exact bytes; new runs freeze Codex
-  instruction override precedence and reject instruction-path drift. Semantic
-  authority rejects duplicate IDs, unbound oracle commands, and attestations
-  without exact item claims. Review evidence and worker settlement now commit
+  instruction override precedence, reject instruction-path drift, and keep
+  effective instructions outside candidate write scope. Semantic authority
+  rejects duplicate IDs, unbound oracle commands, future-dated approvals, and
+  attestations that do not bind the complete canonical item. Conflicting worker
+  terminal events fail closed; review evidence and worker settlement commit
   atomically, while blocked planning assessments return truthful failures.
 - Writer exclusion now uses a crash-released SQLite transaction instead of a
   stale-directory protocol; cancellation is polled by the exact foreground

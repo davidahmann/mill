@@ -161,13 +161,22 @@ describe("runtime authority and repository boundaries", () => {
       const changedScope = await buildContextManifest(
         fixture.root,
         "a".repeat(40),
-        { ...inputs.task, allowedPaths: ["src/**"] },
+        { ...inputs.task, allowedPaths: ["generated/**"] },
         inputs.config,
         inputs.taskDigest,
       );
       expect(changedScope.manifest.contextEpoch).not.toBe(
         first.manifest.contextEpoch,
       );
+      await expect(
+        buildContextManifest(
+          fixture.root,
+          "a".repeat(40),
+          { ...inputs.task, allowedPaths: ["src/**"] },
+          inputs.config,
+          inputs.taskDigest,
+        ),
+      ).rejects.toMatchObject({ code: "BOUND_INPUT_SCOPE_OVERLAP" });
       await writeFile(
         path.join(fixture.root, "src", "AGENTS.md"),
         "# Changed source rules\n",
