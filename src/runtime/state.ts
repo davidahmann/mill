@@ -17,6 +17,7 @@ import { backup, DatabaseSync } from "node:sqlite";
 
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
+import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
 
 export type RunStatus =
   | "approved"
@@ -1423,67 +1424,20 @@ export class StateStore {
   }
 }
 
-export interface WriterLease {
-  release(): Promise<void>;
-}
+export type WriterLease = ExclusiveLease;
 
 export async function acquireWriterLease(
   store: StateStore,
 ): Promise<WriterLease> {
   const leasePath = path.join(store.directory, "writer-lease.sqlite3");
-  let database: DatabaseSync | undefined;
-  try {
-    database = new DatabaseSync(leasePath, {
-      timeout: 0,
-      allowExtension: false,
-      enableDoubleQuotedStringLiterals: false,
-    });
-    database.exec(`
-      PRAGMA journal_mode = DELETE;
-      PRAGMA synchronous = FULL;
-      CREATE TABLE IF NOT EXISTS lease_anchor (
-        singleton INTEGER PRIMARY KEY CHECK(singleton = 1)
-      ) STRICT;
-      BEGIN EXCLUSIVE;
-    `);
-    await chmod(leasePath, 0o600);
-  } catch (error) {
-    try {
-      database?.close();
-    } catch {
-      // Preserve the acquisition error.
-    }
-    if (
-      error instanceof Error &&
-      "errcode" in error &&
-      (error.errcode === 5 || error.errcode === 6)
-    ) {
-      throw new MillError(
-        "WRITER_ALREADY_ACTIVE",
-        "Another Mill writer is active for this repository.",
-        ExitCode.temporary,
-      );
-    }
-    throw new MillError(
-      "WRITER_LEASE_UNAVAILABLE",
+  return await acquireExclusiveLease({
+    path: leasePath,
+    activeCode: "WRITER_ALREADY_ACTIVE",
+    activeMessage: "Another Mill writer is active for this repository.",
+    unavailableCode: "WRITER_LEASE_UNAVAILABLE",
+    unavailableMessage:
       "The repository writer lease could not be acquired safely.",
-      ExitCode.io,
-      { cause: String(error) },
-    );
-  }
-  let released = false;
-  return {
-    release(): Promise<void> {
-      if (released) return Promise.resolve();
-      released = true;
-      try {
-        database.exec("ROLLBACK");
-      } finally {
-        database.close();
-      }
-      return Promise.resolve();
-    },
-  };
+  });
 }
 
 export async function restoreStateBackup(

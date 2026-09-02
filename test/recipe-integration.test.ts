@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 
 import { parse as parseYaml } from "yaml";
@@ -50,6 +51,7 @@ import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
 const originalDocker = process.env.MILL_DOCKER_PATH;
+const originalGit = process.env.MILL_GIT_PATH;
 const originalStateHome = process.env.MILL_STATE_HOME;
 
 function capture() {
@@ -68,6 +70,8 @@ function capture() {
 afterEach(() => {
   if (originalDocker === undefined) delete process.env.MILL_DOCKER_PATH;
   else process.env.MILL_DOCKER_PATH = originalDocker;
+  if (originalGit === undefined) delete process.env.MILL_GIT_PATH;
+  else process.env.MILL_GIT_PATH = originalGit;
   if (originalStateHome === undefined) delete process.env.MILL_STATE_HOME;
   else process.env.MILL_STATE_HOME = originalStateHome;
 });
@@ -132,6 +136,23 @@ if(!blockDependencyPreparation)process.exit(0);
   );
   await chmod(executable, 0o755);
   return { executable, log };
+}
+
+async function cancellingGit(directory: string): Promise<string> {
+  const executable = path.join(directory, "git");
+  await writeFile(
+    executable,
+    `#!${process.execPath}
+const {spawnSync}=require("node:child_process");
+const args=process.argv.slice(2);
+const result=spawnSync("/usr/bin/git",args,{env:process.env,stdio:"inherit"});
+if(result.status===0&&args.includes("commit"))process.kill(process.ppid,"SIGINT");
+process.exit(result.status??1);
+`,
+    { mode: 0o755 },
+  );
+  await chmod(executable, 0o755);
+  return executable;
 }
 
 async function authorityFixture(root: string): Promise<{
@@ -1028,6 +1049,7 @@ describe("qualified repository integration", { concurrent: false }, () => {
 
   it("applies compatible adoption on an isolated branch without touching the checkout", async () => {
     const repository = await temporaryDirectory("mill-adoption-");
+    const tools = await temporaryDirectory("mill-adoption-tools-");
     try {
       const authority = await seedCompatibleRepository(repository.path);
       const ignorePath = path.join(repository.path, ".gitignore");
@@ -1079,6 +1101,7 @@ describe("qualified repository integration", { concurrent: false }, () => {
           `refs/heads/mill/adopt-${planned.approvalDigest.slice(7, 19)}`,
         ]),
       ).rejects.toBeDefined();
+      process.env.MILL_GIT_PATH = await cancellingGit(tools.path);
       const applied = await applyAdoptionIntegration({
         ...authority.options,
         repositoryRoot: repository.path,
@@ -1093,6 +1116,8 @@ describe("qualified repository integration", { concurrent: false }, () => {
         `${base}\n`,
       );
       expect(await git(repository.path, ["status", "--porcelain"])).toBe("");
+      if (originalGit === undefined) delete process.env.MILL_GIT_PATH;
+      else process.env.MILL_GIT_PATH = originalGit;
       expect(
         await git(repository.path, ["show", `${applied.branch}:mill.yaml`]),
       ).toContain("trustCeiling: build");
@@ -1124,13 +1149,15 @@ describe("qualified repository integration", { concurrent: false }, () => {
         }),
       ).rejects.toMatchObject({ code: "ADOPTION_CHECKOUT_DIRTY" });
     } finally {
-      await repository.cleanup();
+      await Promise.all([repository.cleanup(), tools.cleanup()]);
     }
   });
 
   it("binds adoption compatibility to the exact visible base tree", async () => {
     const ignored = await temporaryDirectory("mill-adoption-ignored-");
     const hidden = await temporaryDirectory("mill-adoption-hidden-");
+    const canonical = await temporaryDirectory("mill-adoption-canonical-");
+    const malformed = await temporaryDirectory("mill-adoption-malformed-");
     try {
       const ignoredAuthority = await seedCompatibleRepository(ignored.path);
       const ignorePath = path.join(ignored.path, ".gitignore");
@@ -1173,8 +1200,75 @@ describe("qualified repository integration", { concurrent: false }, () => {
         "--no-skip-worktree",
         "package.json",
       ]);
+
+      const canonicalAuthority = await seedCompatibleRepository(canonical.path);
+      const sourcesPath = path.join(canonical.path, "sources.json");
+      const proposalPath = path.join(canonical.path, "proposal.json");
+      const sources = JSON.parse(await readFile(sourcesPath, "utf8")) as {
+        sources: { uri: string }[];
+      };
+      if (sources.sources[0] === undefined) throw new Error("source required");
+      sources.sources[0].uri = "./PRD.md";
+      const proposal = JSON.parse(await readFile(proposalPath, "utf8")) as {
+        prd: { path: string };
+        sourceManifestDigest: string;
+      };
+      proposal.prd.path = "./PRD.md";
+      proposal.sourceManifestDigest = canonicalDigest(sources);
+      await Promise.all([
+        writeFile(sourcesPath, `${JSON.stringify(sources)}\n`),
+        writeFile(proposalPath, `${JSON.stringify(proposal)}\n`),
+      ]);
+      await git(canonical.path, ["add", "sources.json", "proposal.json"]);
+      await git(canonical.path, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: use a noncanonical safe PRD spelling",
+      ]);
+      await expect(
+        planAdoptionIntegration({
+          ...canonicalAuthority.options,
+          prdPath: "./PRD.md",
+          productApprovalDigest: canonicalDigest(
+            proposal as unknown as JsonValue,
+          ),
+          repositoryRoot: canonical.path,
+        }),
+      ).resolves.toMatchObject({ plan: { mode: "adoption" } });
+
+      const malformedAuthority = await seedCompatibleRepository(malformed.path);
+      const malformedPackage = path.join(malformed.path, "package.json");
+      const packageBytes = await readFile(malformedPackage);
+      await writeFile(
+        malformedPackage,
+        Buffer.concat([
+          packageBytes.subarray(0, packageBytes.byteLength - 2),
+          Buffer.from(',\n  "description": "', "utf8"),
+          Buffer.from([0xff]),
+          Buffer.from('"\n}\n', "utf8"),
+        ]),
+      );
+      await git(malformed.path, ["add", "package.json"]);
+      await git(malformed.path, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: commit malformed UTF-8",
+      ]);
+      await expect(
+        planAdoptionIntegration({
+          ...malformedAuthority.options,
+          repositoryRoot: malformed.path,
+        }),
+      ).rejects.toMatchObject({ code: "INTEGRATION_BASE_FILE_UNSAFE" });
     } finally {
-      await Promise.all([ignored.cleanup(), hidden.cleanup()]);
+      await Promise.all([
+        ignored.cleanup(),
+        hidden.cleanup(),
+        canonical.cleanup(),
+        malformed.cleanup(),
+      ]);
     }
   });
 
@@ -1697,18 +1791,35 @@ describe("qualified repository integration", { concurrent: false }, () => {
       const markerPath = path.join(prepared.directory, "marker.json");
       const markerSource = await readFile(markerPath, "utf8");
       await writeFile(markerPath, "{}\n");
-      const preparationLock = `${prepared.directory}.lock`;
-      await mkdir(preparationLock);
-      await expect(
-        prepareDependencySnapshot({
-          root: repository.path,
-          stateDirectory: state.path,
-          config,
-          attended: true,
-        }),
-      ).rejects.toMatchObject({ code: "DEPENDENCY_PREPARATION_ACTIVE" });
-      await rm(preparationLock, { recursive: true });
+      const preparationLease = new DatabaseSync(
+        `${prepared.directory}.lease.sqlite3`,
+        { timeout: 0 },
+      );
+      preparationLease.exec("BEGIN EXCLUSIVE");
+      try {
+        await expect(
+          prepareDependencySnapshot({
+            root: repository.path,
+            stateDirectory: state.path,
+            config,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "DEPENDENCY_PREPARATION_ACTIVE" });
+      } finally {
+        preparationLease.exec("ROLLBACK");
+        preparationLease.close();
+      }
       await writeFile(markerPath, markerSource);
+      expect(
+        (
+          await prepareDependencySnapshot({
+            root: repository.path,
+            stateDirectory: state.path,
+            config,
+            attended: true,
+          })
+        ).reused,
+      ).toBe(true);
       for (const invalidMarker of ["{not-json\n", "{}\n"]) {
         await writeFile(markerPath, invalidMarker);
         await expect(

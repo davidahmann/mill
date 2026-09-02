@@ -666,7 +666,9 @@ function dynamicFiles(input: {
   });
   const impactSource = yaml(impact);
   const prdTarget =
-    input.mode === "greenfield" ? "product/PRD.md" : input.options.prdPath;
+    input.mode === "greenfield"
+      ? "product/PRD.md"
+      : path.normalize(input.options.prdPath).split(path.sep).join("/");
   assertRelativePath(prdTarget, "PRD integration path");
   const builderAllowedPaths = ["app/**", "public/**", "src/**"];
   if (
@@ -880,16 +882,18 @@ async function commitFile(
   maxOutputBytes = 8 * 1024 * 1024,
 ): Promise<ExistingFile | undefined> {
   assertRelativePath(relative, "Committed integration file");
+  const gitPath = path.normalize(relative).split(path.sep).join("/");
+  assertRelativePath(gitPath, "Normalized committed integration file");
   const listing = await git(
     root,
     [
       "ls-tree",
       "-z",
       "--full-tree",
-      "--format=%(objectmode)%x09%(objecttype)%x09%(path)",
+      "--format=%(objectmode)%x09%(objecttype)%x09%(objectname)%x09%(path)",
       commit,
       "--",
-      relative,
+      gitPath,
     ],
     undefined,
     256 * 1024,
@@ -904,25 +908,37 @@ async function commitFile(
       { path: relative },
     );
   }
-  const [mode, type, listedPath] = records[0]?.split("\t") ?? [];
+  const [mode, type, objectId, listedPath] = records[0]?.split("\t") ?? [];
   if (
     (mode !== "100644" && mode !== "100755") ||
     type !== "blob" ||
-    listedPath !== relative
+    !/^[a-f0-9]{40,64}$/u.test(objectId ?? "") ||
+    listedPath !== gitPath
   ) {
     throw new MillError(
       "INTEGRATION_BASE_FILE_UNSAFE",
       "An exact-base integration path is not a bounded regular Git file.",
       ExitCode.configuration,
-      { path: relative, mode, type },
+      { path: gitPath, mode, type },
     );
   }
   const content = await git(
     root,
-    ["cat-file", "blob", `${commit}:${relative}`],
+    ["cat-file", "blob", `${commit}:${gitPath}`],
     undefined,
     maxOutputBytes,
   );
+  const roundTripObjectId = (
+    await git(root, ["hash-object", "--stdin"], undefined, 256 * 1024, content)
+  ).trim();
+  if (roundTripObjectId !== objectId) {
+    throw new MillError(
+      "INTEGRATION_BASE_FILE_UNSAFE",
+      "An exact-base integration file is not losslessly decodable UTF-8 text.",
+      ExitCode.configuration,
+      { path: gitPath },
+    );
+  }
   return { content, digest: digest(content) };
 }
 
@@ -1595,6 +1611,7 @@ async function git(
   args: readonly string[],
   signal?: AbortSignal,
   maxOutputBytes = 2 * 1024 * 1024,
+  stdin?: string,
 ): Promise<string> {
   const executable = await findTrustedExecutable("git", root);
   if (executable === undefined) {
@@ -1617,6 +1634,7 @@ async function git(
     env: gitEnvironment,
     deadlineMs: Date.now() + 60_000,
     maxOutputBytes,
+    ...(stdin === undefined ? {} : { stdin }),
     ...(signal === undefined ? {} : { signal }),
   });
   if (
@@ -1647,24 +1665,30 @@ async function commitIntegration(
     ["add", "--force", "--", ...files.map((file) => file.path)],
     signal,
   );
-  await git(
-    root,
-    [
-      "-c",
-      `user.name=${input.authorName}`,
-      "-c",
-      `user.email=${input.authorEmail}`,
-      "-c",
-      "commit.gpgsign=false",
-      "commit",
-      "--no-verify",
-      "--no-gpg-sign",
-      "-m",
-      `${message}\n\nSigned-off-by: ${input.authorName} <${input.authorEmail}>`,
-    ],
-    signal,
-  );
-  const commit = (await git(root, ["rev-parse", "HEAD"], signal)).trim();
+  if (signal?.aborted === true) {
+    throw new MillError(
+      "INTEGRATION_CANCELLED",
+      "Repository integration was cancelled before the commit publication boundary.",
+      ExitCode.temporary,
+    );
+  }
+  // Once commit publication begins, finish and report the exact result even if
+  // cancellation arrives. Returning failure after advancing the branch would
+  // strand deterministic authority and make a safe retry impossible.
+  await git(root, [
+    "-c",
+    `user.name=${input.authorName}`,
+    "-c",
+    `user.email=${input.authorEmail}`,
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "--no-verify",
+    "--no-gpg-sign",
+    "-m",
+    `${message}\n\nSigned-off-by: ${input.authorName} <${input.authorEmail}>`,
+  ]);
+  const commit = (await git(root, ["rev-parse", "HEAD"])).trim();
   for (const file of files) {
     const committed = await commitFile(root, commit, file.path);
     if (committed?.digest !== file.contentDigest) {
@@ -1963,7 +1987,7 @@ async function applyAdoptionIntegrationWithSignal(
       planned.files,
       input.signal,
     );
-    await git(root, ["worktree", "remove", "--force", temporary], input.signal);
+    await git(root, ["worktree", "remove", "--force", temporary]);
     return {
       branch,
       commit,

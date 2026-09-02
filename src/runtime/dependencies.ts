@@ -29,6 +29,7 @@ import {
   runProcess,
   type ProcessResult,
 } from "./process.js";
+import { acquireExclusiveLease } from "./lease.js";
 
 interface DependencyIdentity {
   schemaVersion: "1";
@@ -535,8 +536,8 @@ async function prepareDependencySnapshotWithSignal(input: {
   await chmod(parent, 0o700);
   const temporary = await mkdtemp(path.join(parent, ".prepare-"));
   await chmod(temporary, 0o700);
-  let lockDirectory: string | undefined;
-  let lockAcquired = false;
+  let preparationLease:
+    Awaited<ReturnType<typeof acquireExclusiveLease>> | undefined;
   try {
     const canonicalRoot = await realpath(input.root);
     for (const relative of dependencies.lockPaths) {
@@ -562,25 +563,15 @@ async function prepareDependencySnapshotWithSignal(input: {
     const identity = await dependencyIdentity(temporary, input.config);
     await validateNpmLock(temporary, dependencies.lockPaths);
     const destination = path.join(parent, identity.key);
-    lockDirectory = `${destination}.lock`;
-    try {
-      await mkdir(lockDirectory, { mode: 0o700 });
-      lockAcquired = true;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "EEXIST"
-      ) {
-        throw new MillError(
-          "DEPENDENCY_PREPARATION_ACTIVE",
-          "Another process owns preparation of this exact dependency snapshot.",
-          ExitCode.temporary,
-          { snapshot: identity.key },
-        );
-      }
-      throw error;
-    }
+    preparationLease = await acquireExclusiveLease({
+      path: `${destination}.lease.sqlite3`,
+      activeCode: "DEPENDENCY_PREPARATION_ACTIVE",
+      activeMessage:
+        "Another process owns preparation of this exact dependency snapshot.",
+      unavailableCode: "DEPENDENCY_PREPARATION_LEASE_UNAVAILABLE",
+      unavailableMessage:
+        "The exact dependency snapshot lease could not be acquired safely.",
+    });
     if (await markerMatches(destination, identity.marker)) {
       return {
         directory: destination,
@@ -762,9 +753,7 @@ async function prepareDependencySnapshotWithSignal(input: {
     try {
       await rm(temporary, { recursive: true, force: true });
     } finally {
-      if (lockAcquired && lockDirectory !== undefined) {
-        await rm(lockDirectory, { recursive: true });
-      }
+      await preparationLease?.release();
     }
   }
 }
