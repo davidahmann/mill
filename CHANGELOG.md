@@ -42,6 +42,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   incompatible major upgrades require an intentional toolchain qualification.
 - Executable JSON Schemas are generated from runtime contract inputs and checked
   for exact drift in the native gate.
+- New baseline qualifications and runs require task-packet version 2 with exact
+  continuity authority; version 1 remains byte-stable for in-flight resume.
 
 ### Deprecated
 
@@ -85,6 +87,12 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - OCI verification safely aliases comma-bearing bind paths, and restoring an
   older state backup quarantines newer unreferenced worktrees with durable
   recovery evidence rather than deleting them.
+- Planning promotion now rebinds approval to the proposal's current canonical
+  bytes; task semantics and selected scenarios must match approved impact, and
+  inactive impact exceptions grant no authority.
+- Candidate publication and mutating-worker settlement are atomic, review
+  attempts use their exact per-candidate generation, and worker profile digests
+  bind the prompt-template bytes actually used by the adapter.
 
 ### Security
 

@@ -59,12 +59,9 @@ export async function buildContextManifest(
 ): Promise<{ manifest: ContextManifest; digest: string }> {
   const included: { path: string; digest: string }[] = [];
   const instructions = await effectiveInstructionPaths(worktree);
-  const authorityPaths = Object.values(task.authority)
-    .filter(
-      (reference): reference is { path: string; digest: string } =>
-        reference !== undefined,
-    )
-    .map((reference) => reference.path);
+  const authorityPaths = Object.values(task.authority).map(
+    (reference) => reference.path,
+  );
   for (const contextPath of [
     ...new Set([...task.contextPaths, ...authorityPaths, ...instructions]),
   ].sort()) {

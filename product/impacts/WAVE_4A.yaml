@@ -5,6 +5,7 @@ outcomeId: product-continuity
 riskClass: high
 acceptanceIds:
   - ACC-CONTINUITY
+  - ACC-TRUTHFUL-RECOVERY
 affectedInvariantIds:
   - INV-EXACT-EVIDENCE
   - INV-WORKER-LEAST-AUTHORITY
@@ -34,4 +35,4 @@ exceptions: []
 approval:
   approvedBy: davidahmann
   approvedAt: "2026-09-02T11:00:00.000Z"
-  proposalDigest: sha256:7ff4ccaef02b634c388df89d8e14fb0e3f3c6fcb83a28dc86d64b019b4eeae8e
+  proposalDigest: sha256:ee8c4b103b22c18b5679c2fca9c09a26341458ef03c91fa15fc8947ab64f5646

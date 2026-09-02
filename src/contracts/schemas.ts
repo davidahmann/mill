@@ -404,36 +404,15 @@ const evidenceDispositionSchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
-export const taskPacketSchema = z.strictObject({
-  schemaVersion: z.literal("1"),
+const taskPacketCommonShape = {
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
   title: z.string().min(1),
   objective: z.string().min(1),
   riskClass: z.enum(["low", "medium", "high"]),
   baseRef: z.string().regex(/^(?!-)[^\s]+$/u),
-  authority: z.strictObject({
-    productContract: authorityReferenceSchema,
-    scenarioSet: authorityReferenceSchema,
-    policy: authorityReferenceSchema,
-    impactManifest: authorityReferenceSchema.optional(),
-  }),
   contextPaths: z.array(z.string().min(1)).min(1),
   allowedPaths: z.array(repositoryPathPatternSchema).min(1),
   commandIds: z.array(z.string().min(1)).min(1),
-  acceptance: z
-    .array(
-      z.strictObject({
-        id: z.string().min(1),
-        statement: z.string().min(1),
-        invariantIds: z.array(stableInvariantIdSchema).default([]),
-        scenarioIds: z.array(z.string().min(1)).default([]),
-        coverage: z
-          .enum(["new_behavior", "preservation", "both"])
-          .default("new_behavior"),
-        evidence: evidenceDispositionSchema.optional(),
-      }),
-    )
-    .min(1),
   commit: z.strictObject({
     message: z.string().min(1),
     authorName: z.string().min(1),
@@ -444,7 +423,53 @@ export const taskPacketSchema = z.strictObject({
     maxOutputBytes: z.number().int().min(1024).max(10_000_000),
     retryCount: z.number().int().min(0).max(1),
   }),
+} as const;
+
+export const taskPacketV1Schema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  ...taskPacketCommonShape,
+  authority: z.strictObject({
+    productContract: authorityReferenceSchema,
+    scenarioSet: authorityReferenceSchema,
+    policy: authorityReferenceSchema,
+  }),
+  acceptance: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        statement: z.string().min(1),
+      }),
+    )
+    .min(1),
 });
+
+export const taskPacketV2Schema = z.strictObject({
+  schemaVersion: z.literal("2"),
+  ...taskPacketCommonShape,
+  authority: z.strictObject({
+    productContract: authorityReferenceSchema,
+    scenarioSet: authorityReferenceSchema,
+    policy: authorityReferenceSchema,
+    impactManifest: authorityReferenceSchema,
+  }),
+  acceptance: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        statement: z.string().min(1),
+        invariantIds: z.array(stableInvariantIdSchema),
+        scenarioIds: z.array(z.string().min(1)),
+        coverage: z.enum(["new_behavior", "preservation", "both"]),
+        evidence: evidenceDispositionSchema,
+      }),
+    )
+    .min(1),
+});
+
+export const taskPacketSchema = z.discriminatedUnion("schemaVersion", [
+  taskPacketV1Schema,
+  taskPacketV2Schema,
+]);
 
 export const workerProfileSchema = z.strictObject({
   schemaVersion: z.literal("1"),

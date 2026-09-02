@@ -5,12 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   codexAuthStatus,
+  codexPromptTemplate,
+  codexWorkerProfile,
   decodeCodexEvents,
   runCodexBuilder,
   runCodexReview,
 } from "../src/runtime/codex.js";
 import { buildContextManifest } from "../src/runtime/context.js";
-import { loadRuntimeInputs } from "../src/runtime/inputs.js";
+import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 import { temporaryDirectory } from "./helpers.js";
 
@@ -34,6 +36,26 @@ async function executableScript(
 }
 
 describe("Codex adapter boundaries", () => {
+  it("binds worker profiles to the actual role prompt template bytes", async () => {
+    const fixture = await runtimeFixture();
+    process.env.MILL_CODEX_PATH = fixture.codexPath;
+    try {
+      const builder = await codexWorkerProfile(fixture.root, "builder");
+      const reviewer = await codexWorkerProfile(fixture.root, "reviewer");
+      expect(builder.promptTemplateDigest).toBe(
+        textDigest(codexPromptTemplate("builder")),
+      );
+      expect(reviewer.promptTemplateDigest).toBe(
+        textDigest(codexPromptTemplate("reviewer")),
+      );
+      expect(builder.promptTemplateDigest).not.toBe(
+        reviewer.promptTemplateDigest,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("requires exactly one terminal settlement and one reviewer result", () => {
     expect(() => decodeCodexEvents("", "builder")).toThrow(
       expect.objectContaining({ code: "WORKER_SETTLEMENT_MISSING" }),

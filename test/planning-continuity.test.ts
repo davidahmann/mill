@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
@@ -18,12 +18,18 @@ import {
   buildSemanticEvidence,
   loadImpactPlanningInputs,
 } from "../src/planning/impact.js";
-import { textDigest } from "../src/runtime/inputs.js";
+import {
+  assertNewRunTaskContract,
+  loadRuntimeInputs,
+  textDigest,
+} from "../src/runtime/inputs.js";
 import {
   assessSpecificationProposal,
   promoteSpecificationProposal,
   semanticProposalDiff,
 } from "../src/planning/specification.js";
+import { MillError } from "../src/errors.js";
+import { temporaryDirectory } from "./helpers.js";
 
 const digest = (value: unknown) => canonicalDigest(value as JsonValue);
 
@@ -270,6 +276,20 @@ describe("product continuity planning", () => {
         assessment,
       }),
     ).toThrow(expect.objectContaining({ code: "PLANNING_APPROVAL_MISMATCH" }));
+    const mutated = specificationProposalSchema.parse({
+      ...fixture.proposal,
+      productContract: {
+        ...fixture.product,
+        jobToBeDone: "An unapproved replacement job",
+      },
+    });
+    expect(() =>
+      promoteSpecificationProposal({
+        proposal: mutated,
+        approvalDigest: assessment.proposalDigest,
+        assessment,
+      }),
+    ).toThrow(expect.objectContaining({ code: "PLANNING_APPROVAL_MISMATCH" }));
   });
 
   it("reports semantic regeneration drift without replacing approval", () => {
@@ -422,6 +442,148 @@ describe("product continuity planning", () => {
 });
 
 describe("impact and semantic evidence", () => {
+  it("requires version 2 for new material work and exact approved task semantics", async () => {
+    const fixture = continuityFixture();
+    const legacy = taskPacketSchema.parse({
+      schemaVersion: "1",
+      id: "legacy-high-risk",
+      title: "Legacy task",
+      objective: "Resume only.",
+      riskClass: "high",
+      baseRef: "HEAD",
+      authority: {
+        productContract: { path: "product.json", digest: fixture.prdDigest },
+        scenarioSet: { path: "scenarios.json", digest: fixture.prdDigest },
+        policy: { path: "WORKFLOW.md", digest: fixture.prdDigest },
+      },
+      contextPaths: ["WORKFLOW.md"],
+      allowedPaths: ["src/**"],
+      commandIds: ["test"],
+      acceptance: [{ id: "ACC-DELIVERY", statement: "Legacy evidence" }],
+      commit: {
+        message: "test: legacy",
+        authorName: "Mill",
+        authorEmail: "mill@example.invalid",
+      },
+      budget: { deadlineSeconds: 600, maxOutputBytes: 1048576, retryCount: 1 },
+    });
+    expect(() => assertNewRunTaskContract(legacy)).toThrow(
+      expect.objectContaining({ code: "CONTINUITY_TASK_VERSION_REQUIRED" }),
+    );
+
+    const temporary = await temporaryDirectory("mill-continuity-task-");
+    try {
+      await mkdir(`${temporary.path}/product/tasks`, { recursive: true });
+      await mkdir(`${temporary.path}/quality`, { recursive: true });
+      await mkdir(`${temporary.path}/test`, { recursive: true });
+      const productSource = JSON.stringify(fixture.product);
+      const scenarioSource = JSON.stringify(fixture.scenarios);
+      const impactSource = JSON.stringify(fixture.impact);
+      const policy = "# Approved workflow\n";
+      const task = {
+        schemaVersion: "2",
+        id: "continuity-binding",
+        title: "Continuity binding",
+        objective: "Reject weakened task semantics.",
+        riskClass: "high",
+        baseRef: "HEAD",
+        authority: {
+          productContract: {
+            path: "product/contract.json",
+            digest: textDigest(productSource),
+          },
+          scenarioSet: {
+            path: "quality/scenarios.json",
+            digest: textDigest(scenarioSource),
+          },
+          policy: { path: "WORKFLOW.md", digest: textDigest(policy) },
+          impactManifest: {
+            path: "product/impact.json",
+            digest: textDigest(impactSource),
+          },
+        },
+        contextPaths: ["WORKFLOW.md"],
+        allowedPaths: ["src/**"],
+        commandIds: ["test"],
+        acceptance: [
+          {
+            id: "ACC-DELIVERY",
+            statement: "Only require a zero exit.",
+            invariantIds: ["INV-HUMAN-MERGE"],
+            scenarioIds: [],
+            coverage: "both",
+            evidence: { mode: "command", commandId: "test" },
+          },
+        ],
+        commit: {
+          message: "test: reject weakened semantics",
+          authorName: "Mill",
+          authorEmail: "mill@example.invalid",
+        },
+        budget: {
+          deadlineSeconds: 600,
+          maxOutputBytes: 1048576,
+          retryCount: 1,
+        },
+      };
+      await Promise.all([
+        writeFile(`${temporary.path}/product/contract.json`, productSource),
+        writeFile(`${temporary.path}/quality/scenarios.json`, scenarioSource),
+        writeFile(`${temporary.path}/product/impact.json`, impactSource),
+        writeFile(`${temporary.path}/WORKFLOW.md`, policy),
+        writeFile(`${temporary.path}/test/control.js`, "export {};\n"),
+        writeFile(
+          `${temporary.path}/mill.yaml`,
+          JSON.stringify({
+            schemaVersion: "1",
+            repositoryId: "11111111-1111-4111-8111-111111111111",
+            trustCeiling: "build",
+            sensitivePaths: [],
+            verifier: {
+              image: `node@sha256:${"a".repeat(64)}`,
+              network: "none",
+            },
+            commands: {
+              test: {
+                argv: ["node", "--test"],
+                cwd: ".",
+                controlPaths: ["test/control.js"],
+                capability: "test",
+                required: true,
+                timeoutSeconds: 30,
+                execution: "oci",
+              },
+            },
+          }),
+        ),
+        writeFile(
+          `${temporary.path}/product/tasks/continuity.json`,
+          JSON.stringify(task),
+        ),
+      ]);
+      let failure: unknown;
+      try {
+        await loadRuntimeInputs(
+          temporary.path,
+          "product/tasks/continuity.json",
+        );
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(MillError);
+      const continuityError = failure as MillError;
+      expect(continuityError.code).toBe("CONTINUITY_AUTHORITY_BLOCKED");
+      expect(continuityError.details.blockers).toEqual(
+        expect.arrayContaining([
+          "task acceptance statement differs from product contract: ACC-DELIVERY",
+          "task scenario graph differs from approved impact: ACC-DELIVERY",
+        ]),
+      );
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("approves exact impact and separates new behavior from preservation", () => {
     const fixture = continuityFixture();
     expect(
@@ -433,7 +595,7 @@ describe("impact and semantic evidence", () => {
       }),
     ).toMatchObject({ approved: true, blockers: [] });
     const task = taskPacketSchema.parse({
-      schemaVersion: "1",
+      schemaVersion: "2",
       id: "continuity",
       title: "Continuity",
       objective: "Preserve delivery authority.",
@@ -510,7 +672,7 @@ describe("impact and semantic evidence", () => {
       })),
     });
     const task = taskPacketSchema.parse({
-      schemaVersion: "1",
+      schemaVersion: "2",
       id: "continuity-negative-control",
       title: "Continuity negative control",
       objective: "Reject unrelated command evidence.",
@@ -670,7 +832,7 @@ describe("impact and semantic evidence", () => {
       statementDigest: textDigest(statement),
     });
     const task = taskPacketSchema.parse({
-      schemaVersion: "1",
+      schemaVersion: "2",
       id: "evidence-dispositions",
       title: "Evidence dispositions",
       objective: "Keep evidence states distinct.",
@@ -686,6 +848,10 @@ describe("impact and semantic evidence", () => {
           digest: fixture.prdDigest,
         },
         policy: { path: "WORKFLOW.md", digest: fixture.prdDigest },
+        impactManifest: {
+          path: "product/impact.yaml",
+          digest: fixture.prdDigest,
+        },
       },
       contextPaths: ["WORKFLOW.md"],
       allowedPaths: ["src/**"],
@@ -803,6 +969,82 @@ describe("impact and semantic evidence", () => {
     expect(assessment.approved).toBe(false);
     expect(assessment.blockers).toContain(
       "uncertain invariant lacks an approved exception: INV-HUMAN-MERGE",
+    );
+  });
+
+  it("rejects unrelated negative scenarios and future-dated exceptions", () => {
+    const fixture = continuityFixture();
+    const product = productContractSchema.parse({
+      ...fixture.product,
+      acceptance: [
+        ...fixture.product.acceptance,
+        {
+          id: "ACC-UNRELATED",
+          kind: "quality",
+          statement: "An unrelated behavior remains available.",
+          sourceRefs: ["SRC-PRD"],
+        },
+      ],
+      invariants: [
+        ...fixture.product.invariants,
+        {
+          ...fixture.product.invariants[0],
+          id: "INV-UNRELATED",
+          statement: "An unrelated invariant remains true.",
+        },
+      ],
+    });
+    const scenarios = scenarioSetSchema.parse({
+      ...fixture.scenarios,
+      productContractDigest: digest(product),
+      scenarios: fixture.scenarios.scenarios.map((scenario) =>
+        scenario.id === "SCN-RECOVERY"
+          ? {
+              ...scenario,
+              acceptanceRefs: ["ACC-UNRELATED"],
+              invariantRefs: ["INV-UNRELATED"],
+            }
+          : scenario,
+      ),
+    });
+    const proposal = impactManifestSchema.parse({
+      ...fixture.impact,
+      productContractDigest: digest(product),
+      affectedInvariantIds: [],
+      uncertainInvariantIds: ["INV-HUMAN-MERGE"],
+      exceptions: [
+        {
+          id: "EX-FUTURE",
+          scopeRefs: ["INV-HUMAN-MERGE"],
+          reason: "Not active yet",
+          approvedBy: "operator",
+          approvedAt: "2026-09-03T00:00:00.000Z",
+          expiresAt: "2026-09-04T00:00:00.000Z",
+        },
+      ],
+      approval: null,
+    });
+    const manifest = impactManifestSchema.parse({
+      ...proposal,
+      approval: {
+        approvedBy: "operator",
+        approvedAt: "2026-09-02T00:00:00.000Z",
+        proposalDigest: digest(proposal),
+      },
+    });
+    expect(
+      assessImpactManifest({
+        manifest,
+        product,
+        scenarios,
+        now: new Date("2026-09-02T12:00:00.000Z"),
+      }).blockers,
+    ).toEqual(
+      expect.arrayContaining([
+        "selected scenario is outside impact closure: SCN-RECOVERY",
+        "impact exception is not active yet: EX-FUTURE",
+        "uncertain invariant lacks an approved exception: INV-HUMAN-MERGE",
+      ]),
     );
   });
 

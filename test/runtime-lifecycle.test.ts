@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -600,6 +601,28 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
         status: "reviewed",
         candidateCommit: started.run.candidateCommit,
       });
+      const store = await StateStore.open(
+        "11111111-1111-4111-8111-111111111111",
+        await commonGitDirectory(fixture.root),
+      );
+      const databasePath = store.databasePath;
+      store.close();
+      const database = new DatabaseSync(databasePath, { readOnly: true });
+      try {
+        const rows = database
+          .prepare(
+            "SELECT envelope_json FROM worker_invocations WHERE run_id = ? AND phase = 'review' ORDER BY created_at, id",
+          )
+          .all(started.run.id) as unknown as { envelope_json: string }[];
+        expect(
+          rows.map(
+            (row) =>
+              (JSON.parse(row.envelope_json) as { attempt: number }).attempt,
+          ),
+        ).toEqual([2]);
+      } finally {
+        database.close();
+      }
     } finally {
       await fixture.cleanup();
     }

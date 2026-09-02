@@ -61,6 +61,9 @@ material task binds an exact human-approved impact manifest, and validation
 reports new-behavior and preservation evidence separately. Scenario and
 invariant evidence must execute their own approved command or carry a scoped,
 unexpired human attestation; a generic passing command cannot certify them.
+Task-packet version 1 remains a byte-stable, resume-only legacy shape for
+in-flight runs. Every new run uses version 2, which requires the impact manifest
+and exact product-to-task semantic graph.
 
 Codex remains the only worker implementation behind an internal `WorkerAdapter`.
 Before every builder, repair, or reviewer process starts, Mill records an

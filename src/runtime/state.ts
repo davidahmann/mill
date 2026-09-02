@@ -578,7 +578,12 @@ export class StateStore {
     });
   }
 
-  commitCandidate(id: string, commit: string, tree: string): RunRecord {
+  commitCandidate(
+    id: string,
+    commit: string,
+    tree: string,
+    invocationId?: string,
+  ): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
       if (current.cancelRequested) {
@@ -595,6 +600,22 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
+      if (invocationId !== undefined) {
+        const invocation = this.#database
+          .prepare("SELECT run_id, phase FROM worker_invocations WHERE id = ?")
+          .get(invocationId) as { run_id: string; phase: string } | undefined;
+        if (
+          invocation?.run_id !== id ||
+          (invocation.phase !== "build" && invocation.phase !== "repair") ||
+          this.workerInvocationStatus(invocationId) !== "launch_started"
+        ) {
+          throw new MillError(
+            "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+            "Candidate publication requires its one started mutating worker invocation.",
+            ExitCode.configuration,
+          );
+        }
+      }
       this.#database
         .prepare(
           `UPDATE runs SET candidate_commit = ?, candidate_tree = ?,
@@ -609,6 +630,13 @@ export class StateStore {
         commit,
         tree,
       });
+      if (invocationId !== undefined) {
+        this.#invocationEvent(invocationId, "settled", {
+          outcome: "completed",
+          candidateCommit: commit,
+          candidateTree: tree,
+        });
+      }
     });
     return this.getRun(id);
   }
@@ -779,7 +807,8 @@ export class StateStore {
     return this.getRun(id);
   }
 
-  beginReviewAttempt(id: string, maximum: number): void {
+  beginReviewAttempt(id: string, maximum: number): number {
+    let attempt = 0;
     this.#transaction(() => {
       const current = this.getRun(id);
       if (current.cancelRequested) {
@@ -817,11 +846,13 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
+      attempt = row.count + 1;
       this.#event(id, "review.started", {
         candidateCommit: current.candidateCommit,
-        attempt: row.count + 1,
+        attempt,
       });
     });
+    return attempt;
   }
 
   recordBaselineQualification(input: {

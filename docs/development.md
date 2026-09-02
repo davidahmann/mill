@@ -88,6 +88,12 @@ product, scenario, impact, and selected web-recipe contracts. Those tests prove
 contract behavior; they do not replace exact-candidate review or CI because a
 candidate cannot certify itself by changing its own oracle.
 
+Task-packet version `1` is accepted only to resume or inspect work that began
+before the continuity contract. Baseline qualification and every new run require
+version `2`, including an approved impact manifest and explicit acceptance,
+invariant, scenario, coverage, and evidence bindings. Do not rewrite an
+in-flight version `1` task: its canonical bytes and digest remain unchanged.
+
 The real-provider canaries use the maintainer's personal Codex and GitHub
 accounts, a pre-pulled digest-pinned image, and an explicitly named disposable
 repository. They may exercise only the wave's approved effects and must preserve

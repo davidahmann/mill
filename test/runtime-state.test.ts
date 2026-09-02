@@ -173,6 +173,65 @@ describe("operational state", () => {
     }
   });
 
+  it("publishes candidate identity and mutating-worker settlement atomically", async () => {
+    const temporary = await temporaryDirectory("mill-worker-candidate-atomic-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "atomic-candidate",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      store.transition(run.id, "ready", "run.ready");
+      store.transition(run.id, "running", "builder.started");
+      const invocationId = randomUUID();
+      store.admitWorkerInvocation({
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"d".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      });
+      store.markWorkerLaunchStarted(invocationId);
+      expect(() =>
+        store.commitCandidate(
+          run.id,
+          "e".repeat(40),
+          "f".repeat(40),
+          randomUUID(),
+        ),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+        }),
+      );
+      expect(store.getRun(run.id)).toMatchObject({ status: "running" });
+      expect(store.getRun(run.id)).not.toHaveProperty("candidateCommit");
+      expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
+      const committed = store.commitCandidate(
+        run.id,
+        "e".repeat(40),
+        "f".repeat(40),
+        invocationId,
+      );
+      expect(committed).toMatchObject({
+        status: "committed",
+        candidateCommit: "e".repeat(40),
+        candidateTree: "f".repeat(40),
+      });
+      expect(store.workerInvocationStatus(invocationId)).toBe("settled");
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([]);
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
   it("enforces transition, retry, validation, review, and cancellation invariants", async () => {
     const temporary = await temporaryDirectory("mill-state-machine-");
     process.env.MILL_STATE_HOME = temporary.path;
@@ -243,10 +302,17 @@ describe("operational state", () => {
       store.transition(reviewed.id, "running", "running");
       store.commitCandidate(reviewed.id, "1".repeat(40), "2".repeat(40));
       store.completeValidation(reviewed.id, '{"passed":true}', true);
-      store.beginReviewAttempt(reviewed.id, 1);
+      expect(store.beginReviewAttempt(reviewed.id, 1)).toBe(1);
       expect(() => store.beginReviewAttempt(reviewed.id, 1)).toThrow(
         expect.objectContaining({ code: "REVIEW_RETRY_BUDGET_EXHAUSTED" }),
       );
+      const reviewRetry = create();
+      store.transition(reviewRetry.id, "ready", "ready");
+      store.transition(reviewRetry.id, "running", "running");
+      store.commitCandidate(reviewRetry.id, "7".repeat(40), "8".repeat(40));
+      store.completeValidation(reviewRetry.id, '{"passed":true}', true);
+      expect(store.beginReviewAttempt(reviewRetry.id, 2)).toBe(1);
+      expect(store.beginReviewAttempt(reviewRetry.id, 2)).toBe(2);
       const findings = store.completeReview(
         reviewed.id,
         '{"findings":[1]}',
@@ -260,7 +326,7 @@ describe("operational state", () => {
       store.beginRepair(findings.id);
       store.commitCandidate(findings.id, "5".repeat(40), "6".repeat(40));
       store.completeValidation(findings.id, '{"passed":true}', true);
-      expect(() => store.beginReviewAttempt(findings.id, 1)).not.toThrow();
+      expect(store.beginReviewAttempt(findings.id, 1)).toBe(1);
       expect(() => store.beginReviewAttempt(findings.id, 1)).toThrow(
         expect.objectContaining({ code: "REVIEW_RETRY_BUDGET_EXHAUSTED" }),
       );
@@ -282,7 +348,7 @@ describe("operational state", () => {
       expect(requested.cancelRequested).toBe(true);
       store.transition(cancelled.id, "cancelled", "cancelled");
       expect(store.requestCancellation(cancelled.id).status).toBe("cancelled");
-      expect(store.runs()).toHaveLength(4);
+      expect(store.runs()).toHaveLength(5);
     } finally {
       store.close();
       store.close();

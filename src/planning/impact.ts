@@ -146,6 +146,43 @@ export function assessImpactManifest(input: {
   for (const id of input.manifest.scenarioIds) {
     if (!scenarios.has(id)) blockers.push(`scenario is unresolved: ${id}`);
   }
+  const impactedAcceptance = new Set(input.manifest.acceptanceIds);
+  const impactedInvariants = new Set([
+    ...input.manifest.affectedInvariantIds,
+    ...input.manifest.uncertainInvariantIds,
+  ]);
+  const selectedScenarios = input.manifest.scenarioIds
+    .map((id) => scenarios.get(id))
+    .filter((scenario) => scenario !== undefined);
+  for (const scenario of selectedScenarios) {
+    const outsideAcceptance = scenario.acceptanceRefs.filter(
+      (id) => !impactedAcceptance.has(id),
+    );
+    const outsideInvariants = scenario.invariantRefs.filter(
+      (id) => !impactedInvariants.has(id),
+    );
+    if (outsideAcceptance.length > 0 || outsideInvariants.length > 0) {
+      blockers.push(
+        `selected scenario is outside impact closure: ${scenario.id}`,
+      );
+    }
+  }
+  for (const id of input.manifest.acceptanceIds) {
+    if (
+      !selectedScenarios.some((scenario) =>
+        scenario.acceptanceRefs.includes(id),
+      )
+    ) {
+      blockers.push(`impacted acceptance lacks a selected scenario: ${id}`);
+    }
+  }
+  for (const id of impactedInvariants) {
+    if (
+      !selectedScenarios.some((scenario) => scenario.invariantRefs.includes(id))
+    ) {
+      blockers.push(`impacted invariant lacks a selected scenario: ${id}`);
+    }
+  }
   for (const id of input.manifest.materialDecisions) {
     const decision = decisions.get(id);
     if (decision === undefined) blockers.push(`decision is unresolved: ${id}`);
@@ -153,12 +190,26 @@ export function assessImpactManifest(input: {
       blockers.push(`decision is not approved: ${id}`);
     }
   }
-  const exceptionScopes = new Set(
-    input.manifest.exceptions.flatMap((exception) => exception.scopeRefs),
-  );
   const now = input.now ?? new Date();
+  const activeExceptions = input.manifest.exceptions.filter((exception) => {
+    const approvedAt = Date.parse(exception.approvedAt);
+    const expiresAt = Date.parse(exception.expiresAt);
+    return approvedAt <= now.getTime() && expiresAt > now.getTime();
+  });
+  const exceptionScopes = new Set(
+    activeExceptions.flatMap((exception) => exception.scopeRefs),
+  );
   for (const exception of input.manifest.exceptions) {
-    if (Date.parse(exception.expiresAt) <= now.getTime()) {
+    const approvedAt = Date.parse(exception.approvedAt);
+    const expiresAt = Date.parse(exception.expiresAt);
+    if (approvedAt > now.getTime()) {
+      blockers.push(`impact exception is not active yet: ${exception.id}`);
+    }
+    if (expiresAt <= approvedAt) {
+      blockers.push(
+        `impact exception has an invalid interval: ${exception.id}`,
+      );
+    } else if (expiresAt <= now.getTime()) {
       blockers.push(`impact exception is expired: ${exception.id}`);
     }
   }
@@ -175,15 +226,14 @@ export function assessImpactManifest(input: {
     }
   }
   if (input.manifest.riskClass !== "low") {
-    const selected = input.manifest.scenarioIds
-      .map((id) => scenarios.get(id))
-      .filter((scenario) => scenario !== undefined);
-    if (!selected.some((scenario) => scenario.executionRef !== undefined)) {
+    if (
+      !selectedScenarios.some((scenario) => scenario.executionRef !== undefined)
+    ) {
       blockers.push(
         "medium/high risk impact lacks a delivered-surface scenario",
       );
     }
-    if (!selected.some((scenario) => scenario.kind !== "normal")) {
+    if (!selectedScenarios.some((scenario) => scenario.kind !== "normal")) {
       blockers.push("medium/high risk impact lacks a non-normal scenario");
     }
   }
@@ -230,6 +280,14 @@ export function buildSemanticEvidence(input: {
   }[];
   now?: Date;
 }): SemanticEvidence {
+  if (input.task.schemaVersion !== "2") {
+    throw new MillError(
+      "CONTINUITY_TASK_VERSION_REQUIRED",
+      "Semantic evidence requires a task-packet version 2 continuity contract.",
+      ExitCode.configuration,
+    );
+  }
+  const task = input.task;
   const now = input.now ?? new Date();
   const commands = new Map(
     input.commandResults.map((command) => [command.commandId, command.status]),
@@ -242,7 +300,7 @@ export function buildSemanticEvidence(input: {
   );
   const items: SemanticItemEvidence[] = [];
   const taskAcceptance = new Map(
-    input.task.acceptance.map((acceptance) => [acceptance.id, acceptance]),
+    task.acceptance.map((acceptance) => [acceptance.id, acceptance]),
   );
   for (const id of input.manifest.acceptanceIds) {
     const acceptance = taskAcceptance.get(id);
@@ -311,7 +369,7 @@ export function buildSemanticEvidence(input: {
     items.map((item) => [item.id, item] as const),
   );
   const linked = (kind: "invariant" | "scenario", id: string) =>
-    input.task.acceptance
+    task.acceptance
       .filter((acceptance) =>
         kind === "invariant"
           ? acceptance.invariantIds.includes(id)
@@ -358,6 +416,7 @@ export function buildSemanticEvidence(input: {
     const exception = exceptionFor(id);
     const active =
       exception !== undefined &&
+      Date.parse(exception.approvedAt) <= now.getTime() &&
       Date.parse(exception.expiresAt) > now.getTime();
     items.push({
       kind: "invariant",

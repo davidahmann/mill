@@ -4,6 +4,7 @@ import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
+import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { contractSchemas } from "../src/contracts/schemas.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
@@ -358,6 +359,21 @@ const schemaFiles = {
 } as const;
 
 describe("compact schemas", () => {
+  it("preserves legacy task bytes and requires explicit version 2 continuity", () => {
+    const legacy = samples.taskPacket as unknown as JsonValue;
+    const parsed = contractSchemas.taskPacket.parse(samples.taskPacket);
+    expect(parsed).toEqual(samples.taskPacket);
+    expect(canonicalDigest(parsed as unknown as JsonValue)).toBe(
+      canonicalDigest(legacy),
+    );
+    expect(
+      contractSchemas.taskPacket.safeParse({
+        ...samples.taskPacket,
+        schemaVersion: "2",
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps executable JSON Schemas aligned with runtime validators", async () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     ajv.addFormat(

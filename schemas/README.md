@@ -29,6 +29,11 @@ SQLite runs and events, credentials, prompts, raw model streams, and raw command
 output are deliberately not repository contracts and are never accepted as
 authority.
 
+Task packet version `1` remains byte-stable for in-flight Wave 1-3 runs but
+cannot start new work. Version `2` is the continuity contract: it requires an
+approved impact manifest and explicit acceptance, invariant, scenario, coverage,
+and evidence bindings. Every new run requires version `2`.
+
 JSON Schemas are generated from the runtime Zod contracts in input mode. Run
 `npm run schemas:generate` after an intentional contract change;
 `npm run schemas:check` fails if committed JSON and runtime validation drift.

@@ -249,7 +249,13 @@ export function promoteSpecificationProposal(input: {
   blueprints: SpecificationProposal["blueprints"];
   scenarioSet: SpecificationProposal["scenarioSet"];
 } {
-  if (input.approvalDigest !== input.assessment.proposalDigest) {
+  const proposalDigest = canonicalDigest(
+    input.proposal as unknown as JsonValue,
+  );
+  if (
+    input.approvalDigest !== proposalDigest ||
+    input.assessment.proposalDigest !== proposalDigest
+  ) {
     throw new MillError(
       "PLANNING_APPROVAL_MISMATCH",
       "Planning approval does not match the exact canonical proposal.",
@@ -265,7 +271,7 @@ export function promoteSpecificationProposal(input: {
     );
   }
   return {
-    proposalDigest: input.assessment.proposalDigest,
+    proposalDigest,
     canonicalProposal: canonicalJson(input.proposal as unknown as JsonValue),
     productContract: input.proposal.productContract,
     blueprints: input.proposal.blueprints,

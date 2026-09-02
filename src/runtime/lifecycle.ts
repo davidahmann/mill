@@ -19,6 +19,7 @@ import {
 } from "./context.js";
 import { ExitCode, MillError, asMillError } from "../errors.js";
 import {
+  assertNewRunTaskContract,
   loadMillConfig,
   loadRuntimeInputs,
   type RuntimeInputs,
@@ -561,6 +562,7 @@ export async function startLocalRun(input: {
   let provisionalBranch: string | undefined;
   const signals = lifecycleSignals();
   try {
+    assertNewRunTaskContract(inputs.task);
     const qualified = await qualifyRepositoryForBuild(
       input.root,
       "HEAD",
@@ -666,19 +668,18 @@ export async function startLocalRun(input: {
         inputs.task,
         inputs.protectedPaths,
       );
-      store.settleWorkerInvocation(admission.invocationId, "completed", {
-        candidateCommit: candidate.commit,
-      });
+      store.commitCandidate(
+        run.id,
+        candidate.commit,
+        candidate.tree,
+        admission.invocationId,
+      );
     } catch (error) {
       settleWorkerFailure(store, admission.invocationId, "builder", error);
       throw error;
     }
     recordProviderUsage(store, run.id, "builder.completed", invocation.usage);
-    const completed = store.commitCandidate(
-      run.id,
-      candidate.commit,
-      candidate.tree,
-    );
+    const completed = store.getRun(run.id);
     return { run: publicRunRecord(completed), usage: invocation.usage };
   } catch (error) {
     let failure = asMillError(error);
@@ -732,6 +733,7 @@ export async function qualifyBaseline(input: {
   signal?: AbortSignal;
 }): Promise<{ approvalDigest: string | null; evidence: ValidationEvidence }> {
   const inputs = await loadRuntimeInputs(input.root, input.taskPath);
+  assertNewRunTaskContract(inputs.task);
   assertBuildAuthorized(inputs);
   const signals = lifecycleSignals();
   const signal =
@@ -938,7 +940,10 @@ export async function reviewRun(input: {
       );
     }
     const candidate = await assertRunBindings(input.root, run, inputs);
-    store.beginReviewAttempt(run.id, inputs.task.budget.retryCount + 1);
+    const reviewAttempt = store.beginReviewAttempt(
+      run.id,
+      inputs.task.budget.retryCount + 1,
+    );
     const admission = await admitWorker({
       store,
       run,
@@ -947,7 +952,7 @@ export async function reviewRun(input: {
       root: candidate.worktree,
       phase: "review",
       role: "reviewer",
-      attempt: run.repairCount + 1,
+      attempt: reviewAttempt,
       candidateCommit: candidate.commit,
     });
     let result: Awaited<ReturnType<typeof codexWorkerAdapter.runReviewer>>;
@@ -1110,9 +1115,12 @@ export async function resumeRun(input: {
           inputs.task,
           inputs.protectedPaths,
         );
-        store.settleWorkerInvocation(admission.invocationId, "completed", {
-          candidateCommit: candidate.commit,
-        });
+        store.commitCandidate(
+          run.id,
+          candidate.commit,
+          candidate.tree,
+          admission.invocationId,
+        );
       } catch (error) {
         settleWorkerFailure(store, admission.invocationId, "builder", error);
         throw error;
@@ -1123,9 +1131,7 @@ export async function resumeRun(input: {
         "repair.builder_completed",
         invocation.usage,
       );
-      return publicRunRecord(
-        store.commitCandidate(run.id, candidate.commit, candidate.tree),
-      );
+      return publicRunRecord(store.getRun(run.id));
     }
     if (run.candidateCommit !== undefined) {
       throw new MillError(
@@ -1168,9 +1174,12 @@ export async function resumeRun(input: {
         inputs.task,
         inputs.protectedPaths,
       );
-      store.settleWorkerInvocation(admission.invocationId, "completed", {
-        candidateCommit: candidate.commit,
-      });
+      store.commitCandidate(
+        run.id,
+        candidate.commit,
+        candidate.tree,
+        admission.invocationId,
+      );
     } catch (error) {
       settleWorkerFailure(store, admission.invocationId, "builder", error);
       throw error;
@@ -1181,9 +1190,7 @@ export async function resumeRun(input: {
       "builder.resume_completed",
       invocation.usage,
     );
-    return publicRunRecord(
-      store.commitCandidate(run.id, candidate.commit, candidate.tree),
-    );
+    return publicRunRecord(store.getRun(run.id));
   } catch (error) {
     const failure = asMillError(error);
     if (lease !== undefined) settleFailure(store, input.runId, failure);
