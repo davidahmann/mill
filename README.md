@@ -132,17 +132,19 @@ processes receive neither GitHub credentials nor mutation tools. Mill journals
 intent before push and PR creation, uses an expected-old-head lease, and reads
 GitHub back before claiming an effect. An uncertain outcome becomes
 `effect_unknown`; `pr reconcile` is read-only and must classify it before any
-retry. Exact readback proving absence authorizes one retry; a second absent
-outcome blocks. Required checks pass only when every latest exact-head result is
-successful. A configured `github_required` reviewer may complete a current-head
-`APPROVED` or `COMMENTED` review, but any current-head actionable finding still
-blocks, including a severity-tagged top-level review body. Mill stops at
-`awaiting_human`; draft readiness is not closure authority and Mill never
-changes it or merges. Finalization verifies the recorded merger against
-`allowedMergerLogins`. Because GitHub does not expose an authoritative
-distinction between a one-commit squash and rebase, the provable policy is
-`linear_tree_preserving`; Mill never guesses a specific linear method from its
-allowlist.
+retry. Expired impact authority blocks a new remote mutation but does not block
+readback, observation, or truthful finalization of an already attempted effect.
+Exact readback proving absence authorizes one retry only while current mutation
+authority remains valid; a second absent outcome blocks. Required checks pass
+only when every latest exact-head result is successful. A configured
+`github_required` reviewer may complete a current-head `APPROVED` or `COMMENTED`
+review, but any current-head actionable finding still blocks, including a
+severity-tagged top-level review body. Mill stops at `awaiting_human`; draft
+readiness is not closure authority and Mill never changes it or merges.
+Finalization verifies the recorded merger against `allowedMergerLogins`. Because
+GitHub does not expose an authoritative distinction between a one-commit squash
+and rebase, the provable policy is `linear_tree_preserving`; Mill never guesses
+a specific linear method from its allowlist.
 
 Use `--json` before the command for the stable machine-readable envelope.
 `--json --version` is machine-readable; help is human-only and combining it with

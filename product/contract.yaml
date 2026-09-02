@@ -7,9 +7,12 @@ jobToBeDone: >-
   reviewed draft pull request without manually coordinating every delivery step
   or losing existing system behavior.
 outcomes:
-  - Source-backed product and architecture decisions
-  - One bounded exact candidate with realistic evidence
-  - One reviewed draft pull request with truthful lifecycle closure
+  - id: OUT-SOURCE-BACKED-DECISIONS
+    statement: Product and architecture decisions are source backed.
+  - id: OUT-PRODUCT-CONTINUITY
+    statement: A bounded exact candidate has realistic continuity evidence.
+  - id: OUT-REVIEWED-DRAFT
+    statement: A reviewed draft pull request reaches truthful lifecycle closure.
 nonGoals:
   - Hosted control plane or daemon
   - Automatic merge or deployment

@@ -88,7 +88,7 @@ describe("CLI contracts", () => {
       await mkdir(path.join(temporary.path, "product"));
       await writeFile(
         path.join(temporary.path, "product", "contract.yaml"),
-        'schemaVersion: "1"\nid: product\ntitle: Product\nprimaryUser: Founder\njobToBeDone: Ship safely\noutcomes: ["Reviewed PR"]\nnonGoals: []\nassumptions: []\nunknowns: []\nsourceRefs: ["PRD.md"]\n',
+        'schemaVersion: "1"\nid: product\ntitle: Product\nprimaryUser: Founder\njobToBeDone: Ship safely\noutcomes:\n  - id: OUT-REVIEWED-PR\n    statement: Reviewed PR\nnonGoals: []\nassumptions: []\nunknowns: []\nsourceRefs: ["PRD.md"]\n',
       );
       const valid = capture();
       expect(
@@ -234,7 +234,9 @@ describe("CLI contracts", () => {
         title: "Product",
         primaryUser: "Founder",
         jobToBeDone: "Receive one reviewed draft PR.",
-        outcomes: ["Reviewed draft PR"],
+        outcomes: [
+          { id: "OUT-REVIEWED-DRAFT", statement: "Reviewed draft PR" },
+        ],
         nonGoals: [],
         assumptions: [],
         unknowns: [],
@@ -267,16 +269,18 @@ describe("CLI contracts", () => {
         prd: { path: "PRD.md", digest: textDigest(prd) },
         sourceManifestDigest: canonicalDigest(sourceManifest),
         productContract: product,
-        blueprints: ["service", "package"].map((id) => ({
-          schemaVersion: "1",
-          id,
-          productContractDigest: productDigest,
-          recipe: `node-${id}`,
-          recipeVersion: "1",
-          runtime: "node-24",
-          architecture: ["modular monolith"],
-          risks: [],
-        })),
+        blueprints: [
+          {
+            schemaVersion: "1",
+            id: "service",
+            productContractDigest: productDigest,
+            recipe: "node-service",
+            recipeVersion: "1",
+            runtime: "node-24",
+            architecture: ["modular monolith"],
+            risks: [],
+          },
+        ],
         scenarioSet: {
           schemaVersion: "1",
           productContractDigest: productDigest,
@@ -306,7 +310,7 @@ describe("CLI contracts", () => {
         schemaVersion: "1",
         id: "cli-planning",
         productContractDigest: productDigest,
-        outcomeId: "reviewed-pr",
+        outcomeId: "OUT-REVIEWED-DRAFT",
         riskClass: "low",
         acceptanceIds: ["ACC-PR"],
         affectedInvariantIds: ["INV-HUMAN-MERGE"],

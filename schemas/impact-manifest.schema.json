@@ -8,7 +8,7 @@
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
     },
-    "outcomeId": { "type": "string", "minLength": 1 },
+    "outcomeId": { "type": "string", "pattern": "^OUT-[A-Z0-9][A-Z0-9-]*$" },
     "riskClass": { "type": "string", "enum": ["low", "medium", "high"] },
     "acceptanceIds": {
       "minItems": 1,

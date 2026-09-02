@@ -60,7 +60,9 @@ id: fixture
 title: Fixture
 primaryUser: Test operator
 jobToBeDone: Produce one exact positive-value candidate.
-outcomes: [Positive value]
+outcomes:
+  - id: OUT-POSITIVE-VALUE
+    statement: The exported value is positive.
 nonGoals: []
 assumptions: []
 unknowns: []
@@ -105,7 +107,7 @@ scenarios:
     schemaVersion: "1",
     id: "positive-value",
     productContractDigest: productDigest,
-    outcomeId: "positive-value",
+    outcomeId: "OUT-POSITIVE-VALUE",
     riskClass: "low",
     acceptanceIds: ["ACC-POSITIVE"],
     affectedInvariantIds: ["INV-POSITIVE"],

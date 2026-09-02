@@ -1242,6 +1242,53 @@ export class StateStore {
     });
   }
 
+  recordWorkerProcessExit(
+    runId: string,
+    invocationId: string,
+    processId?: string,
+  ): void {
+    this.#transaction(() => {
+      this.getRun(runId);
+      const invocation = this.#database
+        .prepare("SELECT run_id FROM worker_invocations WHERE id = ?")
+        .get(invocationId) as { run_id: string } | undefined;
+      if (
+        invocation?.run_id !== runId ||
+        this.workerInvocationStatus(invocationId) !== "launch_started"
+      ) {
+        throw new MillError(
+          "WORKER_PROCESS_EXIT_CONFLICT",
+          "Process exit evidence requires its one started, unsettled worker invocation.",
+          ExitCode.configuration,
+        );
+      }
+      const active = this.#database
+        .prepare("SELECT active_process_id FROM runs WHERE id = ?")
+        .get(runId) as { active_process_id: string | null };
+      if (
+        (processId !== undefined && active.active_process_id !== processId) ||
+        (processId === undefined && active.active_process_id !== null)
+      ) {
+        throw new MillError(
+          "WORKER_PROCESS_EXIT_CONFLICT",
+          "Process exit evidence does not match the active worker identity.",
+          ExitCode.configuration,
+        );
+      }
+      this.#invocationEvent(invocationId, "process_exited", {
+        processId: processId ?? null,
+      });
+      this.#database
+        .prepare(
+          `UPDATE runs SET active_process_id = NULL, active_pid = NULL,
+           active_process_group = NULL, active_process_identity = NULL,
+           updated_at = ? WHERE id = ?`,
+        )
+        .run(new Date().toISOString(), runId);
+      this.#event(runId, "worker.process_exited", { invocationId });
+    });
+  }
+
   unresolvedMutatingWorkerInvocations(runId: string): readonly {
     invocationId: string;
     phase: "build" | "repair";
@@ -1266,15 +1313,21 @@ export class StateStore {
            ORDER BY sequence DESC LIMIT 1`,
         )
         .get(row.id) as { data_json: string } | undefined;
-      let processExited = false;
+      const observedExit = this.#database
+        .prepare(
+          `SELECT 1 AS present FROM worker_invocation_events
+           WHERE invocation_id = ? AND type = 'process_exited' LIMIT 1`,
+        )
+        .get(row.id) as { present: number } | undefined;
+      let processExited = observedExit?.present === 1;
       if (uncertain !== undefined) {
         try {
           const details = JSON.parse(uncertain.data_json) as {
             processExited?: unknown;
           };
-          processExited = details.processExited === true;
+          processExited = processExited || details.processExited === true;
         } catch {
-          processExited = false;
+          // Preserve separately journaled process-exit evidence.
         }
       }
       return [

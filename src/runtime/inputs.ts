@@ -160,6 +160,7 @@ function patternsOverlap(first: string, second: string): boolean {
 export async function loadRuntimeInputs(
   root: string,
   taskPath: string,
+  authorityMode: "authorize" | "readback" = "authorize",
 ): Promise<RuntimeInputs> {
   validateRelative(taskPath, "Task path");
   const [configSource, taskSource] = await Promise.all([
@@ -259,6 +260,7 @@ export async function loadRuntimeInputs(
       manifest: impact,
       product,
       scenarios,
+      authorityMode,
     });
     const blockers = [...assessment.blockers];
     if (impact.riskClass !== task.riskClass) {

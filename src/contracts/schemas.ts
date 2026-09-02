@@ -12,6 +12,7 @@ const exactSemverSchema = z
 const stableInvariantIdSchema = z.string().regex(/^INV-[A-Z0-9][A-Z0-9-]*$/u);
 const stableSourceIdSchema = z.string().regex(/^SRC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableDecisionIdSchema = z.string().regex(/^DEC-[A-Z0-9][A-Z0-9-]*$/u);
+const stableOutcomeIdSchema = z.string().regex(/^OUT-[A-Z0-9][A-Z0-9-]*$/u);
 
 export const sourceManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
@@ -110,7 +111,14 @@ export const productContractSchema = z.strictObject({
   title: z.string().min(1),
   primaryUser: z.string().min(1),
   jobToBeDone: z.string().min(1),
-  outcomes: z.array(z.string().min(1)).min(1),
+  outcomes: z
+    .array(
+      z.strictObject({
+        id: stableOutcomeIdSchema,
+        statement: z.string().min(1),
+      }),
+    )
+    .min(1),
   nonGoals: z.array(z.string().min(1)),
   assumptions: z.array(z.string().min(1)),
   unknowns: z.array(z.string().min(1)),
@@ -197,7 +205,7 @@ export const impactManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
   productContractDigest: digestSchema,
-  outcomeId: z.string().min(1),
+  outcomeId: stableOutcomeIdSchema,
   riskClass: z.enum(["low", "medium", "high"]),
   acceptanceIds: z.array(z.string().min(1)).min(1),
   affectedInvariantIds: z.array(stableInvariantIdSchema),
@@ -240,7 +248,7 @@ export const specificationProposalSchema = z.strictObject({
   }),
   sourceManifestDigest: digestSchema,
   productContract: productContractSchema,
-  blueprints: z.array(blueprintSchema).min(2).max(3),
+  blueprints: z.array(blueprintSchema).length(1),
   scenarioSet: scenarioSetSchema,
   assumptions: z.array(
     z.strictObject({

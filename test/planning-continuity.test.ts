@@ -77,7 +77,7 @@ function continuityFixture() {
     title: "Mill",
     primaryUser: "Founder",
     jobToBeDone: "Deliver a reviewed outcome without losing prior behavior.",
-    outcomes: ["Reviewed draft PR"],
+    outcomes: [{ id: "OUT-REVIEWED-DRAFT", statement: "Reviewed draft PR" }],
     nonGoals: [],
     assumptions: [],
     unknowns: [],
@@ -166,16 +166,6 @@ function continuityFixture() {
         architecture: ["modular service"],
         risks: [],
       },
-      {
-        schemaVersion: "1",
-        id: "node-package",
-        productContractDigest: productDigest,
-        recipe: "node-typescript-package",
-        recipeVersion: "1.0.0",
-        runtime: "node-24",
-        architecture: ["modular package"],
-        risks: [],
-      },
     ],
     scenarioSet: scenarios,
     assumptions: [],
@@ -187,7 +177,7 @@ function continuityFixture() {
     schemaVersion: "1",
     id: "wave-4a",
     productContractDigest: productDigest,
-    outcomeId: "product-continuity",
+    outcomeId: "OUT-REVIEWED-DRAFT",
     riskClass: "high",
     acceptanceIds: ["ACC-DELIVERY"],
     affectedInvariantIds: ["INV-HUMAN-MERGE"],
@@ -333,6 +323,31 @@ describe("product continuity planning", () => {
     expect(assessment.promotable).toBe(false);
     expect(assessment.blockers.join("\n")).toContain("duplicated");
     expect(assessment.blockers.join("\n")).toContain("SRC-MISSING");
+
+    const duplicateSources = sourceManifestSchema.parse({
+      ...fixture.sources,
+      sources: [
+        ...fixture.sources.sources,
+        {
+          ...fixture.sources.sources[0],
+          revision: "sha256:conflicting-revision",
+          claims: ["A conflicting claim under the same stable identity."],
+        },
+      ],
+    });
+    const duplicateSourceProposal = specificationProposalSchema.parse({
+      ...fixture.proposal,
+      sourceManifestDigest: digest(duplicateSources),
+    });
+    expect(
+      assessSpecificationProposal({
+        proposal: duplicateSourceProposal,
+        prdPath: "product/PRD.md",
+        prdDigest: fixture.prdDigest,
+        sourceManifest: duplicateSources,
+        sourceManifestDigest: digest(duplicateSources),
+      }).blockers,
+    ).toContain("source identity is duplicated: SRC-PRD");
   });
 
   it("reports stale identity, unresolved graph, and approval blockers together", () => {
@@ -796,7 +811,7 @@ describe("impact and semantic evidence", () => {
       schemaVersion: "1",
       id: "evidence-dispositions",
       productContractDigest: digest(product),
-      outcomeId: "evidence",
+      outcomeId: "OUT-REVIEWED-DRAFT",
       riskClass: "high",
       acceptanceIds: [
         "ACC-DELIVERY",
@@ -1195,6 +1210,52 @@ describe("impact and semantic evidence", () => {
     ).toContain("impact approval is not active yet");
   });
 
+  it("keeps expired authority closed for mutation but available for readback", () => {
+    const fixture = continuityFixture();
+    const proposal = impactManifestSchema.parse({
+      ...fixture.impact,
+      affectedInvariantIds: [],
+      uncertainInvariantIds: ["INV-HUMAN-MERGE"],
+      exceptions: [
+        {
+          id: "EX-SETTLED",
+          scopeRefs: ["INV-HUMAN-MERGE"],
+          reason: "Authority was active when the remote effect was attempted.",
+          approvedBy: "operator",
+          approvedAt: "2026-08-31T00:00:00.000Z",
+          expiresAt: "2026-09-01T00:00:00.000Z",
+        },
+      ],
+      approval: null,
+    });
+    const manifest = impactManifestSchema.parse({
+      ...proposal,
+      approval: {
+        approvedBy: "operator",
+        approvedAt: "2026-09-01T00:00:00.000Z",
+        proposalDigest: digest(proposal),
+      },
+    });
+    const now = new Date("2026-09-02T00:00:00.000Z");
+    expect(
+      assessImpactManifest({
+        manifest,
+        product: fixture.product,
+        scenarios: fixture.scenarios,
+        now,
+      }).blockers,
+    ).toContain("impact exception is expired: EX-SETTLED");
+    expect(
+      assessImpactManifest({
+        manifest,
+        product: fixture.product,
+        scenarios: fixture.scenarios,
+        now,
+        authorityMode: "readback",
+      }),
+    ).toMatchObject({ approved: true, blockers: [] });
+  });
+
   it("fails closed on stale, duplicate, unresolved, and under-tested impact", () => {
     const fixture = continuityFixture();
     const product = productContractSchema.parse({
@@ -1217,7 +1278,7 @@ describe("impact and semantic evidence", () => {
       schemaVersion: "1",
       id: "invalid-impact",
       productContractDigest: `sha256:${"b".repeat(64)}`,
-      outcomeId: "invalid",
+      outcomeId: "OUT-MISSING",
       riskClass: "high",
       acceptanceIds: ["ACC-MISSING", "ACC-MISSING"],
       affectedInvariantIds: ["INV-MISSING", "INV-HUMAN-MERGE"],
@@ -1250,6 +1311,7 @@ describe("impact and semantic evidence", () => {
       expect.arrayContaining([
         "impact manifest is bound to another product contract",
         "scenario set is bound to another product contract",
+        "outcome is unresolved: OUT-MISSING",
         "acceptance references are duplicated",
         "scenario references are duplicated",
         "command references are duplicated",

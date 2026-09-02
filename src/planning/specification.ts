@@ -144,6 +144,11 @@ export function assessSpecificationProposal(input: {
   if (proposal.sourceManifestDigest !== input.sourceManifestDigest) {
     blockers.push("proposal source-manifest identity is stale");
   }
+  for (const duplicate of duplicates(
+    sourceManifest.sources.map((source) => source.id),
+  )) {
+    blockers.push(`source identity is duplicated: ${duplicate}`);
+  }
   if (proposal.productContract.acceptance.length === 0) {
     blockers.push("product contract has no stable acceptance items");
   }
@@ -151,6 +156,7 @@ export function assessSpecificationProposal(input: {
     blockers.push("product contract has no stable behavioral invariants");
   }
   for (const duplicate of duplicates([
+    ...proposal.productContract.outcomes.map((item) => item.id),
     ...proposal.productContract.acceptance.map((item) => item.id),
     ...proposal.productContract.invariants.map((item) => item.id),
     ...proposal.productContract.decisions.map((item) => item.id),

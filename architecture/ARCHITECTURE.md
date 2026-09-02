@@ -56,15 +56,16 @@ and structured proposal; they return blockers, semantic differences, canonical
 bytes, and exact approval digests without writing files, running repository
 commands, or invoking a model. Live research and proposal generation remain an
 explicit later coordinator step, not an implied crawler. Approved product
-contracts carry stable acceptance, invariant, decision, and scenario IDs. Each
-material task binds an exact human-approved impact manifest, and validation
-reports new-behavior and preservation evidence separately. Scenario and
-invariant evidence must execute their own approved command or carry an unexpired
-human attestation with an exact kind, stable ID, and content-digest claim for
-that item; an acceptance claim or generic passing command cannot certify another
-semantic item. Task-packet version 1 remains a byte-stable, resume-only legacy
-shape for in-flight runs. Every new run uses version 2, which requires the
-impact manifest and exact product-to-task semantic graph.
+contracts carry stable outcome, acceptance, invariant, decision, and scenario
+IDs. Each material task binds one approved outcome and an exact human-approved
+impact manifest, and validation reports new-behavior and preservation evidence
+separately. Scenario and invariant evidence must execute their own approved
+command or carry an unexpired human attestation with an exact kind, stable ID,
+and content-digest claim for that item; an acceptance claim or generic passing
+command cannot certify another semantic item. Task-packet version 1 remains a
+byte-stable, resume-only legacy shape for in-flight runs. Every new run uses
+version 2, which requires the impact manifest and exact product-to-task semantic
+graph.
 
 Codex remains the only worker implementation behind an internal `WorkerAdapter`.
 Before every builder, repair, or reviewer process starts, Mill records an
@@ -75,9 +76,10 @@ terminal provider event settles an invocation, and reviewers must emit exactly
 one structured result. Candidate publication is atomic with its mutating-worker
 settlement, and review-result publication is atomic with its reviewer
 settlement, so a crash cannot consume an attempt without preserving the
-corresponding result. A possibly started mutating invocation becomes uncertain
-and is reconciled from candidate, process, and worktree state instead of being
-replayed.
+corresponding result. Process exit is journaled against the invocation in the
+same transaction that clears its active-process binding. A possibly started
+mutating invocation becomes uncertain and is reconciled from candidate, process,
+and worktree state instead of being blindly replayed.
 
 The GitHub adapter is isolated behind the delivery coordinator. Planning reads
 the live delegated actor, repository node identity, clone URL, fork status and
@@ -86,15 +88,16 @@ branch, required checks, review policy, allowed merge methods, approval expiry,
 and intended effects. Only `pr open` mutates. Its effect journal records intent
 and call start before each push or PR request, caps each effect at two attempts,
 and makes ambiguous results enter `effect_unknown`. Reconciliation performs
-authoritative branch/marker/PR readback without mutation. Exact absence permits
-one retry; a second absent outcome blocks for human disposition. The same
-recorded PR number, node identity, marker, branch, base, open-draft state, and
-observed head are invariant whether an ambiguous repair push is absent or
-landed. A retry performs that check again from a fresh readback immediately
-before recording call start and invoking Git. GitHub API collections are
-paginated under one deadline and output budget. Tokens remain behind the
-operator-owned `gh` and Git credential-helper boundary and are not passed to
-Codex or stored in state.
+authoritative branch/marker/PR readback without mutation. Expiration blocks new
+mutation authority but never prevents readback or truthful lifecycle closure for
+an already attempted effect. Exact absence permits one retry; a second absent
+outcome blocks for human disposition. The same recorded PR number, node
+identity, marker, branch, base, open-draft state, and observed head are
+invariant whether an ambiguous repair push is absent or landed. A retry performs
+that check again from a fresh readback immediately before recording call start
+and invoking Git. GitHub API collections are paginated under one deadline and
+output budget. Tokens remain behind the operator-owned `gh` and Git
+credential-helper boundary and are not passed to Codex or stored in state.
 
 One stable delivery key and branch identify the PR across the single allowed
 repair. A new candidate gets new validation, review, approval, and push-effect

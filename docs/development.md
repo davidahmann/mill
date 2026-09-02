@@ -81,9 +81,10 @@ job with personal credentials. The realistic scenario set covers:
 
 Wave 4A adds contract and negative-control coverage for source authority,
 canonical proposal approval, semantic regeneration diffs, impact exceptions,
-duplicate stable IDs, item-scoped attestation claims, command-bound scenarios,
-instruction precedence and path-set drift, immutable worker admission,
-launch-before-spawn, atomic result settlement, and malformed or conflicting
+duplicate source and stable product IDs, outcome-to-impact binding, item-scoped
+attestation claims, command-bound scenarios, instruction precedence and path-set
+drift, immutable worker admission, launch-before-spawn, atomic process-exit and
+result settlement, expired-authority readback, and malformed or conflicting
 provider events. The repository dogfoods its approved product, scenario, impact,
 and selected web-recipe contracts. Those tests prove contract behavior; they do
 not replace exact-candidate review or CI because a candidate cannot certify

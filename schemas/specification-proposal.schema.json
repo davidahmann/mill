@@ -27,7 +27,15 @@
         "outcomes": {
           "minItems": 1,
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^OUT-[A-Z0-9][A-Z0-9-]*$" },
+              "statement": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id", "statement"],
+            "additionalProperties": false
+          }
         },
         "nonGoals": {
           "type": "array",
@@ -190,8 +198,8 @@
       "additionalProperties": false
     },
     "blueprints": {
-      "minItems": 2,
-      "maxItems": 3,
+      "minItems": 1,
+      "maxItems": 1,
       "type": "array",
       "items": {
         "type": "object",

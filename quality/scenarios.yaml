@@ -1,5 +1,5 @@
 schemaVersion: "1"
-productContractDigest: sha256:f25dc305ec297a2f5b29a695351ff001733f4e42b8b8ad21f136db1931c86383
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
 scenarios:
   - id: SCN-CONTINUITY
     kind: normal

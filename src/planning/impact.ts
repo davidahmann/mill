@@ -117,12 +117,14 @@ export function assessImpactManifest(input: {
   product: ContinuityProductContract;
   scenarios: ContinuityScenarioSet;
   now?: Date;
+  authorityMode?: "authorize" | "readback";
 }): ImpactAssessment {
   const blockers: string[] = [];
   const productDigest = canonicalDigest(input.product);
   const acceptanceIds = new Set(
     input.product.acceptance.map((item) => item.id),
   );
+  const outcomeIds = new Set(input.product.outcomes.map((item) => item.id));
   const invariantIds = new Set(input.product.invariants.map((item) => item.id));
   const decisions = new Map(
     input.product.decisions.map((decision) => [decision.id, decision]),
@@ -131,6 +133,7 @@ export function assessImpactManifest(input: {
     input.scenarios.scenarios.map((scenario) => [scenario.id, scenario]),
   );
   for (const duplicate of duplicates([
+    ...input.product.outcomes.map((item) => item.id),
     ...input.product.acceptance.map((item) => item.id),
     ...input.product.invariants.map((item) => item.id),
     ...input.product.decisions.map((item) => item.id),
@@ -143,6 +146,9 @@ export function assessImpactManifest(input: {
   }
   if (input.scenarios.productContractDigest !== productDigest) {
     blockers.push("scenario set is bound to another product contract");
+  }
+  if (!outcomeIds.has(input.manifest.outcomeId)) {
+    blockers.push(`outcome is unresolved: ${input.manifest.outcomeId}`);
   }
   for (const [label, values] of [
     ["acceptance", input.manifest.acceptanceIds],
@@ -244,10 +250,15 @@ export function assessImpactManifest(input: {
     }
   }
   const now = input.now ?? new Date();
+  const authorityMode = input.authorityMode ?? "authorize";
   const activeExceptions = input.manifest.exceptions.filter((exception) => {
     const approvedAt = Date.parse(exception.approvedAt);
     const expiresAt = Date.parse(exception.expiresAt);
-    return approvedAt <= now.getTime() && expiresAt > now.getTime();
+    return (
+      approvedAt <= now.getTime() &&
+      expiresAt > approvedAt &&
+      (authorityMode === "readback" || expiresAt > now.getTime())
+    );
   });
   const exceptionScopes = new Set(
     activeExceptions.flatMap((exception) => exception.scopeRefs),
@@ -262,7 +273,7 @@ export function assessImpactManifest(input: {
       blockers.push(
         `impact exception has an invalid interval: ${exception.id}`,
       );
-    } else if (expiresAt <= now.getTime()) {
+    } else if (authorityMode === "authorize" && expiresAt <= now.getTime()) {
       blockers.push(`impact exception is expired: ${exception.id}`);
     }
   }

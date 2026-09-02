@@ -185,7 +185,12 @@ try {
     title: "Package canary",
     primaryUser: "Package maintainer",
     jobToBeDone: "Prove the delivered package can run the attended lifecycle.",
-    outcomes: ["One exact reviewed candidate"],
+    outcomes: [
+      {
+        id: "OUT-REVIEWED-CANDIDATE",
+        statement: "One exact reviewed candidate",
+      },
+    ],
     nonGoals: [],
     assumptions: [],
     unknowns: [],
@@ -239,7 +244,7 @@ try {
     schemaVersion: "1",
     id: "package-canary",
     productContractDigest,
-    outcomeId: "package-canary",
+    outcomeId: "OUT-REVIEWED-CANDIDATE",
     riskClass: "low",
     acceptanceIds: ["PKG-A1"],
     affectedInvariantIds: ["INV-PACKAGE-POSITIVE"],

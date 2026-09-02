@@ -1,7 +1,7 @@
 schemaVersion: "1"
 id: mill-wave-4a-continuity
-productContractDigest: sha256:f25dc305ec297a2f5b29a695351ff001733f4e42b8b8ad21f136db1931c86383
-outcomeId: product-continuity
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
 riskClass: high
 acceptanceIds:
   - ACC-CONTINUITY
@@ -35,4 +35,4 @@ exceptions: []
 approval:
   approvedBy: davidahmann
   approvedAt: "2026-09-02T11:00:00.000Z"
-  proposalDigest: sha256:ee8c4b103b22c18b5679c2fca9c09a26341458ef03c91fa15fc8947ab64f5646
+  proposalDigest: sha256:f9d87d5c9040c1e1e0ba3c1f692aa0b7df23072561e5cb267465be50ebdf93d5

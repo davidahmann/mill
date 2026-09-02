@@ -100,6 +100,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Candidate publication and mutating-worker settlement are atomic, review
   attempts use their exact per-candidate generation, and worker profile digests
   bind the prompt-template bytes actually used by the adapter.
+- Product outcomes now carry stable IDs that impact manifests must resolve;
+  single-blueprint proposals are valid, duplicate source identities block, and
+  expired effect authority cannot strand readback or truthful closure.
+- Worker exit evidence and active-process clearing now commit atomically, so a
+  controller crash after process exit leaves a safely reconcilable invocation.
 
 ### Security
 

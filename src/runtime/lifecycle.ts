@@ -379,7 +379,11 @@ function lifecycleHooks(
       store.setActiveProcess(runId, process);
     },
     onExit(process): void {
-      if (process !== undefined) store.clearActiveProcess(runId, process.id);
+      if (invocationId !== undefined) {
+        store.recordWorkerProcessExit(runId, invocationId, process?.id);
+      } else if (process !== undefined) {
+        store.clearActiveProcess(runId, process.id);
+      }
     },
     cancellationRequested(): boolean {
       return store.getRun(runId).cancelRequested;
@@ -487,7 +491,8 @@ function reconcileMutatingWorkerAdmissions(
   }
   const unresolved = store.unresolvedMutatingWorkerInvocations(run.id);
   const unobservedLaunches = unresolved.filter(
-    (invocation) => invocation.status === "launch_started",
+    (invocation) =>
+      invocation.status === "launch_started" && !invocation.processExited,
   );
   if (
     unobservedLaunches.length > 0 &&
@@ -503,17 +508,17 @@ function reconcileMutatingWorkerAdmissions(
     );
   }
   for (const invocation of unresolved) {
-    if (invocation.status === "launch_started") {
-      store.reconcileWorkerInvocation(
-        run.id,
-        invocation.invocationId,
-        "recorded_process_absent",
-      );
-    } else if (invocation.processExited) {
+    if (invocation.processExited) {
       store.reconcileWorkerInvocation(
         run.id,
         invocation.invocationId,
         "process_exit_observed",
+      );
+    } else if (invocation.status === "launch_started") {
+      store.reconcileWorkerInvocation(
+        run.id,
+        invocation.invocationId,
+        "recorded_process_absent",
       );
     } else {
       throw new MillError(

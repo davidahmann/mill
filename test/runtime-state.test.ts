@@ -190,6 +190,65 @@ describe("operational state", () => {
     }
   });
 
+  it("records worker exit and clears its process binding atomically", async () => {
+    const temporary = await temporaryDirectory("mill-worker-exit-atomic-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "worker-exit",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const invocationId = randomUUID();
+      store.admitWorkerInvocation({
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"d".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      });
+      store.markWorkerLaunchStarted(invocationId);
+      const processId = randomUUID();
+      store.setActiveProcess(run.id, {
+        id: processId,
+        pid: 1234,
+        processGroup: 1234,
+        identity: `sha256:${"e".repeat(64)}`,
+      });
+
+      store.recordWorkerProcessExit(run.id, invocationId, processId);
+
+      const exitedRun = store.getRun(run.id);
+      expect(exitedRun.activeProcessId).toBeUndefined();
+      expect(exitedRun.activePid).toBeUndefined();
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([
+        {
+          invocationId,
+          phase: "build",
+          status: "launch_started",
+          processExited: true,
+        },
+      ]);
+      store.reconcileWorkerInvocation(
+        run.id,
+        invocationId,
+        "process_exit_observed",
+      );
+      expect(store.workerInvocationStatus(invocationId)).toBe("reconciled");
+      expect(store.events(run.id).map((event) => event.type)).toContain(
+        "worker.process_exited",
+      );
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
   it("publishes candidate identity and mutating-worker settlement atomically", async () => {
     const temporary = await temporaryDirectory("mill-worker-candidate-atomic-");
     process.env.MILL_STATE_HOME = temporary.path;
