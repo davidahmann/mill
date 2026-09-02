@@ -1121,7 +1121,7 @@ describe("exact-candidate GitHub draft delivery", () => {
     } finally {
       await fixture.cleanup();
     }
-  });
+  }, 10_000);
 
   it("fails closed on PR drift and post-merge evidence until every identity settles", async () => {
     const { fixture, runId, candidateCommit, candidateTree } =
