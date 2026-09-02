@@ -212,7 +212,7 @@ function assertIdentity(input: IntegrationOptions): void {
       ExitCode.configuration,
     );
   }
-  if (!/^\S+@\S+\.\S+$/u.test(input.authorEmail)) {
+  if (!validAuthorEmail(input.authorEmail)) {
     throw new MillError(
       "INVALID_AUTHOR_IDENTITY",
       "Repository integration requires an explicit valid author email.",
@@ -237,6 +237,57 @@ function assertIdentity(input: IntegrationOptions): void {
       ExitCode.configuration,
     );
   }
+}
+
+function validAuthorEmail(value: string): boolean {
+  if (value.length > 254) return false;
+  const separator = value.indexOf("@");
+  if (
+    separator <= 0 ||
+    separator !== value.lastIndexOf("@") ||
+    separator > 64
+  ) {
+    return false;
+  }
+  const local = value.slice(0, separator);
+  const domain = value.slice(separator + 1);
+  if (
+    local.startsWith(".") ||
+    local.endsWith(".") ||
+    local.includes("..") ||
+    domain.length === 0 ||
+    domain.length > 253
+  ) {
+    return false;
+  }
+  const localPunctuation = "!#$%&'*+-/=?^_`{|}~.";
+  for (const character of local) {
+    const code = character.codePointAt(0) ?? 0;
+    const alphanumeric =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122);
+    if (!alphanumeric && !localPunctuation.includes(character)) return false;
+  }
+  const labels = domain.split(".");
+  if (labels.length < 2) return false;
+  for (const label of labels) {
+    if (label.length === 0 || label.length > 63) return false;
+    for (let index = 0; index < label.length; index += 1) {
+      const code = label.codePointAt(index) ?? 0;
+      const alphanumeric =
+        (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122);
+      if (
+        !alphanumeric &&
+        (label[index] !== "-" || index === 0 || index === label.length - 1)
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 async function authority(input: IntegrationOptions): Promise<{

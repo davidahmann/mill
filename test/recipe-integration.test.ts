@@ -410,6 +410,13 @@ describe("qualified repository integration", { concurrent: false }, () => {
       await expect(
         planGreenfieldIntegration({
           ...authority.options,
+          authorEmail: `${"!@".repeat(100_000)}invalid`,
+          targetDirectory,
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_AUTHOR_IDENTITY" });
+      await expect(
+        planGreenfieldIntegration({
+          ...authority.options,
           approvedBy: "",
           targetDirectory,
         }),
