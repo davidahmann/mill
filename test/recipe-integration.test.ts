@@ -986,6 +986,88 @@ describe("qualified repository integration", { concurrent: false }, () => {
     }
   });
 
+  it("does not publish greenfield authority after cancellation during commit", async () => {
+    const workspace = await temporaryDirectory("mill-greenfield-cancel-");
+    const tools = await temporaryDirectory("mill-greenfield-cancel-tools-");
+    const state = await temporaryDirectory("mill-greenfield-cancel-state-");
+    try {
+      const authority = await authorityFixture(workspace.path);
+      const plan = await planGreenfieldIntegration({
+        ...authority.options,
+        targetDirectory: "cancelled-app",
+      });
+      const docker = await fakeDocker(tools.path);
+      process.env.MILL_DOCKER_PATH = docker.executable;
+      process.env.MILL_GIT_PATH = await cancellingGit(tools.path);
+      process.env.MILL_STATE_HOME = state.path;
+      await expect(
+        applyGreenfieldIntegration({
+          ...authority.options,
+          targetDirectory: "cancelled-app",
+          planApprovalDigest: plan.approvalDigest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "GREENFIELD_CANCELLED" });
+      expect(await exists(path.join(workspace.path, "cancelled-app"))).toBe(
+        false,
+      );
+    } finally {
+      await Promise.all([
+        workspace.cleanup(),
+        tools.cleanup(),
+        state.cleanup(),
+      ]);
+    }
+  });
+
+  it("rechecks cancellation at the final greenfield publication boundary", async () => {
+    const workspace = await temporaryDirectory(
+      "mill-greenfield-publish-cancel-",
+    );
+    const tools = await temporaryDirectory(
+      "mill-greenfield-publish-cancel-tools-",
+    );
+    const state = await temporaryDirectory(
+      "mill-greenfield-publish-cancel-state-",
+    );
+    let publicationPoll: NodeJS.Timeout | undefined;
+    try {
+      const authority = await authorityFixture(workspace.path);
+      const target = path.join(workspace.path, "cancelled-app");
+      const plan = await planGreenfieldIntegration({
+        ...authority.options,
+        targetDirectory: "cancelled-app",
+      });
+      const docker = await fakeDocker(tools.path);
+      process.env.MILL_DOCKER_PATH = docker.executable;
+      process.env.MILL_STATE_HOME = state.path;
+      const controller = new AbortController();
+      publicationPoll = setInterval(() => {
+        void access(target).then(
+          () => controller.abort(),
+          () => undefined,
+        );
+      }, 1);
+      await expect(
+        applyGreenfieldIntegration({
+          ...authority.options,
+          targetDirectory: "cancelled-app",
+          planApprovalDigest: plan.approvalDigest,
+          attended: true,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ code: "GREENFIELD_CANCELLED" });
+      expect(await exists(target)).toBe(false);
+    } finally {
+      if (publicationPoll !== undefined) clearInterval(publicationPoll);
+      await Promise.all([
+        workspace.cleanup(),
+        tools.cleanup(),
+        state.cleanup(),
+      ]);
+    }
+  });
+
   it("removes staging and state when generated-repository qualification fails", async () => {
     const workspace = await temporaryDirectory("mill-greenfield-fail-");
     const tools = await temporaryDirectory("mill-greenfield-fail-tools-");

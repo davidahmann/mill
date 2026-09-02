@@ -93,7 +93,10 @@ files without `.git` and atomically renames the complete staged `.git` directory
 into place as the final authority-publication boundary; the reserved path is not
 a repository before that operation. A target-scoped exclusive lock prevents
 concurrent Mill apply, while the exclusive reservation preserves a target
-created by another process after approval. Failure removes staging, the
+created by another process after approval. Greenfield publication is a two-phase
+cancellation boundary: target materialization stays cancellable and rechecks
+immediately before the atomic `.git` rename; once that rename is invoked, Mill
+completes and reports the exact published result. Failure removes staging, the
 Mill-owned reservation, and only state created by that attempt. Adoption first
 performs the static scanner and exact compatibility checks, rejects symbolic
 links and credential-like files including `.npmrc`, and requires the approved

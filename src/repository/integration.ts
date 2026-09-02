@@ -1564,6 +1564,7 @@ async function writeFiles(
 async function publishGreenfieldStaging(
   staging: string,
   target: string,
+  signal: AbortSignal,
 ): Promise<void> {
   try {
     await mkdir(target, { mode: 0o700 });
@@ -1587,6 +1588,13 @@ async function publishGreenfieldStaging(
       );
     }
     for (const entry of entries.filter((entry) => entry !== ".git")) {
+      if (signal.aborted) {
+        throw new MillError(
+          "GREENFIELD_CANCELLED",
+          "Greenfield apply was cancelled before repository authority was published.",
+          ExitCode.temporary,
+        );
+      }
       await cp(path.join(staging, entry), path.join(target, entry), {
         recursive: true,
         force: false,
@@ -1599,6 +1607,13 @@ async function publishGreenfieldStaging(
     // target is therefore reserved exclusively, non-authoritative files are
     // materialized, and the complete Git authority marker is published last
     // with one same-filesystem rename. Before that boundary this is not a repo.
+    if (signal.aborted) {
+      throw new MillError(
+        "GREENFIELD_CANCELLED",
+        "Greenfield apply was cancelled before repository authority was published.",
+        ExitCode.temporary,
+      );
+    }
     await rename(path.join(staging, ".git"), path.join(target, ".git"));
   } catch (error) {
     await rm(target, { recursive: true, force: true });
@@ -1863,7 +1878,14 @@ async function applyGreenfieldIntegrationWithSignal(
       planned.files,
       input.signal,
     );
-    await publishGreenfieldStaging(staging, target);
+    if (input.signal.aborted) {
+      throw new MillError(
+        "GREENFIELD_CANCELLED",
+        "Greenfield apply was cancelled before repository authority was published.",
+        ExitCode.temporary,
+      );
+    }
+    await publishGreenfieldStaging(staging, target, input.signal);
     targetPublished = true;
     await rm(staging, { recursive: true, force: true });
     staging = undefined;
