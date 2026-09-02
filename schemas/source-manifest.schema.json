@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "trigger": {
+      "type": "string",
+      "enum": ["bootstrap", "adoption_uncertainty", "approved_stack_change"]
+    },
+    "providers": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "text": { "type": "string", "minLength": 1 },
+                "purpose": { "type": "string", "minLength": 1 }
+              },
+              "required": ["id", "text", "purpose"],
+              "additionalProperties": false
+            }
+          },
+          "networkDisclosure": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id", "name", "queries", "networkDisclosure"],
+        "additionalProperties": false
+      }
+    },
+    "sources": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^SRC-[A-Z0-9][A-Z0-9-]*$" },
+          "class": {
+            "type": "string",
+            "enum": [
+              "primary_documentation",
+              "official_registry",
+              "security_advisory",
+              "license",
+              "repository",
+              "user_evidence",
+              "operator_constraint"
+            ]
+          },
+          "uri": { "type": "string", "minLength": 1 },
+          "revision": { "type": "string", "minLength": 1 },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "freshness": {
+            "type": "string",
+            "enum": ["current", "stale", "unknown"]
+          },
+          "authority": {
+            "type": "string",
+            "enum": ["evidence", "constraint", "approved_decision"]
+          },
+          "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "claims": {
+            "minItems": 1,
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "required": [
+          "id",
+          "class",
+          "uri",
+          "revision",
+          "observedAt",
+          "freshness",
+          "authority",
+          "claims"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "trigger", "providers", "sources"],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/source-manifest.schema.json",
+  "title": "SourceManifest"
+}

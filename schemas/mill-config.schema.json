@@ -1,37 +1,114 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/davidahmann/mill/schemas/mill-config.schema.json",
-  "title": "MillConfig",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["schemaVersion", "repositoryId", "trustCeiling", "commands"],
   "properties": {
-    "schemaVersion": { "const": "1" },
-    "repositoryId": { "type": "string", "format": "uuid" },
-    "trustCeiling": { "enum": ["inspect", "build", "propose"] },
+    "schemaVersion": { "type": "string", "const": "1" },
+    "repositoryId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "trustCeiling": {
+      "type": "string",
+      "enum": ["inspect", "build", "propose"]
+    },
     "sensitivePaths": {
+      "default": [],
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^*?[\\]\\\\]+(?:/\\*\\*)?$"
-      },
-      "default": []
+        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+      }
     },
     "verifier": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["image", "network"],
       "properties": {
         "image": {
           "type": "string",
           "pattern": "^[^@\\s]+@sha256:[a-f0-9]{64}$"
         },
-        "network": { "const": "none" }
-      }
+        "network": { "type": "string", "const": "none" }
+      },
+      "required": ["image", "network"],
+      "additionalProperties": false
     },
     "propose": {
       "type": "object",
-      "additionalProperties": false,
+      "properties": {
+        "forge": { "type": "string", "const": "github" },
+        "host": { "type": "string", "const": "github.com" },
+        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+        "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+        "repositoryNodeId": { "type": "string", "minLength": 1 },
+        "remoteName": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "baseBranch": {
+          "type": "string",
+          "pattern": "^(?!-)(?!.*\\.\\.)[^\\s~^:?*[\\\\]+$"
+        },
+        "branchPrefix": { "type": "string", "const": "mill/" },
+        "allowedActors": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowedMergerLogins": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "requiredChecks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "reviewPolicy": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["local_only", "github_required"]
+            },
+            "requiredReviewerLogins": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "required": ["mode", "requiredReviewerLogins"],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": { "mode": { "const": "github_required" } },
+                "required": ["mode"]
+              },
+              "then": {
+                "properties": {
+                  "requiredReviewerLogins": { "type": "array", "minItems": 1 }
+                }
+              }
+            }
+          ]
+        },
+        "allowedMergeMethods": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["merge", "linear_tree_preserving"]
+          }
+        },
+        "approvalTtlSeconds": {
+          "default": 900,
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 3600
+        },
+        "pollTimeoutSeconds": {
+          "default": 600,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1800
+        }
+      },
       "required": [
         "forge",
         "host",
@@ -47,133 +124,61 @@
         "reviewPolicy",
         "allowedMergeMethods"
       ],
-      "properties": {
-        "forge": { "const": "github" },
-        "host": { "const": "github.com" },
-        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
-        "repository": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+$"
-        },
-        "repositoryNodeId": { "type": "string", "minLength": 1 },
-        "remoteName": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9._-]+$"
-        },
-        "baseBranch": {
-          "type": "string",
-          "pattern": "^(?!-)(?!.*\\.\\.)[^\\s~^:?*[\\\\]+$"
-        },
-        "branchPrefix": { "const": "mill/" },
-        "allowedActors": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "allowedMergerLogins": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "requiredChecks": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "reviewPolicy": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["mode", "requiredReviewerLogins"],
-          "properties": {
-            "mode": { "enum": ["local_only", "github_required"] },
-            "requiredReviewerLogins": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 }
-            }
-          },
-          "allOf": [
-            {
-              "if": {
-                "properties": { "mode": { "const": "github_required" } },
-                "required": ["mode"]
-              },
-              "then": {
-                "properties": {
-                  "requiredReviewerLogins": {
-                    "type": "array",
-                    "minItems": 1
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "allowedMergeMethods": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "enum": ["merge", "linear_tree_preserving"] }
-        },
-        "approvalTtlSeconds": {
-          "type": "integer",
-          "minimum": 60,
-          "maximum": 3600,
-          "default": 900
-        },
-        "pollTimeoutSeconds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 1800,
-          "default": 600
-        }
-      }
+      "additionalProperties": false
     },
     "commands": {
       "type": "object",
-      "propertyNames": { "minLength": 1 },
+      "propertyNames": { "type": "string", "minLength": 1 },
       "additionalProperties": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["argv", "cwd", "controlPaths", "capability"],
         "properties": {
           "argv": {
-            "type": "array",
             "minItems": 1,
+            "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
           "cwd": { "type": "string", "minLength": 1 },
           "controlPaths": {
-            "type": "array",
             "minItems": 1,
+            "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^*?[\\]\\\\]+(?:/\\*\\*)?$"
+              "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
             }
           },
-          "capability": { "enum": ["read", "build", "test", "package"] },
-          "required": { "type": "boolean", "default": true },
+          "capability": {
+            "type": "string",
+            "enum": ["read", "build", "test", "package"]
+          },
+          "required": { "default": true, "type": "boolean" },
           "timeoutSeconds": {
+            "default": 600,
             "type": "integer",
             "minimum": 1,
-            "maximum": 3600,
-            "default": 600
+            "maximum": 3600
           },
           "execution": {
-            "enum": ["oci", "host"],
-            "default": "oci"
+            "default": "oci",
+            "type": "string",
+            "enum": ["oci", "host"]
           }
-        }
+        },
+        "required": ["argv", "cwd", "controlPaths", "capability"],
+        "additionalProperties": false
       }
     }
   },
+  "required": ["schemaVersion", "repositoryId", "trustCeiling", "commands"],
+  "additionalProperties": false,
   "allOf": [
     {
       "if": {
         "properties": { "trustCeiling": { "const": "propose" } },
         "required": ["trustCeiling"]
       },
-      "then": {
-        "properties": { "propose": true },
-        "required": ["propose"]
-      }
+      "then": { "properties": { "propose": true }, "required": ["propose"] }
     }
-  ]
+  ],
+  "$id": "https://github.com/davidahmann/mill/schemas/mill-config.schema.json",
+  "title": "MillConfig"
 }

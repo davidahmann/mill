@@ -1,0 +1,71 @@
+schemaVersion: "1"
+trigger: bootstrap
+providers:
+  - id: codex-web-primary-sources
+    name: Codex web research over official primary sources
+    queries:
+      - id: Q-NODE-LTS
+        text: Node.js 24 Active LTS official release schedule
+        purpose: select a supported production runtime
+      - id: Q-NEXT-INSTALL
+        text: Next.js App Router installation and system requirements
+        purpose: qualify the web application recipe
+      - id: Q-NEXT-DEPLOY
+        text: Next.js supported deployment forms
+        purpose: avoid binding the recipe to one hosting vendor
+      - id: Q-REACT-VERSION
+        text: current stable React version
+        purpose: qualify the framework compatibility family
+    networkDisclosure: >-
+      HTTPS search and reads of the disclosed Node.js, Next.js, and React
+      official documentation on 2026-09-02; no package installation or
+      repository command execution occurred during research.
+sources:
+  - id: SRC-PRD
+    class: user_evidence
+    uri: product/PRD.md
+    revision: sha256:3d61c3632c38c65d3994623166a4d003c35e7d363c170c7d347fd561aa7fa992
+    observedAt: "2026-09-02T11:00:00.000Z"
+    freshness: current
+    authority: constraint
+    claims:
+      - Mill turns approved founder intent into a tested reviewed draft PR.
+      - Human authority controls consequential ambiguity and remote effects.
+  - id: SRC-NODE-RELEASES
+    class: primary_documentation
+    uri: https://nodejs.org/en/about/previous-releases
+    revision: observed-2026-09-02-v24-active-lts
+    observedAt: "2026-09-02T11:00:00.000Z"
+    freshness: current
+    authority: evidence
+    claims:
+      - Node.js 24 is an Active LTS release suitable for production use.
+  - id: SRC-NEXT-INSTALL
+    class: primary_documentation
+    uri: https://nextjs.org/docs/app/getting-started/installation
+    revision: observed-2026-09-02-next-16-guidance
+    observedAt: "2026-09-02T11:00:00.000Z"
+    freshness: current
+    authority: evidence
+    claims:
+      - The recommended Next.js defaults include TypeScript and App Router.
+      - Next.js 16 requires explicit lint execution because build does not lint.
+  - id: SRC-NEXT-DEPLOY
+    class: primary_documentation
+    uri: https://nextjs.org/docs/app/getting-started/deploying
+    revision: observed-2026-09-02-deployment-options
+    observedAt: "2026-09-02T11:00:00.000Z"
+    freshness: current
+    authority: evidence
+    claims:
+      - A Next.js application can deploy as a Node server, container, or static
+        export.
+  - id: SRC-REACT-VERSIONS
+    class: primary_documentation
+    uri: https://react.dev/versions
+    revision: observed-2026-09-02-react-19.2
+    observedAt: "2026-09-02T11:00:00.000Z"
+    freshness: current
+    authority: evidence
+    claims:
+      - React 19.2 is the current documented stable family.

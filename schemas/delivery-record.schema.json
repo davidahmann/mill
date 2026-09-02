@@ -1,9 +1,241 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/davidahmann/mill/schemas/delivery-record.schema.json",
-  "title": "DeliveryRecord",
   "type": "object",
-  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "deliveryKey": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "proposalDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "approvalExpiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "proposing",
+        "effect_unknown",
+        "awaiting_ci",
+        "awaiting_human",
+        "merged",
+        "post_merge_verified",
+        "closed",
+        "cancelled",
+        "blocked"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "forge": { "type": "string", "const": "github" },
+        "host": { "type": "string", "const": "github.com" },
+        "owner": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "minLength": 1 },
+        "repositoryNodeId": { "type": "string", "minLength": 1 },
+        "cloneUrl": { "type": "string", "format": "uri" },
+        "remoteName": { "type": "string", "minLength": 1 },
+        "baseBranch": { "type": "string", "minLength": 1 },
+        "actorLogin": { "type": "string", "minLength": 1 },
+        "actorId": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "forge",
+        "host",
+        "owner",
+        "repository",
+        "repositoryNodeId",
+        "cloneUrl",
+        "remoteName",
+        "baseBranch",
+        "actorLogin",
+        "actorId"
+      ],
+      "additionalProperties": false
+    },
+    "branchName": { "type": "string", "minLength": 1 },
+    "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "candidateTree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "requiredChecks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "reviewPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["local_only", "github_required"] },
+        "requiredReviewerLogins": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "required": ["mode", "requiredReviewerLogins"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "mode": { "const": "github_required" } },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "requiredReviewerLogins": { "type": "array", "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "allowedMergerLogins": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "allowedMergeMethods": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "enum": ["merge", "linear_tree_preserving"] }
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "kind": { "type": "string", "enum": ["push", "pull_request"] },
+          "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+          "status": {
+            "type": "string",
+            "enum": [
+              "intent",
+              "call_started",
+              "effect_unknown",
+              "retryable_absent",
+              "verified",
+              "blocked"
+            ]
+          },
+          "attemptCount": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "expectedOldCommit": {
+            "anyOf": [
+              { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+              { "type": "null" }
+            ]
+          },
+          "errorCode": {
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "candidateCommit",
+          "status",
+          "attemptCount",
+          "expectedOldCommit",
+          "errorCode",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "remoteHeadCommit": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        { "type": "null" }
+      ]
+    },
+    "pullRequest": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "nodeId": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "format": "uri" }
+          },
+          "required": ["number", "nodeId", "url"],
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "observation": {
+      "anyOf": [
+        {
+          "type": "object",
+          "propertyNames": { "type": "string" },
+          "additionalProperties": {}
+        },
+        { "type": "null" }
+      ]
+    },
+    "merge": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "method": {
+              "type": "string",
+              "enum": ["merge", "linear_tree_preserving"]
+            },
+            "mergedByLogin": { "type": "string", "minLength": 1 },
+            "mergedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "defaultBranchHead": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            }
+          },
+          "required": [
+            "commit",
+            "tree",
+            "method",
+            "mergedByLogin",
+            "mergedAt",
+            "defaultBranchHead"
+          ],
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "lastErrorCode": {
+      "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    }
+  },
   "required": [
     "schemaVersion",
     "runId",
@@ -28,193 +260,7 @@
     "createdAt",
     "updatedAt"
   ],
-  "properties": {
-    "schemaVersion": { "const": "1" },
-    "runId": { "type": "string", "format": "uuid" },
-    "deliveryKey": { "$ref": "#/$defs/digest" },
-    "proposalDigest": { "$ref": "#/$defs/digest" },
-    "approvalExpiresAt": { "type": "string", "format": "date-time" },
-    "state": {
-      "enum": [
-        "planned",
-        "proposing",
-        "effect_unknown",
-        "awaiting_ci",
-        "awaiting_human",
-        "merged",
-        "post_merge_verified",
-        "closed",
-        "cancelled",
-        "blocked"
-      ]
-    },
-    "target": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "forge",
-        "host",
-        "owner",
-        "repository",
-        "repositoryNodeId",
-        "cloneUrl",
-        "remoteName",
-        "baseBranch",
-        "actorLogin",
-        "actorId"
-      ],
-      "properties": {
-        "forge": { "const": "github" },
-        "host": { "const": "github.com" },
-        "owner": { "type": "string", "minLength": 1 },
-        "repository": { "type": "string", "minLength": 1 },
-        "repositoryNodeId": { "type": "string", "minLength": 1 },
-        "cloneUrl": { "type": "string", "format": "uri" },
-        "remoteName": { "type": "string", "minLength": 1 },
-        "baseBranch": { "type": "string", "minLength": 1 },
-        "actorLogin": { "type": "string", "minLength": 1 },
-        "actorId": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "branchName": { "type": "string", "minLength": 1 },
-    "candidateCommit": { "$ref": "#/$defs/sha" },
-    "candidateTree": { "$ref": "#/$defs/sha" },
-    "requiredChecks": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "reviewPolicy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["mode", "requiredReviewerLogins"],
-      "properties": {
-        "mode": { "enum": ["local_only", "github_required"] },
-        "requiredReviewerLogins": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": { "mode": { "const": "github_required" } },
-            "required": ["mode"]
-          },
-          "then": {
-            "properties": {
-              "requiredReviewerLogins": {
-                "type": "array",
-                "minItems": 1
-              }
-            }
-          }
-        }
-      ]
-    },
-    "allowedMergerLogins": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "allowedMergeMethods": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "enum": ["merge", "linear_tree_preserving"] }
-    },
-    "effects": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/effect" }
-    },
-    "remoteHeadCommit": {
-      "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
-    },
-    "pullRequest": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["number", "nodeId", "url"],
-          "properties": {
-            "number": { "type": "integer", "minimum": 1 },
-            "nodeId": { "type": "string", "minLength": 1 },
-            "url": { "type": "string", "format": "uri" }
-          }
-        },
-        { "type": "null" }
-      ]
-    },
-    "observation": { "type": ["object", "null"] },
-    "merge": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "commit",
-            "tree",
-            "method",
-            "mergedByLogin",
-            "mergedAt",
-            "defaultBranchHead"
-          ],
-          "properties": {
-            "commit": { "$ref": "#/$defs/sha" },
-            "tree": { "$ref": "#/$defs/sha" },
-            "method": {
-              "enum": ["merge", "linear_tree_preserving"]
-            },
-            "mergedByLogin": { "type": "string", "minLength": 1 },
-            "mergedAt": { "type": "string", "format": "date-time" },
-            "defaultBranchHead": { "$ref": "#/$defs/sha" }
-          }
-        },
-        { "type": "null" }
-      ]
-    },
-    "lastErrorCode": { "type": ["string", "null"], "minLength": 1 },
-    "createdAt": { "type": "string", "format": "date-time" },
-    "updatedAt": { "type": "string", "format": "date-time" }
-  },
-  "$defs": {
-    "digest": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
-    },
-    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
-    "effect": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "kind",
-        "candidateCommit",
-        "status",
-        "attemptCount",
-        "expectedOldCommit",
-        "errorCode",
-        "updatedAt"
-      ],
-      "properties": {
-        "id": { "$ref": "#/$defs/digest" },
-        "kind": { "enum": ["push", "pull_request"] },
-        "candidateCommit": { "$ref": "#/$defs/sha" },
-        "status": {
-          "enum": [
-            "intent",
-            "call_started",
-            "effect_unknown",
-            "retryable_absent",
-            "verified",
-            "blocked"
-          ]
-        },
-        "attemptCount": { "type": "integer", "minimum": 0, "maximum": 2 },
-        "expectedOldCommit": {
-          "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
-        },
-        "errorCode": { "type": ["string", "null"], "minLength": 1 },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
-    }
-  }
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/delivery-record.schema.json",
+  "title": "DeliveryRecord"
 }

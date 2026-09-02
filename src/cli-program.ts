@@ -10,6 +10,17 @@ import { asMillError, ExitCode, MillError } from "./errors.js";
 import { inspectPrd } from "./intake/prd.js";
 import { scanRepository } from "./repository/scan.js";
 import {
+  assessSpecificationProposal,
+  loadPlanningSources,
+  loadSpecificationProposal,
+  promoteSpecificationProposal,
+  semanticProposalDiff,
+} from "./planning/specification.js";
+import {
+  assessImpactManifest,
+  loadImpactPlanningInputs,
+} from "./planning/impact.js";
+import {
   finalizeDraftPr,
   observeDraftPr,
   openDraftPr,
@@ -239,6 +250,170 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         }),
       );
     });
+
+  const plan = program
+    .command("plan")
+    .description(
+      "compile and assess product-continuity authority without writes",
+    );
+  plan
+    .command("specification")
+    .description(
+      "assess one source-backed product proposal and approval digest",
+    )
+    .requiredOption("--prd <path>", "PRD path inside the selected root")
+    .requiredOption(
+      "--sources <path>",
+      "source manifest path inside the selected root",
+    )
+    .requiredOption("--proposal <path>", "specification proposal path")
+    .action(
+      async (options: { prd: string; sources: string; proposal: string }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const [planning, proposal] = await Promise.all([
+          loadPlanningSources({
+            root,
+            prdPath: options.prd,
+            sourceManifestPath: options.sources,
+          }),
+          loadSpecificationProposal(root, options.proposal),
+        ]);
+        const assessment = assessSpecificationProposal({
+          proposal,
+          prdPath: planning.prdPath,
+          prdDigest: planning.prdDigest,
+          sourceManifest: planning.sourceManifest,
+          sourceManifestDigest: planning.sourceManifestDigest,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "plan.specification",
+            ok: true,
+            status: assessment.promotable ? "ok" : "blocked",
+            data: assessment,
+            reasons: assessment.blockers.map((message) => ({
+              code: "SPECIFICATION_PROMOTION_BLOCKED",
+              message,
+            })),
+          }),
+        );
+      },
+    );
+  plan
+    .command("promote")
+    .description(
+      "return exact frozen artifacts for one explicitly approved proposal",
+    )
+    .requiredOption("--prd <path>", "PRD path inside the selected root")
+    .requiredOption("--sources <path>", "source manifest path")
+    .requiredOption("--proposal <path>", "specification proposal path")
+    .requiredOption("--approve <digest>", "exact proposal digest")
+    .action(
+      async (options: {
+        prd: string;
+        sources: string;
+        proposal: string;
+        approve: string;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const [planning, proposal] = await Promise.all([
+          loadPlanningSources({
+            root,
+            prdPath: options.prd,
+            sourceManifestPath: options.sources,
+          }),
+          loadSpecificationProposal(root, options.proposal),
+        ]);
+        const assessment = assessSpecificationProposal({
+          proposal,
+          prdPath: planning.prdPath,
+          prdDigest: planning.prdDigest,
+          sourceManifest: planning.sourceManifest,
+          sourceManifestDigest: planning.sourceManifestDigest,
+        });
+        const promoted = promoteSpecificationProposal({
+          proposal,
+          approvalDigest: options.approve,
+          assessment,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "plan.promote",
+            ok: true,
+            data: promoted,
+          }),
+        );
+      },
+    );
+  plan
+    .command("diff")
+    .description("compare a regenerated proposal without replacing approval")
+    .requiredOption("--approved <path>", "approved proposal path")
+    .requiredOption("--proposal <path>", "regenerated proposal path")
+    .action(async (options: { approved: string; proposal: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const [approved, proposal] = await Promise.all([
+        loadSpecificationProposal(root, options.approved),
+        loadSpecificationProposal(root, options.proposal),
+      ]);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "plan.diff",
+          ok: true,
+          data: { changedPaths: semanticProposalDiff(approved, proposal) },
+        }),
+      );
+    });
+  plan
+    .command("impact")
+    .description("assess one exact approved JIT impact manifest")
+    .requiredOption("--product <path>", "product contract path")
+    .requiredOption("--scenarios <path>", "scenario set path")
+    .requiredOption("--manifest <path>", "impact manifest path")
+    .action(
+      async (options: {
+        product: string;
+        scenarios: string;
+        manifest: string;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const inputs = await loadImpactPlanningInputs({
+          root,
+          productPath: options.product,
+          scenarioPath: options.scenarios,
+          impactPath: options.manifest,
+        });
+        const assessment = assessImpactManifest(inputs);
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "plan.impact",
+            ok: true,
+            status: assessment.approved ? "ok" : "blocked",
+            data: assessment,
+            reasons: assessment.blockers.map((message) => ({
+              code: "IMPACT_PROMOTION_BLOCKED",
+              message,
+            })),
+          }),
+        );
+      },
+    );
 
   const auth = program
     .command("auth")

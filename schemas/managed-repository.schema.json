@@ -1,9 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/davidahmann/mill/schemas/managed-repository.schema.json",
-  "title": "ManagedRepository",
   "type": "object",
-  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "forgeHost": { "type": "string", "minLength": 1 },
+    "owner": { "type": "string", "minLength": 1 },
+    "repository": { "type": "string", "minLength": 1 },
+    "canonicalBranch": { "type": "string", "minLength": 1 },
+    "remoteName": { "type": "string", "minLength": 1 },
+    "remoteUrl": { "type": "string", "format": "uri" },
+    "trustCeiling": {
+      "type": "string",
+      "enum": ["inspect", "build", "propose"]
+    }
+  },
   "required": [
     "schemaVersion",
     "id",
@@ -15,15 +30,7 @@
     "remoteUrl",
     "trustCeiling"
   ],
-  "properties": {
-    "schemaVersion": { "const": "1" },
-    "id": { "type": "string", "format": "uuid" },
-    "forgeHost": { "type": "string", "minLength": 1 },
-    "owner": { "type": "string", "minLength": 1 },
-    "repository": { "type": "string", "minLength": 1 },
-    "canonicalBranch": { "type": "string", "minLength": 1 },
-    "remoteName": { "type": "string", "minLength": 1 },
-    "remoteUrl": { "type": "string", "format": "uri" },
-    "trustCeiling": { "enum": ["inspect", "build", "propose"] }
-  }
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/managed-repository.schema.json",
+  "title": "ManagedRepository"
 }

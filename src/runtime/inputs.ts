@@ -4,10 +4,22 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { z } from "zod";
 
-import { millConfigSchema, taskPacketSchema } from "../contracts/schemas.js";
+import {
+  impactManifestSchema,
+  millConfigSchema,
+  productContractSchema,
+  scenarioSetSchema,
+  taskPacketSchema,
+} from "../contracts/schemas.js";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { ExitCode, MillError } from "../errors.js";
 import { safeReadText } from "../security/safe-path.js";
+import {
+  assessImpactManifest,
+  type ContinuityProductContract,
+  type ContinuityScenarioSet,
+  type ImpactManifest,
+} from "../planning/impact.js";
 
 export type MillConfig = z.infer<typeof millConfigSchema>;
 export type TaskPacket = z.infer<typeof taskPacketSchema>;
@@ -19,6 +31,12 @@ export interface RuntimeInputs {
   taskDigest: string;
   configDigest: string;
   protectedPaths: readonly string[];
+  continuity?: {
+    product: ContinuityProductContract;
+    scenarios: ContinuityScenarioSet;
+    impact: ImpactManifest;
+    impactDigest: string;
+  };
 }
 
 export function textDigest(value: string): string {
@@ -126,6 +144,9 @@ export async function loadRuntimeInputs(
     task.authority.productContract.path,
     task.authority.scenarioSet.path,
     task.authority.policy.path,
+    ...(task.authority.impactManifest === undefined
+      ? []
+      : [task.authority.impactManifest.path]),
     ...Object.values(config.commands).map((command) => command.cwd),
     ...Object.values(config.commands).flatMap(
       (command) => command.controlPaths,
@@ -151,7 +172,12 @@ export async function loadRuntimeInputs(
   const protectedPaths = [
     "mill.yaml",
     taskPath,
-    ...Object.values(task.authority).map((reference) => reference.path),
+    ...Object.values(task.authority)
+      .filter(
+        (reference): reference is { path: string; digest: string } =>
+          reference !== undefined,
+      )
+      .map((reference) => reference.path),
     ...task.contextPaths,
     ...selectedControlPaths,
     ".gitattributes",
@@ -170,7 +196,10 @@ export async function loadRuntimeInputs(
       );
     }
   }
-  for (const reference of Object.values(task.authority)) {
+  for (const reference of Object.values(task.authority).filter(
+    (candidate): candidate is { path: string; digest: string } =>
+      candidate !== undefined,
+  )) {
     const source = await safeReadText(root, reference.path, 2 * 1024 * 1024);
     if (textDigest(source) !== reference.digest) {
       throw new MillError(
@@ -185,13 +214,70 @@ export async function loadRuntimeInputs(
       await safeReadText(root, controlPath, 2 * 1024 * 1024);
     }
   }
+  let continuity: RuntimeInputs["continuity"];
+  if (task.authority.impactManifest !== undefined) {
+    const [productSource, scenarioSource, impactSource] = await Promise.all([
+      safeReadText(root, task.authority.productContract.path, 2 * 1024 * 1024),
+      safeReadText(root, task.authority.scenarioSet.path, 2 * 1024 * 1024),
+      safeReadText(root, task.authority.impactManifest.path, 2 * 1024 * 1024),
+    ]);
+    const product = parseContract(
+      productSource,
+      productContractSchema,
+      task.authority.productContract.path,
+    );
+    const scenarios = parseContract(
+      scenarioSource,
+      scenarioSetSchema,
+      task.authority.scenarioSet.path,
+    );
+    const impact = parseContract(
+      impactSource,
+      impactManifestSchema,
+      task.authority.impactManifest.path,
+    );
+    const assessment = assessImpactManifest({
+      manifest: impact,
+      product,
+      scenarios,
+    });
+    const blockers = [...assessment.blockers];
+    if (impact.riskClass !== task.riskClass) {
+      blockers.push("task and impact risk classes differ");
+    }
+    for (const id of impact.commandIds) {
+      if (!task.commandIds.includes(id)) {
+        blockers.push(`impact command is absent from task: ${id}`);
+      }
+    }
+    for (const id of impact.acceptanceIds) {
+      if (!task.acceptance.some((acceptance) => acceptance.id === id)) {
+        blockers.push(`impact acceptance is absent from task: ${id}`);
+      }
+    }
+    if (blockers.length > 0) {
+      throw new MillError(
+        "CONTINUITY_AUTHORITY_BLOCKED",
+        "The approved impact and semantic task authority are inconsistent.",
+        ExitCode.configuration,
+        { blockers: [...new Set(blockers)].sort() },
+      );
+    }
+    continuity = {
+      product,
+      scenarios,
+      impact,
+      impactDigest: assessment.manifestDigest,
+    };
+  }
   return {
     config,
     task,
     taskPath,
-    taskDigest: canonicalDigest(task),
+    taskDigest: canonicalDigest(task as unknown as JsonValue),
     configDigest: canonicalDigest(config as unknown as JsonValue),
     protectedPaths,
+    ...(continuity === undefined ? {} : { continuity }),
   };
 }
 

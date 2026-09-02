@@ -71,10 +71,15 @@ try {
     "LICENSE",
     "schemas/context-manifest.schema.json",
     "schemas/delivery-record.schema.json",
+    "schemas/impact-manifest.schema.json",
     "schemas/mill-config.schema.json",
     "schemas/review-result.schema.json",
+    "schemas/source-manifest.schema.json",
+    "schemas/specification-proposal.schema.json",
     "schemas/task-packet.schema.json",
     "schemas/validation-evidence.schema.json",
+    "schemas/worker-invocation.schema.json",
+    "schemas/worker-profile.schema.json",
   ]) {
     if (!files.includes(required)) {
       throw new Error(`packed artifact is missing ${required}`);
@@ -140,6 +145,7 @@ try {
   }
   for (const command of [
     "auth",
+    "plan",
     "qualify",
     "run",
     "status",
@@ -297,6 +303,7 @@ import {writeFile} from "node:fs/promises";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
+if(args[0]==="--version"){console.log("codex-cli package-fixture-1");process.exit(0)}
 if(args[0]==="login"){console.log("Logged in using ChatGPT");process.exit(0)}
 if(args.includes("--approve-for-me")){process.exit(2)}
 if(!args.some((value,index)=>value==="-c"&&args[index+1]==='approval_policy="never"')){process.exit(2)}
@@ -310,6 +317,7 @@ if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:"clean",findings:[]});
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
+  console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));
 }else{
   await writeFile(path.join(cwd,"src/value.js"),"export const value = 2;\\n");
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));

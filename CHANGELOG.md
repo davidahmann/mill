@@ -27,11 +27,21 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   exact post-merge closure with an executable delivery-record contract.
 - Coordinator-enforced remote attendance, one readback-authorized effect retry,
   changing-blocker replacement, and database-swap state-restore recovery.
+- Source manifests, stable product invariants and decision cards, canonical
+  specification assessment/promotion/diff, approved impact manifests, and
+  item-level new-behavior versus preservation evidence.
+- One internal Codex worker adapter with immutable profile and invocation
+  contracts, durable admission/launch/settlement state, recursive instruction
+  freezing, and strict provider-event settlement.
+- A source-qualified Node.js 24, Next.js 16, and React 19.2 web-recipe decision
+  for the Wave 4B greenfield path.
 
 ### Changed
 
 - Dependabot preserves the qualified Node type and TypeScript major boundaries;
   incompatible major upgrades require an intentional toolchain qualification.
+- Executable JSON Schemas are generated from runtime contract inputs and checked
+  for exact drift in the native gate.
 
 ### Deprecated
 

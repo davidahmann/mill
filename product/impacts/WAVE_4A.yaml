@@ -1,0 +1,37 @@
+schemaVersion: "1"
+id: mill-wave-4a-continuity
+productContractDigest: sha256:f25dc305ec297a2f5b29a695351ff001733f4e42b8b8ad21f136db1931c86383
+outcomeId: product-continuity
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: product-planning
+    kind: system
+    change: Add source-backed proposal, promotion, diff, and impact contracts.
+  - id: semantic-validation
+    kind: system
+    change: Bind item-level evidence to approved commands or human attestation.
+  - id: worker-admission
+    kind: operations
+    change: Journal immutable worker identity and launch before process start.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-TRUNCATED-WORKER
+  - SCN-RESUME-NO-REPLAY
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-NODE-24
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-02T11:00:00.000Z"
+  proposalDigest: sha256:7ff4ccaef02b634c388df89d8e14fb0e3f3c6fcb83a28dc86d64b019b4eeae8e

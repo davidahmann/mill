@@ -181,6 +181,7 @@ import {readFile,writeFile} from "node:fs/promises";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
+if(args[0]==="--version"){console.log("codex-cli fixture-1");process.exit(0)}
 if(args[0]==="login"){console.log("Logged in using ChatGPT");process.exit(0)}
 if(args.includes("--approve-for-me")){console.error("automatic escalation approval is forbidden");process.exit(2)}
 if(!args.some((value,index)=>value==="-c"&&args[index+1]==='approval_policy="never"')){console.error("approval policy must fail closed");process.exit(2)}
@@ -198,6 +199,7 @@ if(args.includes("--output-schema")){
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:findings.length?"repair required":"clean",findings});
   console.log(JSON.stringify({type:"thread.started",thread_id:"fake-review"}));
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
+  console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:10,output_tokens:5}}));
 }else{
   const value=prompt.includes("Repair this complete")?3:2;
   await writeFile(path.join(cwd,"src/value.js"),\`export const value = \${value};\\n\`);

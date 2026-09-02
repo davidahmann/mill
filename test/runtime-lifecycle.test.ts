@@ -275,7 +275,7 @@ describe("local delivery lifecycle", () => {
     try {
       await writeFile(
         fixture.codexPath,
-        `#!${process.execPath}\nif(process.argv[2]==="login")process.exit(0);setInterval(()=>{},1000);\n`,
+        `#!${process.execPath}\nif(process.argv[2]==="--version"){console.log("codex-cli cancellation-fixture");process.exit(0)}if(process.argv[2]==="login")process.exit(0);setInterval(()=>{},1000);\n`,
         { mode: 0o755 },
       );
       await chmod(fixture.codexPath, 0o755);
@@ -589,7 +589,7 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
           taskPath: fixture.taskPath,
           runId: started.run.id,
         }),
-      ).rejects.toMatchObject({ code: "CODEX_EXECUTION_FAILED" });
+      ).rejects.toMatchObject({ code: "CODEX_PROFILE_UNAVAILABLE" });
       process.env.MILL_CODEX_PATH = fixture.codexPath;
       const reviewed = await reviewRun({
         root: fixture.root,
@@ -627,7 +627,7 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
             taskPath: fixture.taskPath,
             runId: started.run.id,
           }),
-        ).rejects.toMatchObject({ code: "CODEX_EXECUTION_FAILED" });
+        ).rejects.toMatchObject({ code: "CODEX_PROFILE_UNAVAILABLE" });
       }
       await expect(
         reviewRun({
@@ -857,6 +857,83 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
     } finally {
       controller.abort();
       await child;
+      await fixture.cleanup();
+    }
+  });
+
+  it("blocks a mutating launch that crashed before process identity was recorded", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const qualified = await qualifyRepositoryForBuild(fixture.root, "HEAD");
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        qualified.commonDirectory,
+      );
+      const run = store.createRun({
+        repositoryId: inputs.config.repositoryId,
+        taskId: inputs.task.id,
+        taskDigest: inputs.taskDigest,
+        configDigest: inputs.configDigest,
+        baseCommit: qualified.baseCommit,
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      store.transition(run.id, "ready", "run.ready");
+      const worktree = path.join(store.worktreesDirectory, run.id);
+      await createCandidateWorktree(
+        fixture.root,
+        worktree,
+        qualified.baseCommit,
+        inputs.task.id,
+        run.id,
+      );
+      const frozen = await buildContextManifest(
+        worktree,
+        qualified.baseCommit,
+        inputs.task,
+        inputs.config,
+        inputs.taskDigest,
+      );
+      store.setWorkspace(
+        run.id,
+        worktree,
+        frozen.digest,
+        JSON.stringify(frozen.manifest),
+        JSON.stringify(await captureGitControlState(worktree)),
+      );
+      store.transition(run.id, "running", "builder.started");
+      store.beginBuilderAttempt(run.id, 2);
+      const invocationId = randomUUID();
+      store.admitWorkerInvocation({
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"a".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      });
+      store.markWorkerLaunchStarted(invocationId);
+      store.close();
+
+      await expect(
+        runStatus({ root: fixture.root, runId: run.id }),
+      ).resolves.toMatchObject({ reconciliationRequired: true });
+      await expect(
+        cancelRun({ root: fixture.root, runId: run.id }),
+      ).resolves.toMatchObject({ status: "running", cancelRequested: true });
+      await expect(
+        resumeRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId: run.id,
+        }),
+      ).rejects.toMatchObject({
+        code: "WORKER_INVOCATION_RECONCILIATION_REQUIRED",
+      });
+      expect(
+        await readFile(path.join(worktree, "src", "value.js"), "utf8"),
+      ).toBe("export const value = 1;\n");
+    } finally {
       await fixture.cleanup();
     }
   });

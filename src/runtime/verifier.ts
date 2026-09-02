@@ -7,6 +7,12 @@ import { findTrustedExecutable } from "../doctor.js";
 import { validationEvidenceSchema } from "../contracts/schemas.js";
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
+import {
+  buildSemanticEvidence,
+  type ContinuityProductContract,
+  type ContinuityScenarioSet,
+  type ImpactManifest,
+} from "../planning/impact.js";
 import type { MillConfig, TaskPacket } from "./inputs.js";
 import {
   runProcess,
@@ -56,16 +62,34 @@ function validationEvidence(input: {
   candidateCommit: string;
   verifierImage: string;
   commands: readonly CommandEvidence[];
+  task: TaskPacket;
+  impact?: ImpactManifest;
+  product?: ContinuityProductContract;
+  scenarios?: ContinuityScenarioSet;
 }): ValidationEvidence {
+  const semantic =
+    input.impact === undefined ||
+    input.product === undefined ||
+    input.scenarios === undefined
+      ? undefined
+      : buildSemanticEvidence({
+          task: input.task,
+          manifest: input.impact,
+          product: input.product,
+          scenarios: input.scenarios,
+          commandResults: input.commands,
+        });
+  const commandsPassed = input.commands.every(
+    (item) => !item.required || item.status === "passed",
+  );
   return validationEvidenceSchema.parse({
     schemaVersion: "1",
     candidateCommit: input.candidateCommit,
     verifierImage: input.verifierImage,
     network: "none",
     commands: input.commands,
-    passed: input.commands.every(
-      (item) => !item.required || item.status === "passed",
-    ),
+    ...(semantic === undefined ? {} : { semantic }),
+    passed: commandsPassed && (semantic?.passed ?? true),
   });
 }
 
@@ -226,6 +250,9 @@ export async function verifyDeclaredCommands(input: {
   candidateCommit: string;
   config: MillConfig;
   task: TaskPacket;
+  impact?: ImpactManifest;
+  product?: ContinuityProductContract;
+  scenarios?: ContinuityScenarioSet;
   deadlineMs: number;
   maxOutputBytes: number;
   signal?: AbortSignal;
@@ -251,6 +278,10 @@ export async function verifyDeclaredCommands(input: {
       candidateCommit: input.candidateCommit,
       verifierImage: input.config.verifier.image,
       commands: stoppedCommands(input.config, input.task.commandIds, stopped),
+      task: input.task,
+      ...(input.impact === undefined ? {} : { impact: input.impact }),
+      ...(input.product === undefined ? {} : { product: input.product }),
+      ...(input.scenarios === undefined ? {} : { scenarios: input.scenarios }),
     });
   }
   const docker = await findTrustedExecutable("docker", input.root);
@@ -431,6 +462,10 @@ export async function verifyDeclaredCommands(input: {
       candidateCommit: input.candidateCommit,
       verifierImage: input.config.verifier.image,
       commands: evidence,
+      task: input.task,
+      ...(input.impact === undefined ? {} : { impact: input.impact }),
+      ...(input.product === undefined ? {} : { product: input.product }),
+      ...(input.scenarios === undefined ? {} : { scenarios: input.scenarios }),
     });
   } finally {
     await mount.dispose();

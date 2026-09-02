@@ -11,8 +11,9 @@ Owner: David Ahmann
    recovery.
 3. **Draft PR:** intent/receipt/readback protocol, GitHub draft PR, exact-head
    CI/review observation, one repair wave, human merge, and truthful closure.
-4. **Product intelligence:** PRD compiler, one qualified Node/TypeScript recipe,
-   basic retrofit, scenarios, and one resumable `start` command.
+4. **Product intelligence:** source-backed product contracts, explicit
+   continuity and worker admission, one qualified Node/TypeScript web recipe,
+   basic retrofit, and one resumable `start` command.
 5. **Public alpha:** audits, narrow clean-room canaries, genesis release,
    provenance, manual rollback/detach, limitations and support matrix.
 
@@ -20,7 +21,11 @@ Each item is one vertical delivery wave, not a bucket of microtasks. Later-wave
 choices close only before their wave. The current detailed task is in
 `product/tasks/`.
 
-Waves 1 and 2 are landed. Wave 3 is active: its implementation, fake-provider
-fault matrix, and packed draft-PR canary live in the same candidate change.
-Exact-candidate review, PR CI, human merge, resulting-main checks, and the
-explicitly authorized disposable real-GitHub canary remain its promotion gates.
+Waves 1 through 3 are landed. The attended Wave 3 disposable-repository canary
+opened, reviewed, human-merged, and truthfully finalized the exact candidate;
+its resulting-main check passed. Wave 4A is delivered by the current change:
+source and product continuity contracts, semantic impact evidence, immutable
+worker admission, and the selected Node.js 24/Next.js 16 web recipe. Wave 4B is
+next: transactional bootstrap and retrofit, recipe application, task
+compilation, and the resumable founder `start` path. No public-alpha or general
+stack-support claim is made before Wave 5 qualification.

@@ -79,11 +79,25 @@ job with personal credentials. The realistic scenario set covers:
 - packaging through installation of the generated tarball and execution of its
   public CLI and schema exports.
 
+Wave 4A adds contract and negative-control coverage for source authority,
+canonical proposal approval, semantic regeneration diffs, impact exceptions,
+stable cross-references, scenario-specific evidence, instruction/context epochs,
+immutable worker admission, launch-before-spawn, no-replay settlement, and
+malformed or conflicting provider events. The repository dogfoods its approved
+product, scenario, impact, and selected web-recipe contracts. Those tests prove
+contract behavior; they do not replace exact-candidate review or CI because a
+candidate cannot certify itself by changing its own oracle.
+
 The real-provider canaries use the maintainer's personal Codex and GitHub
 accounts, a pre-pulled digest-pinned image, and an explicitly named disposable
 repository. They may exercise only the wave's approved effects and must preserve
 authoritative readback evidence. No test may provision a repository, mark a PR
 ready, merge, deploy, or rerun remote checks.
+
+The completed Wave 3 canary is recorded in
+[`docs/canaries/wave-3-real-github.md`](canaries/wave-3-real-github.md). It also
+shows why provider-authoritative usage must be budgeted: even a tiny task can
+consume substantial context tokens while currency cost remains unavailable.
 
 ## Architecture questions
 

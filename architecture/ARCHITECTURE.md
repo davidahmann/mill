@@ -1,6 +1,6 @@
 # Mill architecture
 
-Status: approved v1 decision Last updated: 2026-09-01
+Status: approved v1 decision Last updated: 2026-09-02
 
 ## Form
 
@@ -49,6 +49,28 @@ untrusted PRD/repo/web inputs
 The builder never receives forge/deployment authority. The shipper cannot create
 or amend the candidate commit. Product/oracle changes invalidate the candidate.
 Provider state is authoritative for external effects.
+
+Wave 4A adds two fail-closed seams without adding another harness. Read-only
+planning commands assess an operator-supplied PRD, disclosed source manifest,
+and structured proposal; they return blockers, semantic differences, canonical
+bytes, and exact approval digests without writing files, running repository
+commands, or invoking a model. Live research and proposal generation remain an
+explicit later coordinator step, not an implied crawler. Approved product
+contracts carry stable acceptance, invariant, decision, and scenario IDs. Each
+material task binds an exact human-approved impact manifest, and validation
+reports new-behavior and preservation evidence separately. Scenario and
+invariant evidence must execute their own approved command or carry a scoped,
+unexpired human attestation; a generic passing command cannot certify them.
+
+Codex remains the only worker implementation behind an internal `WorkerAdapter`.
+Before every builder, repair, or reviewer process starts, Mill records an
+immutable redacted invocation envelope containing the task, context epoch,
+candidate when applicable, role profile, prompt-template digest, allowed scope,
+deadline, and output budget. Launch intent is durable before spawn. Exactly one
+terminal provider event settles an invocation, and reviewers must emit exactly
+one structured result. A possibly started mutating invocation becomes uncertain
+and is reconciled from candidate, process, and worktree state instead of being
+replayed.
 
 The GitHub adapter is isolated behind the delivery coordinator. Planning reads
 the live delegated actor, repository node identity, clone URL, fork status and
@@ -136,12 +158,20 @@ allowing writes. There is no background daemon or implicit retry.
 - product, scenario, blueprint, and JIT compilers;
 - static repository scanner and transactional bootstrap/retrofit engine;
 - frozen context compiler and Codex adapter;
+- immutable worker profile, admission, launch, and settlement journal;
 - SQLite control plane and append-only run events;
 - worktree/process runner and command policy;
 - native verifier and scenario runner;
 - exact-candidate local reviewer and bounded repair coordinator;
 - GitHub shipper, effect journal, readback, and closure;
 - audits and qualification/release commands.
+
+The first qualified greenfield recipe is a Node.js 24 TypeScript web modular
+monolith using Next.js 16 App Router and the React 19.2 family. It is
+deliberately one recipe, not a generalized stack claim. Wave 4B must freeze
+exact dependency and OCI identities, generate native
+lint/type/unit/integration/browser/build gates, and prove the repository works
+without Mill before applying it.
 
 ## Identity and authority
 

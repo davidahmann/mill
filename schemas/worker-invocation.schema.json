@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "invocationId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "phase": { "type": "string", "enum": ["build", "repair", "review"] },
+    "attempt": { "type": "integer", "exclusiveMinimum": 0, "maximum": 2 },
+    "taskDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "contextEpoch": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "impactManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "1" },
+        "adapter": { "type": "string", "const": "codex-cli" },
+        "role": {
+          "type": "string",
+          "enum": ["planner", "builder", "reviewer"]
+        },
+        "contractVersion": { "type": "string", "const": "1" },
+        "harnessVersion": { "type": "string", "minLength": 1 },
+        "promptTemplateDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "modelIdentity": { "type": "string", "const": "provider-mutable" },
+        "approvalPolicy": { "type": "string", "const": "never" },
+        "sandbox": {
+          "type": "string",
+          "enum": ["read-only", "workspace-write"]
+        },
+        "session": { "type": "string", "const": "ephemeral" },
+        "hostRules": { "type": "string", "const": "ignored" },
+        "skillDiscovery": { "type": "string", "const": "disabled" },
+        "toolDiscovery": { "type": "string", "const": "disabled" },
+        "networkPosture": {
+          "type": "string",
+          "enum": ["unknown", "provider-managed"]
+        },
+        "capabilities": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "outputContract": { "type": "string", "minLength": 1 }
+      },
+      "required": [
+        "schemaVersion",
+        "adapter",
+        "role",
+        "contractVersion",
+        "harnessVersion",
+        "promptTemplateDigest",
+        "modelIdentity",
+        "approvalPolicy",
+        "sandbox",
+        "session",
+        "hostRules",
+        "skillDiscovery",
+        "toolDiscovery",
+        "networkPosture",
+        "capabilities",
+        "outputContract"
+      ],
+      "additionalProperties": false
+    },
+    "profileDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "allowedPaths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+      }
+    },
+    "deadlineAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "maxOutputBytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 10000000
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "invocationId",
+    "runId",
+    "phase",
+    "attempt",
+    "taskDigest",
+    "contextEpoch",
+    "baseCommit",
+    "profile",
+    "profileDigest",
+    "allowedPaths",
+    "deadlineAt",
+    "maxOutputBytes"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/worker-invocation.schema.json",
+  "title": "WorkerInvocation"
+}

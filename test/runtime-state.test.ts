@@ -83,6 +83,96 @@ describe("operational state", () => {
     }
   });
 
+  it("admits immutable worker invocations before launch and never replays a possible start", async () => {
+    const temporary = await temporaryDirectory("mill-worker-admission-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "worker-admission",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const invocationId = randomUUID();
+      const admission = {
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"d".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      };
+      expect(store.admitWorkerInvocation(admission)).toBe("created");
+      expect(store.admitWorkerInvocation(admission)).toBe("existing");
+      expect(store.workerInvocationStatus(invocationId)).toBe("admitted");
+      expect(() =>
+        store.admitWorkerInvocation({
+          ...admission,
+          envelopeDigest: `sha256:${"e".repeat(64)}`,
+        }),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_IDENTITY_CONFLICT",
+        }),
+      );
+
+      store.markWorkerLaunchStarted(invocationId);
+      expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
+      expect(() => store.markWorkerLaunchStarted(invocationId)).toThrow(
+        expect.objectContaining({ code: "WORKER_INVOCATION_POSSIBLY_STARTED" }),
+      );
+      store.settleWorkerInvocation(invocationId, "completed");
+      expect(store.workerInvocationStatus(invocationId)).toBe("settled");
+      expect(() =>
+        store.settleWorkerInvocation(invocationId, "completed"),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+        }),
+      );
+
+      const uncertainId = randomUUID();
+      store.admitWorkerInvocation({
+        ...admission,
+        invocationId: uncertainId,
+        envelopeDigest: `sha256:${"f".repeat(64)}`,
+      });
+      store.markWorkerLaunchStarted(uncertainId);
+      store.settleWorkerInvocation(uncertainId, "uncertain", {
+        code: "CODEX_EXECUTION_FAILED",
+        processExited: true,
+      });
+      expect(store.workerInvocationStatus(uncertainId)).toBe("uncertain");
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([
+        {
+          invocationId: uncertainId,
+          phase: "build",
+          status: "uncertain",
+          processExited: true,
+        },
+      ]);
+      store.reconcileWorkerInvocation(
+        run.id,
+        uncertainId,
+        "process_exit_observed",
+      );
+      expect(store.workerInvocationStatus(uncertainId)).toBe("reconciled");
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([]);
+      expect(store.events(run.id).map((event) => event.type)).toEqual([
+        "run.created",
+        "worker.admitted",
+        "worker.admitted",
+        "worker.reconciled",
+      ]);
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
   it("enforces transition, retry, validation, review, and cancellation invariants", async () => {
     const temporary = await temporaryDirectory("mill-state-machine-");
     process.env.MILL_STATE_HOME = temporary.path;

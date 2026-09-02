@@ -1,0 +1,134 @@
+schemaVersion: "1"
+id: mill
+title: Mill
+primaryUser: Founder-maintainer shipping one repository at a time
+jobToBeDone: >-
+  Turn approved product intent and evidence into an exact, tested, independently
+  reviewed draft pull request without manually coordinating every delivery step
+  or losing existing system behavior.
+outcomes:
+  - Source-backed product and architecture decisions
+  - One bounded exact candidate with realistic evidence
+  - One reviewed draft pull request with truthful lifecycle closure
+nonGoals:
+  - Hosted control plane or daemon
+  - Automatic merge or deployment
+  - Arbitrary stack generation
+  - Shared credentials or parallel writers
+assumptions:
+  - The founder can make consequential product and delivery decisions.
+  - The operator has their own authenticated Codex and GitHub sessions.
+unknowns:
+  - Public-alpha demand and support load remain unproven.
+  - Generalized retrofit behavior remains unqualified.
+sourceRefs:
+  - SRC-PRD
+  - SRC-NODE-RELEASES
+  - SRC-NEXT-INSTALL
+  - SRC-NEXT-DEPLOY
+  - SRC-REACT-VERSIONS
+acceptance:
+  - id: ACC-SOURCE-PROPOSAL
+    kind: functional
+    statement:
+      Planning exposes sources, assumptions, contradictions, and exact approval
+      identity.
+    sourceRefs: [SRC-PRD]
+  - id: ACC-CONTINUITY
+    kind: quality
+    statement:
+      Every affected outcome, invariant, and realistic scenario has explicit
+      evidence or blocks.
+    sourceRefs: [SRC-PRD]
+  - id: ACC-REVIEWED-DRAFT
+    kind: functional
+    statement:
+      The unchanged exact candidate reaches one independently reviewed draft
+      pull request.
+    sourceRefs: [SRC-PRD]
+  - id: ACC-TRUTHFUL-RECOVERY
+    kind: operational
+    statement:
+      Cancellation, ambiguity, and resume never duplicate work or invent
+      success.
+    sourceRefs: [SRC-PRD]
+invariants:
+  - id: INV-HUMAN-AUTHORITY
+    statement:
+      Only the configured human authority approves consequential ambiguity and
+      merge.
+    owner: maintainer
+    criticality: critical
+    surfaceRefs: [planning, github-delivery]
+    verification:
+      mode: human
+      ref: exact-approval-and-merge-readback
+    sourceRefs: [SRC-PRD]
+    unknowns: []
+  - id: INV-EXACT-EVIDENCE
+    statement:
+      Required evidence binds the approved inputs and exact candidate or
+      resulting main commit.
+    owner: mill-runtime
+    criticality: critical
+    surfaceRefs: [planning, validation, review, delivery]
+    verification:
+      mode: command
+      ref: test:coverage
+    sourceRefs: [SRC-PRD]
+    unknowns: []
+  - id: INV-WORKER-LEAST-AUTHORITY
+    statement:
+      Builder and reviewer workers cannot receive forge or merge authority.
+    owner: mill-runtime
+    criticality: critical
+    surfaceRefs: [worker-adapter, github-delivery]
+    verification:
+      mode: command
+      ref: test:coverage
+    sourceRefs: [SRC-PRD]
+    unknowns: []
+  - id: INV-DOWNSTREAM-INDEPENDENT
+    statement: A generated or adopted repository remains operable without Mill.
+    owner: downstream-maintainer
+    criticality: high
+    surfaceRefs: [recipe, repository-pack]
+    verification:
+      mode: command
+      ref: test:package
+    sourceRefs: [SRC-PRD]
+    unknowns: []
+decisions:
+  - id: DEC-NODE-24
+    kind: architecture
+    question: Which runtime family does the first recipe target?
+    decision: Node.js 24 Active LTS with an exact repository-local patch pin.
+    rationale:
+      The active LTS line is production-supported and already qualified by Mill.
+    sourceRefs: [SRC-NODE-RELEASES]
+    status: approved
+    costlyToReverse: false
+  - id: DEC-WEB-RECIPE
+    kind: architecture
+    question:
+      Which non-CLI product form should the first greenfield recipe prove?
+    decision:
+      A TypeScript Next.js 16 App Router modular monolith using the React 19.2
+      family.
+    rationale: >-
+      It proves a real web and server product surface while retaining one
+      repository, one runtime, portable Node or container deployment, and
+      explicit native gates.
+    sourceRefs: [SRC-NEXT-INSTALL, SRC-NEXT-DEPLOY, SRC-REACT-VERSIONS]
+    status: approved
+    costlyToReverse: true
+  - id: DEC-OPERATOR-SESSIONS
+    kind: architecture
+    question: Who authenticates and pays for coding and GitHub operations?
+    decision: Each operator uses their own local Codex and GitHub sessions.
+    rationale:
+      This keeps credentials out of repositories and makes billing attributable
+      to the operator.
+    sourceRefs: [SRC-PRD]
+    status: approved
+    costlyToReverse: false

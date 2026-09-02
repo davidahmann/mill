@@ -8,6 +8,30 @@ import { contractSchemas } from "../src/contracts/schemas.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const samples = {
+  sourceManifest: {
+    schemaVersion: "1",
+    trigger: "bootstrap",
+    providers: [
+      {
+        id: "operator",
+        name: "Operator research",
+        queries: [{ id: "Q1", text: "Node support", purpose: "runtime pin" }],
+        networkDisclosure: "Official documentation only",
+      },
+    ],
+    sources: [
+      {
+        id: "SRC-PRD",
+        class: "user_evidence",
+        uri: "product/PRD.md",
+        revision: digest,
+        observedAt: "2026-09-02T12:00:00.000Z",
+        freshness: "current",
+        authority: "constraint",
+        claims: ["A founder needs reviewed delivery."],
+      },
+    ],
+  },
   managedRepository: {
     schemaVersion: "1",
     id: "123e4567-e89b-12d3-a456-426614174000",
@@ -30,6 +54,63 @@ const samples = {
     assumptions: [],
     unknowns: [],
     sourceRefs: ["product/PRD.md"],
+  },
+  specificationProposal: {
+    schemaVersion: "1",
+    prd: { path: "product/PRD.md", digest },
+    sourceManifestDigest: digest,
+    productContract: {
+      schemaVersion: "1",
+      id: "product",
+      title: "Product",
+      primaryUser: "Founder",
+      jobToBeDone: "Ship an outcome",
+      outcomes: ["Reviewed PR"],
+      nonGoals: [],
+      assumptions: [],
+      unknowns: [],
+      sourceRefs: ["SRC-PRD"],
+    },
+    blueprints: [
+      {
+        schemaVersion: "1",
+        id: "node-service",
+        productContractDigest: digest,
+        recipe: "node-service",
+        recipeVersion: "1",
+        runtime: "node-24",
+        architecture: ["modular monolith"],
+        risks: [],
+      },
+      {
+        schemaVersion: "1",
+        id: "node-package",
+        productContractDigest: digest,
+        recipe: "node-package",
+        recipeVersion: "1",
+        runtime: "node-24",
+        architecture: ["modular package"],
+        risks: [],
+      },
+    ],
+    scenarioSet: {
+      schemaVersion: "1",
+      productContractDigest: digest,
+      scenarios: [
+        {
+          id: "normal",
+          kind: "normal",
+          given: ["approved input"],
+          when: ["run"],
+          then: ["reviewed candidate"],
+          oracleOwner: "repository",
+        },
+      ],
+    },
+    assumptions: [],
+    contradictions: [],
+    questions: [],
+    status: "proposed",
   },
   blueprint: {
     schemaVersion: "1",
@@ -67,6 +148,23 @@ const samples = {
         status: "approved",
       },
     ],
+  },
+  impactManifest: {
+    schemaVersion: "1",
+    id: "task-1",
+    productContractDigest: digest,
+    outcomeId: "o1",
+    riskClass: "low",
+    acceptanceIds: ["A1"],
+    affectedInvariantIds: [],
+    uncertainInvariantIds: [],
+    surfaces: [{ id: "cli", kind: "interface", change: "Add a command." }],
+    scenarioIds: ["normal"],
+    commandIds: ["test"],
+    materialDecisions: [],
+    unresolved: [],
+    exceptions: [],
+    approval: null,
   },
   millConfig: {
     schemaVersion: "1",
@@ -164,6 +262,56 @@ const samples = {
     excludedPatterns: [".env"],
     disclosure: ["approved context"],
   },
+  workerProfile: {
+    schemaVersion: "1",
+    adapter: "codex-cli",
+    role: "builder",
+    contractVersion: "1",
+    harnessVersion: "0.0.0-development",
+    promptTemplateDigest: digest,
+    modelIdentity: "provider-mutable",
+    approvalPolicy: "never",
+    sandbox: "workspace-write",
+    session: "ephemeral",
+    hostRules: "ignored",
+    skillDiscovery: "disabled",
+    toolDiscovery: "disabled",
+    networkPosture: "provider-managed",
+    capabilities: ["repository-write"],
+    outputContract: "codex-jsonl-v1",
+  },
+  workerInvocation: {
+    schemaVersion: "1",
+    invocationId: "123e4567-e89b-42d3-a456-426614174001",
+    runId: "123e4567-e89b-42d3-a456-426614174000",
+    phase: "build",
+    attempt: 1,
+    taskDigest: digest,
+    contextEpoch: digest,
+    baseCommit: "a".repeat(40),
+    profile: {
+      schemaVersion: "1",
+      adapter: "codex-cli",
+      role: "builder",
+      contractVersion: "1",
+      harnessVersion: "0.0.0-development",
+      promptTemplateDigest: digest,
+      modelIdentity: "provider-mutable",
+      approvalPolicy: "never",
+      sandbox: "workspace-write",
+      session: "ephemeral",
+      hostRules: "ignored",
+      skillDiscovery: "disabled",
+      toolDiscovery: "disabled",
+      networkPosture: "provider-managed",
+      capabilities: ["repository-write"],
+      outputContract: "codex-jsonl-v1",
+    },
+    profileDigest: digest,
+    allowedPaths: ["src/**"],
+    deadlineAt: "2026-09-02T12:15:00.000Z",
+    maxOutputBytes: 1048576,
+  },
   reviewResult: {
     schemaVersion: "1",
     candidateCommit: "a".repeat(40),
@@ -190,16 +338,21 @@ const samples = {
 } as const;
 
 const schemaFiles = {
+  sourceManifest: "source-manifest.schema.json",
   managedRepository: "managed-repository.schema.json",
   productContract: "product-contract.schema.json",
+  specificationProposal: "specification-proposal.schema.json",
   blueprint: "blueprint.schema.json",
   scenarioSet: "scenario-set.schema.json",
   outcomePlan: "outcome-plan.schema.json",
+  impactManifest: "impact-manifest.schema.json",
   millConfig: "mill-config.schema.json",
   deliveryRecord: "delivery-record.schema.json",
   millLock: "mill-lock.schema.json",
   taskPacket: "task-packet.schema.json",
   contextManifest: "context-manifest.schema.json",
+  workerProfile: "worker-profile.schema.json",
+  workerInvocation: "worker-invocation.schema.json",
   reviewResult: "review-result.schema.json",
   validationEvidence: "validation-evidence.schema.json",
 } as const;
@@ -221,6 +374,9 @@ describe("compact schemas", () => {
     });
     ajv.addFormat("date-time", (value) => Number.isFinite(Date.parse(value)));
     ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
+    expect(Object.keys(schemaFiles).sort()).toEqual(
+      Object.keys(contractSchemas).sort(),
+    );
     for (const kind of Object.keys(
       schemaFiles,
     ) as (keyof typeof schemaFiles)[]) {
@@ -418,6 +574,7 @@ describe("compact schemas", () => {
 
   it("rejects option-like and whitespace-bearing Git base references", async () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
+    ajv.addFormat("date-time", (value) => Number.isFinite(Date.parse(value)));
     ajv.addFormat("email", /^[^\s@]+@[^\s@]+$/u);
     const validate = ajv.compile(
       JSON.parse(

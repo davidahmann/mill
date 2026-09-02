@@ -12,6 +12,13 @@ CI/review observation, human merge, and truthful closure. The CLI is `millctl`,
 published eventually as `@davidahmann/mill` to avoid collision with the existing
 `mill` command and npm package.
 
+Wave 4A adds source-backed planning contracts, stable product invariants,
+approved per-slice impact, scenario-specific semantic evidence, and durable
+worker admission. Its planning commands are deliberately read-only: today an
+operator supplies the structured proposal, while Wave 4B will coordinate the
+qualified planner and transactionally apply the first Node.js 24/Next.js 16 web
+recipe.
+
 Mill's v1 boundary is deliberately narrow:
 
 - local and attended;
@@ -182,9 +189,12 @@ the repository.
 ## Status
 
 Not published. Local attended delivery and the bounded draft-PR lifecycle are
-implemented and covered by fake-provider and packed-package canaries. The first
-attended disposable real-GitHub canary, hostile-host containment, release, and
-generalized stack-compatibility claims remain pending their explicit gates.
+implemented, and the first disposable real-Codex/GitHub canary was human-merged,
+verified on resulting main, and truthfully finalized. Product-continuity and
+worker-admission contracts are implemented. Transactional recipe application,
+retrofit, the founder `start` coordinator, stronger hostile-host containment,
+genesis release, and generalized stack-compatibility claims remain pending their
+explicit gates.
 
 ## License
 

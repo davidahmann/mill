@@ -6,11 +6,10 @@ import {
   reviewResultSchema,
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
-import { canonicalDigest } from "../contracts/canonical.js";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import {
+  codexWorkerAdapter,
   codexAuthStatus,
-  runCodexBuilder,
-  runCodexReview,
   type ProviderUsage,
 } from "./codex.js";
 import {
@@ -50,6 +49,7 @@ import {
   type PublicRunRecord,
   type RunRecord,
 } from "./state.js";
+import { createWorkerInvocation } from "./worker.js";
 import { verifyDeclaredCommands, type ValidationEvidence } from "./verifier.js";
 import { processIdentityStatus, type ActiveProcess } from "./process.js";
 import { MILL_VERSION } from "../version.js";
@@ -177,7 +177,7 @@ function storedManifest(run: RunRecord): ContextManifest {
     );
   }
   const manifest = parsed.data;
-  if (canonicalDigest(manifest) !== run.contextDigest) {
+  if (canonicalDigest(manifest as unknown as JsonValue) !== run.contextDigest) {
     throw new MillError(
       "CONTEXT_MANIFEST_DRIFT",
       "Stored context manifest digest does not match.",
@@ -361,12 +361,19 @@ function assertNotCancelled(store: StateStore, runId: string): void {
 function lifecycleHooks(
   store: StateStore,
   runId: string,
+  invocationId?: string,
 ): {
+  onBeforeSpawn(): void;
   onSpawn(process: ActiveProcess): void;
   onExit(process?: ActiveProcess): void;
   cancellationRequested(): boolean;
 } {
   return {
+    onBeforeSpawn(): void {
+      if (invocationId !== undefined) {
+        store.markWorkerLaunchStarted(invocationId);
+      }
+    },
     onSpawn(process): void {
       store.setActiveProcess(runId, process);
     },
@@ -377,6 +384,73 @@ function lifecycleHooks(
       return store.getRun(runId).cancelRequested;
     },
   };
+}
+
+async function admitWorker(input: {
+  store: StateStore;
+  run: RunRecord;
+  inputs: RuntimeInputs;
+  manifest: ContextManifest;
+  root: string;
+  phase: "build" | "repair" | "review";
+  role: "builder" | "reviewer";
+  attempt: number;
+  candidateCommit?: string;
+}): Promise<{
+  invocationId: string;
+  hooks: ReturnType<typeof lifecycleHooks>;
+}> {
+  const profile = await codexWorkerAdapter.profile(input.root, input.role);
+  const admitted = createWorkerInvocation({
+    runId: input.run.id,
+    phase: input.phase,
+    attempt: input.attempt,
+    task: input.inputs.task,
+    taskDigest: input.inputs.taskDigest,
+    manifest: input.manifest,
+    baseCommit: input.run.baseCommit,
+    ...(input.candidateCommit === undefined
+      ? {}
+      : { candidateCommit: input.candidateCommit }),
+    ...(input.inputs.continuity === undefined
+      ? {}
+      : { impactManifestDigest: input.inputs.continuity.impactDigest }),
+    profile,
+    deadlineAt: input.run.deadlineAt,
+  });
+  input.store.admitWorkerInvocation({
+    runId: input.run.id,
+    invocationId: admitted.invocation.invocationId,
+    phase: input.phase,
+    envelopeDigest: admitted.digest,
+    envelopeJson: JSON.stringify(admitted.invocation),
+  });
+  return {
+    invocationId: admitted.invocation.invocationId,
+    hooks: lifecycleHooks(
+      input.store,
+      input.run.id,
+      admitted.invocation.invocationId,
+    ),
+  };
+}
+
+function settleWorkerFailure(
+  store: StateStore,
+  invocationId: string,
+  role: "builder" | "reviewer",
+  error: unknown,
+): void {
+  if (store.workerInvocationStatus(invocationId) !== "launch_started") return;
+  const failure = asMillError(error);
+  store.settleWorkerInvocation(
+    invocationId,
+    role === "builder" ? "uncertain" : "failed",
+    {
+      code: failure.code,
+      ...(role === "builder" ? { processExited: true } : {}),
+    },
+  );
 }
 
 function storedActiveProcess(run: RunRecord): ActiveProcess | undefined {
@@ -394,6 +468,62 @@ function storedActiveProcess(run: RunRecord): ActiveProcess | undefined {
     processGroup: run.activeProcessGroup,
     identity: run.activeProcessIdentity,
   };
+}
+
+function reconcileMutatingWorkerAdmissions(
+  store: StateStore,
+  run: RunRecord,
+  active: ActiveProcess | undefined,
+): void {
+  const activeStatus =
+    active === undefined ? undefined : processIdentityStatus(active);
+  if (active !== undefined && activeStatus !== "mismatch") {
+    throw new MillError(
+      "ORPHANED_EXECUTION_RECONCILIATION_REQUIRED",
+      "A recorded execution may still be active without its controller; Mill will not signal it or resume automatically.",
+      ExitCode.temporary,
+    );
+  }
+  const unresolved = store.unresolvedMutatingWorkerInvocations(run.id);
+  const unobservedLaunches = unresolved.filter(
+    (invocation) => invocation.status === "launch_started",
+  );
+  if (
+    unobservedLaunches.length > 0 &&
+    (active === undefined ||
+      activeStatus !== "mismatch" ||
+      unobservedLaunches.length !== 1)
+  ) {
+    throw new MillError(
+      "WORKER_INVOCATION_RECONCILIATION_REQUIRED",
+      "A mutating worker may have started before process identity was durably observed; attended disposition is required.",
+      ExitCode.temporary,
+      { invocationIds: unobservedLaunches.map((item) => item.invocationId) },
+    );
+  }
+  for (const invocation of unresolved) {
+    if (invocation.status === "launch_started") {
+      store.reconcileWorkerInvocation(
+        run.id,
+        invocation.invocationId,
+        "recorded_process_absent",
+      );
+    } else if (invocation.processExited) {
+      store.reconcileWorkerInvocation(
+        run.id,
+        invocation.invocationId,
+        "process_exit_observed",
+      );
+    } else {
+      throw new MillError(
+        "WORKER_INVOCATION_RECONCILIATION_REQUIRED",
+        "An uncertain mutating worker lacks durable process-exit evidence; attended disposition is required.",
+        ExitCode.temporary,
+        { invocationId: invocation.invocationId },
+      );
+    }
+  }
+  store.setActiveProcess(run.id, null);
 }
 
 function recordProviderUsage(
@@ -503,27 +633,47 @@ export async function startLocalRun(input: {
     );
     provisionalWorktree = undefined;
     provisionalBranch = undefined;
-    store.transition(run.id, "running", "builder.started");
+    run = store.transition(run.id, "running", "builder.started");
     store.beginBuilderAttempt(run.id, inputs.task.budget.retryCount + 1);
-    const hooks = lifecycleHooks(store, run.id);
-    const invocation = await runCodexBuilder({
-      root: worktree,
-      task: inputs.task,
+    run = store.getRun(run.id);
+    const admission = await admitWorker({
+      store,
+      run,
+      inputs,
       manifest: frozen.manifest,
-      deadlineMs: persistedRunDeadline(run),
-      maxOutputBytes: inputs.task.budget.maxOutputBytes,
-      signal: signals.signal,
-      ...hooks,
+      root: worktree,
+      phase: "build",
+      role: "builder",
+      attempt: run.attemptCount,
     });
-    assertNotCancelled(store, run.id);
-    await assertGitControlState(worktree, gitControl);
+    let invocation: Awaited<ReturnType<typeof codexWorkerAdapter.runBuilder>>;
+    let candidate: Awaited<ReturnType<typeof commitCandidate>>;
+    try {
+      invocation = await codexWorkerAdapter.runBuilder({
+        root: worktree,
+        task: inputs.task,
+        manifest: frozen.manifest,
+        deadlineMs: persistedRunDeadline(run),
+        maxOutputBytes: inputs.task.budget.maxOutputBytes,
+        signal: signals.signal,
+        ...admission.hooks,
+      });
+      assertNotCancelled(store, run.id);
+      await assertGitControlState(worktree, gitControl);
+      candidate = await commitCandidate(
+        worktree,
+        qualified.baseCommit,
+        inputs.task,
+        inputs.protectedPaths,
+      );
+      store.settleWorkerInvocation(admission.invocationId, "completed", {
+        candidateCommit: candidate.commit,
+      });
+    } catch (error) {
+      settleWorkerFailure(store, admission.invocationId, "builder", error);
+      throw error;
+    }
     recordProviderUsage(store, run.id, "builder.completed", invocation.usage);
-    const candidate = await commitCandidate(
-      worktree,
-      qualified.baseCommit,
-      inputs.task,
-      inputs.protectedPaths,
-    );
     const completed = store.commitCandidate(
       run.id,
       candidate.commit,
@@ -681,6 +831,13 @@ export async function verifyRun(input: {
       candidateCommit: candidate.commit,
       config: inputs.config,
       task: inputs.task,
+      ...(inputs.continuity === undefined
+        ? {}
+        : {
+            impact: inputs.continuity.impact,
+            product: inputs.continuity.product,
+            scenarios: inputs.continuity.scenarios,
+          }),
       deadlineMs,
       maxOutputBytes: inputs.task.budget.maxOutputBytes,
       signal: signals.signal,
@@ -735,7 +892,13 @@ export async function reviewRun(input: {
       "CODEX_DEADLINE_EXCEEDED",
       "CODEX_OUTPUT_BUDGET_EXCEEDED",
       "CODEX_EXECUTION_FAILED",
+      "CODEX_PROFILE_UNAVAILABLE",
       "INVALID_REVIEW_RESULT",
+      "MALFORMED_WORKER_EVENT",
+      "WORKER_SETTLEMENT_MISSING",
+      "WORKER_SETTLEMENT_CONFLICT",
+      "WORKER_RESULT_MISSING",
+      "WORKER_RESULT_CONFLICT",
     ]);
     if (
       run.status === "blocked" &&
@@ -776,19 +939,39 @@ export async function reviewRun(input: {
     }
     const candidate = await assertRunBindings(input.root, run, inputs);
     store.beginReviewAttempt(run.id, inputs.task.budget.retryCount + 1);
-    const hooks = lifecycleHooks(store, run.id);
-    const result = await runCodexReview({
-      root: candidate.worktree,
-      task: inputs.task,
+    const admission = await admitWorker({
+      store,
+      run,
+      inputs,
       manifest: candidate.manifest,
+      root: candidate.worktree,
+      phase: "review",
+      role: "reviewer",
+      attempt: run.repairCount + 1,
       candidateCommit: candidate.commit,
-      deadlineMs,
-      maxOutputBytes: inputs.task.budget.maxOutputBytes,
-      signal: signals.signal,
-      ...hooks,
     });
-    assertNotCancelled(store, run.id);
-    await assertCandidateIdentity(candidate.worktree, candidate);
+    let result: Awaited<ReturnType<typeof codexWorkerAdapter.runReviewer>>;
+    try {
+      result = await codexWorkerAdapter.runReviewer({
+        root: candidate.worktree,
+        task: inputs.task,
+        manifest: candidate.manifest,
+        candidateCommit: candidate.commit,
+        deadlineMs,
+        maxOutputBytes: inputs.task.budget.maxOutputBytes,
+        signal: signals.signal,
+        ...admission.hooks,
+      });
+      assertNotCancelled(store, run.id);
+      await assertCandidateIdentity(candidate.worktree, candidate);
+      store.settleWorkerInvocation(admission.invocationId, "completed", {
+        candidateCommit: candidate.commit,
+        findings: result.review.findings.length,
+      });
+    } catch (error) {
+      settleWorkerFailure(store, admission.invocationId, "reviewer", error);
+      throw error;
+    }
     store.recordEvent(run.id, "review.completed", {
       candidateCommit: candidate.commit,
       findings: result.review.findings.length,
@@ -836,14 +1019,7 @@ export async function resumeRun(input: {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
     const active = storedActiveProcess(run);
-    if (active !== undefined && processIdentityStatus(active) !== "mismatch") {
-      throw new MillError(
-        "ORPHANED_EXECUTION_RECONCILIATION_REQUIRED",
-        "A recorded execution may still be active without its controller; Mill will not signal it or resume automatically.",
-        ExitCode.temporary,
-      );
-    }
-    store.setActiveProcess(run.id, null);
+    reconcileMutatingWorkerAdmissions(store, run, active);
     run = store.getRun(run.id);
     if (run.status === "effect_unknown") {
       throw new MillError(
@@ -872,6 +1048,7 @@ export async function resumeRun(input: {
         ExitCode.configuration,
       );
     }
+    const worktreePath = run.worktreePath;
     if (
       run.taskDigest !== inputs.taskDigest ||
       run.configDigest !== inputs.configDigest
@@ -884,7 +1061,7 @@ export async function resumeRun(input: {
     }
     const manifest = storedManifest(run);
     const gitControl = storedGitControl(run);
-    await assertGitControlState(run.worktreePath, gitControl);
+    await assertGitControlState(worktreePath, gitControl);
     const findings = storedReviewFindings(run);
     if (findings !== undefined) {
       if (run.repairCount >= 1) {
@@ -900,31 +1077,51 @@ export async function resumeRun(input: {
         inputs,
       );
       const base = reviewedCandidate.commit;
-      store.beginRepair(run.id);
-      const hooks = lifecycleHooks(store, run.id);
-      const invocation = await runCodexBuilder({
-        root: run.worktreePath,
-        task: inputs.task,
+      run = store.beginRepair(run.id);
+      const admission = await admitWorker({
+        store,
+        run,
+        inputs,
         manifest,
-        repairFindings: findings,
-        deadlineMs,
-        maxOutputBytes: inputs.task.budget.maxOutputBytes,
-        signal: signals.signal,
-        ...hooks,
+        root: worktreePath,
+        phase: "repair",
+        role: "builder",
+        attempt: run.repairCount,
+        candidateCommit: base,
       });
-      assertNotCancelled(store, run.id);
+      let invocation: Awaited<ReturnType<typeof codexWorkerAdapter.runBuilder>>;
+      let candidate: Awaited<ReturnType<typeof commitCandidate>>;
+      try {
+        invocation = await codexWorkerAdapter.runBuilder({
+          root: worktreePath,
+          task: inputs.task,
+          manifest,
+          repairFindings: findings,
+          deadlineMs,
+          maxOutputBytes: inputs.task.budget.maxOutputBytes,
+          signal: signals.signal,
+          ...admission.hooks,
+        });
+        assertNotCancelled(store, run.id);
+        await assertGitControlState(worktreePath, gitControl);
+        candidate = await commitCandidate(
+          worktreePath,
+          base,
+          inputs.task,
+          inputs.protectedPaths,
+        );
+        store.settleWorkerInvocation(admission.invocationId, "completed", {
+          candidateCommit: candidate.commit,
+        });
+      } catch (error) {
+        settleWorkerFailure(store, admission.invocationId, "builder", error);
+        throw error;
+      }
       recordProviderUsage(
         store,
         run.id,
         "repair.builder_completed",
         invocation.usage,
-      );
-      await assertGitControlState(run.worktreePath, gitControl);
-      const candidate = await commitCandidate(
-        run.worktreePath,
-        base,
-        inputs.task,
-        inputs.protectedPaths,
       );
       return publicRunRecord(
         store.commitCandidate(run.id, candidate.commit, candidate.tree),
@@ -938,31 +1135,51 @@ export async function resumeRun(input: {
       );
     }
     store.beginBuilderAttempt(run.id, inputs.task.budget.retryCount + 1);
-    await resetCandidateWorktree(run.worktreePath, run.baseCommit);
-    store.transition(run.id, "running", "builder.resumed");
-    const hooks = lifecycleHooks(store, run.id);
-    const invocation = await runCodexBuilder({
-      root: run.worktreePath,
-      task: inputs.task,
+    await resetCandidateWorktree(worktreePath, run.baseCommit);
+    run = store.transition(run.id, "running", "builder.resumed");
+    run = store.getRun(run.id);
+    const admission = await admitWorker({
+      store,
+      run,
+      inputs,
       manifest,
-      deadlineMs,
-      maxOutputBytes: inputs.task.budget.maxOutputBytes,
-      signal: signals.signal,
-      ...hooks,
+      root: worktreePath,
+      phase: "build",
+      role: "builder",
+      attempt: run.attemptCount,
     });
-    assertNotCancelled(store, run.id);
+    let invocation: Awaited<ReturnType<typeof codexWorkerAdapter.runBuilder>>;
+    let candidate: Awaited<ReturnType<typeof commitCandidate>>;
+    try {
+      invocation = await codexWorkerAdapter.runBuilder({
+        root: worktreePath,
+        task: inputs.task,
+        manifest,
+        deadlineMs,
+        maxOutputBytes: inputs.task.budget.maxOutputBytes,
+        signal: signals.signal,
+        ...admission.hooks,
+      });
+      assertNotCancelled(store, run.id);
+      await assertGitControlState(worktreePath, gitControl);
+      candidate = await commitCandidate(
+        worktreePath,
+        run.baseCommit,
+        inputs.task,
+        inputs.protectedPaths,
+      );
+      store.settleWorkerInvocation(admission.invocationId, "completed", {
+        candidateCommit: candidate.commit,
+      });
+    } catch (error) {
+      settleWorkerFailure(store, admission.invocationId, "builder", error);
+      throw error;
+    }
     recordProviderUsage(
       store,
       run.id,
       "builder.resume_completed",
       invocation.usage,
-    );
-    await assertGitControlState(run.worktreePath, gitControl);
-    const candidate = await commitCandidate(
-      run.worktreePath,
-      run.baseCommit,
-      inputs.task,
-      inputs.protectedPaths,
     );
     return publicRunRecord(
       store.commitCandidate(run.id, candidate.commit, candidate.tree),
@@ -1013,13 +1230,21 @@ export async function cancelRun(input: {
       return publicRunRecord(current);
     }
     const active = storedActiveProcess(current);
-    if (active !== undefined && processIdentityStatus(active) !== "mismatch") {
+    try {
+      reconcileMutatingWorkerAdmissions(store, current, active);
+    } catch (error) {
+      const failure = asMillError(error);
+      if (
+        failure.code !== "ORPHANED_EXECUTION_RECONCILIATION_REQUIRED" &&
+        failure.code !== "WORKER_INVOCATION_RECONCILIATION_REQUIRED"
+      ) {
+        throw failure;
+      }
       store.recordEvent(current.id, "run.cancellation_pending", {
-        code: "ORPHANED_EXECUTION_RECONCILIATION_REQUIRED",
+        code: failure.code,
       });
       return publicRunRecord(current);
     }
-    store.setActiveProcess(current.id, null);
     return publicRunRecord(
       store.transition(current.id, "cancelled", "run.cancelled", {
         code: "OPERATOR_CANCELLED",
@@ -1051,7 +1276,9 @@ export async function runStatus(input: {
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
     if (run === undefined) return {};
     let interrupted = false;
-    let reconciliationRequired = run.status === "effect_unknown";
+    let reconciliationRequired =
+      run.status === "effect_unknown" ||
+      store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
     if (

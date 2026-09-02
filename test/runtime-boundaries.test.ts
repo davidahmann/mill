@@ -123,6 +123,63 @@ describe("runtime authority and repository boundaries", () => {
     }
   });
 
+  it("freezes all repository instructions and a content-addressed provider scope", async () => {
+    const fixture = await runtimeFixture();
+    try {
+      await Promise.all([
+        writeFile(path.join(fixture.root, "AGENTS.md"), "# Root rules\n"),
+        writeFile(
+          path.join(fixture.root, "src", "AGENTS.md"),
+          "# Source rules\n",
+        ),
+      ]);
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const first = await buildContextManifest(
+        fixture.root,
+        "a".repeat(40),
+        inputs.task,
+        inputs.config,
+        inputs.taskDigest,
+      );
+      const repeated = await buildContextManifest(
+        fixture.root,
+        "a".repeat(40),
+        inputs.task,
+        inputs.config,
+        inputs.taskDigest,
+      );
+      expect(
+        first.manifest.effectiveInstructions.map((item) => item.path),
+      ).toEqual(["AGENTS.md", "src/AGENTS.md"]);
+      expect(first.manifest.providerVisibleScope).toMatchObject({
+        repositoryScope: "worktree",
+        writablePatterns: inputs.task.allowedPaths,
+        observedReads: "unavailable",
+      });
+      expect(first.manifest.contextEpoch).toBe(repeated.manifest.contextEpoch);
+
+      const changedScope = await buildContextManifest(
+        fixture.root,
+        "a".repeat(40),
+        { ...inputs.task, allowedPaths: ["src/**"] },
+        inputs.config,
+        inputs.taskDigest,
+      );
+      expect(changedScope.manifest.contextEpoch).not.toBe(
+        first.manifest.contextEpoch,
+      );
+      await writeFile(
+        path.join(fixture.root, "src", "AGENTS.md"),
+        "# Changed source rules\n",
+      );
+      await expect(
+        assertContextFresh(fixture.root, first.manifest),
+      ).rejects.toMatchObject({ code: "INSTRUCTION_DRIFT" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("rejects output scope that overlaps task, authority, context, or command controls", async () => {
     const fixture = await runtimeFixture();
     try {
