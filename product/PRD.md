@@ -33,11 +33,20 @@ Given a PRD and supporting evidence, Mill must:
 9. push only the verified commit and open one draft PR through local `gh`;
 10. reconcile ambiguous external effects and observe human merge/main checks.
 
+In the current pre-alpha, an operator supplies the structured source manifest
+and specification proposal that Mill assesses and freezes. Mill does not yet
+claim autonomous live research or proposal generation from prose alone. Once a
+repository is integrated, `start` coordinates one already approved ready outcome
+through the existing lifecycle; it does not reinterpret the PRD on every run.
+
 For every material slice, Mill must also preserve product continuity: stable
 acceptance and invariant IDs, an approved impact manifest, a realistic scenario
 set, and item-level evidence that distinguishes new behavior from preservation.
 A generic passing test, model statement, digest, or current-run oracle change is
-not semantic evidence for an unrelated requirement.
+not semantic evidence for an unrelated requirement. For repository creation, a
+task may use bundled command evidence only when its approved scenario selects a
+named recipe oracle that declares the specific behavior and evidence paths.
+Otherwise the evidence disposition blocks.
 
 ## Trust modes
 
@@ -71,9 +80,18 @@ self-modification.
 - Humans approve consequential ambiguity and remote effects; tools do not infer
   authority from available credentials.
 - Native repo commands and typed contracts are authoritative.
+- Repository onboarding has a non-mutating product approval followed by an exact
+  integration-plan approval; apply never infers approval from a PRD.
+- Integration identities bind the generator version, canonical target, exact
+  recipe and adoption-oracle bytes, and frozen dependency lock graph.
 - Model output may vary; approved canonical bytes and exact candidates do not.
 - Research and planning propose product truth; they never approve themselves.
 - Durable worker admission precedes process launch, and a possibly started
   mutating invocation is reconciled rather than blindly replayed.
 - Required pending, skipped, stale, or flaky evidence does not count as pass.
 - Downstream repositories work without Mill.
+- Dependency preparation may use attended registry network, but candidate
+  verification is offline, source-read-only, and limited to declared scratch;
+  attendance and build trust are enforced again at the effect boundary.
+- Outcome execution compares plan, product, impact, acceptance, and task
+  authority and accounts for every nonterminal run before external spend.

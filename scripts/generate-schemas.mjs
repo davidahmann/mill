@@ -18,6 +18,11 @@ const definitions = {
   millLock: ["mill-lock.schema.json", "MillLock"],
   outcomePlan: ["outcome-plan.schema.json", "OutcomePlan"],
   productContract: ["product-contract.schema.json", "ProductContract"],
+  recipeManifest: ["recipe-manifest.schema.json", "RecipeManifest"],
+  repositoryIntegrationPlan: [
+    "repository-integration-plan.schema.json",
+    "RepositoryIntegrationPlan",
+  ],
   reviewResult: ["review-result.schema.json", "ReviewResult"],
   scenarioSet: ["scenario-set.schema.json", "ScenarioSet"],
   sourceManifest: ["source-manifest.schema.json", "SourceManifest"],

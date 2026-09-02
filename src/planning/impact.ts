@@ -120,7 +120,7 @@ export function assessImpactManifest(input: {
   authorityMode?: "authorize" | "readback";
 }): ImpactAssessment {
   const blockers: string[] = [];
-  const productDigest = canonicalDigest(input.product);
+  const productDigest = canonicalDigest(input.product as unknown as JsonValue);
   const acceptanceIds = new Set(
     input.product.acceptance.map((item) => item.id),
   );

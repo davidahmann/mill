@@ -31,7 +31,27 @@ export {
   type ImpactManifest,
   type SemanticEvidence,
 } from "./planning/impact.js";
+export {
+  loadNodeWebRecipe,
+  renderNodeWebRecipe,
+  type FileOwnership,
+  type RecipeFile,
+  type RecipeManifest,
+} from "./recipes/node-typescript-next-web.js";
+export {
+  applyAdoptionIntegration,
+  applyGreenfieldIntegration,
+  planAdoptionIntegration,
+  planDetach,
+  planGreenfieldIntegration,
+  type RepositoryIntegrationPlan,
+} from "./repository/integration.js";
 export { scanRepository, type RepositoryScan } from "./repository/scan.js";
+export {
+  dependencySnapshotDirectory,
+  prepareDependencySnapshot,
+  type DependencyPreparationResult,
+} from "./runtime/dependencies.js";
 export {
   finalizeDraftPr,
   observeDraftPr,
@@ -46,6 +66,7 @@ export {
   qualifyBaseline,
   resumeRun,
   reviewRun,
+  runInventory,
   runStatus,
   startLocalRun,
   stateBackup,
@@ -60,4 +81,11 @@ export {
   type WorkerInvocation,
   type WorkerProfile,
 } from "./runtime/worker.js";
+export {
+  nextReadyOutcome,
+  prepareRepositoryDependencies,
+  startNextReadyOutcome,
+  startFounderDelivery,
+  type NextOutcome,
+} from "./workflows/founder.js";
 export { MILL_PACKAGE, MILL_VERSION } from "./version.js";

@@ -200,6 +200,38 @@ describe("local delivery lifecycle", () => {
     }
   });
 
+  it("serializes active-run admission with run creation under the writer lease", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const approvalDigest = await qualifiedApproval(fixture);
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      store.createRun({
+        repositoryId: inputs.config.repositoryId,
+        taskId: "already-active",
+        taskDigest: inputs.taskDigest,
+        configDigest: inputs.configDigest,
+        baseCommit: (await git(fixture.root, ["rev-parse", "HEAD"])).trim(),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      store.close();
+
+      await expect(
+        startLocalRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          approvalDigest,
+        }),
+      ).rejects.toMatchObject({ code: "ACTIVE_OUTCOME_CONFLICT" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("rejects ignored-file contamination before exact-candidate verification", async () => {
     const fixture = await runtimeFixture();
     activate(fixture);

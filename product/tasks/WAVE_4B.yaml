@@ -1,0 +1,137 @@
+task_id: mill-wave-4b-founder-path
+status: closed
+objective: >-
+  Turn the approved Wave 4 product contracts into one transactional web-recipe
+  onboarding path, compatible adoption path, exact dependency and verifier
+  boundary, and resumable founder coordinator without introducing a second
+  execution or shipping state machine.
+risk_class: high
+base_commit: 39ae11f55f7f72e048c10baef3a1754fecc83286
+impact_manifest: product/impacts/WAVE_4B.yaml
+design_decisions:
+  - one exact Node.js 24, TypeScript, Next.js 16, and React 19.2 recipe is
+    supported; every other stack remains unsupported
+  - product approval and repository-integration approval are distinct exact
+    digests; neither a PRD nor a model grants apply authority
+  - greenfield apply stages and qualifies all bytes before one canonical commit
+    and publishes Git authority last through an atomic same-filesystem rename
+  - adoption creates an isolated branch and never rewrites the operator checkout
+  - generated ownership is explicit in mill.lock and detach remains plan-only
+  - registry network is attended and confined to dependency preparation;
+    candidate verification is networkless and source-read-only
+  - run next, start, and ship are coordinators over existing lifecycle methods,
+    not new state machines or authority channels
+  - the selected Playwright image truthfully determines recipe Node and npm
+    patch versions even though Mill itself uses a newer Node 24 patch
+allowed_paths:
+  - architecture/**
+  - docs/**
+  - product/**
+  - quality/**
+  - recipes/**
+  - schemas/**
+  - scripts/**
+  - src/**
+  - test/**
+  - CHANGELOG.md
+  - README.md
+  - WORKFLOW.md
+  - eslint.config.js
+  - package.json
+forbidden_paths:
+  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - .env*
+  - .github/workflows/release.yml
+acceptance_items:
+  - W4B-A1 the recipe digest binds the exact manifest and every generated asset,
+    including named behavior-specific oracles, packable dotfile aliases, and
+    syntax-safe source and Markdown product-title rendering
+  - W4B-A2 greenfield and adoption plans are deterministic exact approvals and
+    bind the canonical target; apply rejects a different approved
+    recipe/version/runtime and cannot overwrite, widen, follow a symbolic-link
+    ancestor, use future-dated approval, place the PRD inside builder-writable
+    scope, adopt credential-like files, or expose partial authority; direct
+    apply APIs require attendance
+  - W4B-A3 greenfield creates one clean initial commit only after complete
+    recipe qualification; target locking prevents concurrent apply and failure
+    removes staging without clobbering preexisting state
+  - W4B-A4 adoption supports only the exact compatible Next.js tuple, preserves
+    the exact dependency lock and native oracle bytes, creates an isolated
+    branch, and blocks hazards, missing or modified oracle files, or conflicts
+  - W4B-A5 the non-self-referential approved plan identity is recorded unchanged
+    in the plan result and mill.lock alongside recipe, base, ownership,
+    generator version, template, installed, and preexisting identities for
+    manual detach and audit
+  - W4B-A6 dependency preparation requires attendance, exact image and lock
+    bytes frozen before identity, the root package-lock consumed by npm, build
+    trust, explicit credential-free npm/HTTPS registry identity, complete
+    SHA-512-bound allowed origins, disabled lifecycle scripts, post-install lock
+    revalidation, validated output, bounded access, installed-tree content
+    identity, cancellation cleanup, and atomic reuse
+  - W4B-A7 verification mounts dependency inputs read-only, source entries
+    read-only, and only declared comma-free top-level scratch paths as tmpfs
+  - W4B-A8 the exact recipe passes format, lint, type, unit, integration,
+    browser, build, and package checks offline in the pinned OCI image
+  - W4B-A9 run next selects exactly one approved ready outcome bound to the same
+    plan, product, impact, acceptance, and task authority, and start inventories
+    every nonterminal run while new-run admission rechecks under its writer
+    lease before resuming the sole existing build, verify, review, delivery, and
+    closure lifecycle
+  - W4B-A10 start performs readiness before dependency or model spend, blocks a
+    conflicting nonterminal task, permits a later task after terminalization,
+    binds the exact repo-native PRD source, avoids build/dependency preflight
+    for remote readback and closure, and never marks ready, merges, or deploys
+  - W4B-A11 ship draft preserves the existing separate plan/apply approval and
+    exact-candidate GitHub effect protocol
+  - W4B-A12 packed-package validation loads and renders the installed recipe,
+    required dotfile and escaped title, new schemas, and all founder-path help
+  - W4B-A13 code, schemas, docs, tests, canary evidence, and closure ship in
+    this same feature change without a bookkeeping tail; shipping uses Mill's
+    native checks and ordinary Git/GitHub interfaces without a tracked Factory
+    profile, verifier, pack, sibling checkout, or runtime dependency
+validation_commands:
+  - npm run format:check
+  - npm run lint
+  - npm run typecheck
+  - npm run check:workflows
+  - npm run schemas:check
+  - npm run test:coverage
+  - npm run test:package
+final_validation_commands:
+  - npm run check
+  - exact pinned-image offline recipe check
+required_reviews:
+  - code
+  - security
+  - architecture
+scope_exclusions:
+  - live autonomous specification generation or web research; an operator still
+    supplies the structured proposal that Mill assesses and freezes
+  - remote repository creation, branch-protection mutation, automatic readiness,
+    merge, deployment, daemon operation, or hosted control plane
+  - arbitrary stack adoption, in-place dependency migration, automated detach,
+    or upgrade/rollback planning
+  - genesis release, public npm publication, or public-alpha support claims
+stop_conditions:
+  - repository integration can hide or overwrite unapproved existing content
+  - candidate verification needs candidate network or source write authority
+  - coordinator wrappers bypass an existing lifecycle approval or state machine
+  - generated repositories require Mill for native build, test, or operation
+  - the same subsystem produces recurring P0/P1 review findings
+retry_budget: 1
+changelog_intent: add transactional recipe onboarding and founder delivery path
+versioning_impact: pre-alpha additive contract and CLI expansion
+migration_impact: >-
+  mill.lock and mill.yaml gain additive integration, dependency, and scratch
+  metadata; no released repository migration is claimed
+docs_sync_refs:
+  - README.md
+  - product/PLAN.md
+  - product/PRD.md
+  - architecture/ARCHITECTURE.md
+  - docs/development.md
+  - docs/canaries/wave-4b-recipe.md
+  - WORKFLOW.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

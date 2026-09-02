@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  processCancellationScope,
   processIdentityStatus,
   runProcess,
   type ActiveProcess,
@@ -11,6 +12,29 @@ import {
 import { temporaryDirectory } from "./helpers.js";
 
 describe("controlled process runner", () => {
+  it("propagates and disposes an optional operation cancellation scope", () => {
+    const sigintListeners = process.listenerCount("SIGINT");
+    const sigtermListeners = process.listenerCount("SIGTERM");
+    const parent = new AbortController();
+    const scope = processCancellationScope(parent.signal);
+    expect(scope.signal.aborted).toBe(false);
+    parent.abort();
+    expect(scope.signal.aborted).toBe(true);
+    scope.dispose();
+    expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
+
+    const alreadyAborted = new AbortController();
+    alreadyAborted.abort();
+    const inherited = processCancellationScope(alreadyAborted.signal);
+    expect(inherited.signal.aborted).toBe(true);
+    inherited.dispose();
+
+    const standalone = processCancellationScope();
+    expect(standalone.signal.aborted).toBe(false);
+    standalone.dispose();
+  });
+
   it("enforces absolute deadlines and output budgets", async () => {
     const timed = await runProcess({
       executable: process.execPath,
@@ -233,5 +257,13 @@ describe("controlled process runner", () => {
     expect(active).toBeDefined();
     if (active === undefined) throw new Error("active process missing");
     expect(processIdentityStatus(active)).toBe("mismatch");
+    expect(
+      processIdentityStatus({
+        id: "malformed",
+        pid: 0,
+        processGroup: 0,
+        identity: `sha256:${"0".repeat(64)}`,
+      }),
+    ).toBe("unknown");
   });
 });

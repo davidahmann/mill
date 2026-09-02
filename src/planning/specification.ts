@@ -144,6 +144,33 @@ export function assessSpecificationProposal(input: {
   if (proposal.sourceManifestDigest !== input.sourceManifestDigest) {
     blockers.push("proposal source-manifest identity is stale");
   }
+  const normalizedPrdPath = path
+    .normalize(input.prdPath)
+    .split(path.sep)
+    .join("/");
+  const prdSources = sourceManifest.sources.filter((source) => {
+    const normalizedSourcePath = path
+      .normalize(source.uri)
+      .split(path.sep)
+      .join("/");
+    return (
+      normalizedSourcePath === normalizedPrdPath &&
+      (source.revision === input.prdDigest || source.digest === input.prdDigest)
+    );
+  });
+  if (prdSources.length !== 1) {
+    blockers.push("exactly one source must bind the inspected PRD identity");
+  }
+  const prdSource = prdSources[0];
+  if (
+    prdSources.length === 1 &&
+    prdSource !== undefined &&
+    !proposal.productContract.sourceRefs.includes(prdSource.id)
+  ) {
+    blockers.push(
+      `product contract does not bind the inspected PRD source: ${prdSource.id}`,
+    );
+  }
   for (const duplicate of duplicates(
     sourceManifest.sources.map((source) => source.id),
   )) {
@@ -154,6 +181,15 @@ export function assessSpecificationProposal(input: {
   }
   if (proposal.productContract.invariants.length === 0) {
     blockers.push("product contract has no stable behavioral invariants");
+  }
+  for (const outcome of proposal.productContract.outcomes) {
+    for (const acceptanceRef of outcome.acceptanceIds ?? []) {
+      if (!acceptanceIds.has(acceptanceRef)) {
+        blockers.push(
+          `outcome acceptance reference is unresolved: ${outcome.id}/${acceptanceRef}`,
+        );
+      }
+    }
   }
   for (const duplicate of duplicates([
     ...proposal.productContract.outcomes.map((item) => item.id),
@@ -198,7 +234,9 @@ export function assessSpecificationProposal(input: {
     if (question.blocking)
       blockers.push(`blocking question remains: ${question.id}`);
   }
-  const productDigest = canonicalDigest(proposal.productContract);
+  const productDigest = canonicalDigest(
+    proposal.productContract as unknown as JsonValue,
+  );
   for (const blueprint of proposal.blueprints) {
     if (blueprint.productContractDigest !== productDigest) {
       blockers.push(

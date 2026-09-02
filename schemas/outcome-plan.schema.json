@@ -20,6 +20,12 @@
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
+          "acceptanceIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          },
           "dependsOn": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
@@ -27,6 +33,10 @@
           "status": {
             "type": "string",
             "enum": ["proposed", "approved", "ready", "blocked", "closed"]
+          },
+          "taskRef": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
           }
         },
         "required": ["id", "title", "acceptance", "dependsOn", "status"],

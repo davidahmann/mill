@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
@@ -7,6 +9,8 @@ import { runCli } from "../src/cli-program.js";
 import { canonicalDigest } from "../src/contracts/canonical.js";
 import { textDigest } from "../src/runtime/inputs.js";
 import { temporaryDirectory } from "./helpers.js";
+
+const execFileAsync = promisify(execFile);
 
 function capture(): {
   io: {
@@ -527,7 +531,9 @@ describe("CLI contracts", () => {
   it("emits human output and blocks hazardous adoption", async () => {
     const temporary = await temporaryDirectory("mill-cli-adopt-");
     try {
-      await mkdir(path.join(temporary.path, ".git"));
+      await execFileAsync("/usr/bin/git", ["init", "--initial-branch=main"], {
+        cwd: temporary.path,
+      });
       await writeFile(
         path.join(temporary.path, ".git", "config"),
         "[core]\n  hooksPath = hooks\n",
@@ -541,6 +547,128 @@ describe("CLI contracts", () => {
       ).toBe(78);
       expect(output.stdout.join("")).toContain("BLOCKED: adopt.scan");
       expect(output.stdout.join("")).toContain("UNSAFE_GIT_CONFIGURATION");
+      await execFileAsync(
+        "/usr/bin/git",
+        ["config", "--unset", "core.hooksPath"],
+        { cwd: temporary.path },
+      );
+      await writeFile(path.join(temporary.path, ".npmrc"), "//registry=:x\n");
+      const sensitive = capture();
+      expect(
+        await runCli(
+          ["--cwd", temporary.path, "adopt", "--scan-only"],
+          sensitive.io,
+        ),
+      ).toBe(78);
+      expect(sensitive.stdout.join("")).toContain("SENSITIVE_PATHS_PRESENT");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("keeps integration wrappers explicit and supports read-only local utilities", async () => {
+    const temporary = await temporaryDirectory("mill-cli-integration-");
+    try {
+      const conflictingNew = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "new",
+            "app",
+            "--dry-run",
+            "--apply",
+          ],
+          conflictingNew.io,
+        ),
+      ).toBe(64);
+      expect(JSON.parse(conflictingNew.stdout.join(""))).toMatchObject({
+        reasons: [{ code: "USAGE_ERROR" }],
+      });
+      const incompleteNew = capture();
+      expect(
+        await runCli(
+          ["--json", "--cwd", temporary.path, "new", "app", "--dry-run"],
+          incompleteNew.io,
+        ),
+      ).toBe(64);
+      expect(JSON.parse(incompleteNew.stdout.join(""))).toMatchObject({
+        reasons: [{ code: "USAGE_ERROR" }],
+      });
+
+      const conflictingAdopt = capture();
+      expect(
+        await runCli(
+          ["--json", "--cwd", temporary.path, "adopt", "--plan", "--apply"],
+          conflictingAdopt.io,
+        ),
+      ).toBe(64);
+
+      const safeScan = capture();
+      const safeScanExit = await runCli(
+        ["--json", "--cwd", temporary.path, "adopt", "--scan-only"],
+        safeScan.io,
+      );
+      expect(safeScanExit, safeScan.stdout.join("")).toBe(0);
+      expect(JSON.parse(safeScan.stdout.join(""))).toMatchObject({
+        command: "adopt.scan",
+        ok: true,
+      });
+
+      await mkdir(path.join(temporary.path, ".git"));
+      await writeFile(
+        path.join(temporary.path, "mill.yaml"),
+        'schemaVersion: "1"\nrepositoryId: "123e4567-e89b-42d3-a456-426614174000"\ntrustCeiling: inspect\ncommands: {}\n',
+      );
+      const dependencies = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "dependencies",
+            "prepare",
+            "--attended",
+          ],
+          dependencies.io,
+        ),
+      ).toBe(0);
+      expect(JSON.parse(dependencies.stdout.join(""))).toMatchObject({
+        command: "dependencies.prepare",
+        data: { configured: false },
+      });
+      await writeFile(
+        path.join(temporary.path, "mill.lock"),
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n',
+      );
+      const detach = capture();
+      expect(
+        await runCli(
+          ["--json", "--cwd", temporary.path, "detach", "plan"],
+          detach.io,
+        ),
+      ).toBe(0);
+      expect(JSON.parse(detach.stdout.join(""))).toMatchObject({
+        command: "detach.plan",
+        data: { mode: "manual", remove: ["mill.lock"] },
+      });
+      await writeFile(
+        path.join(temporary.path, "mill.lock"),
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\n',
+      );
+      const legacyDetach = capture();
+      expect(
+        await runCli(
+          ["--json", "--cwd", temporary.path, "detach", "plan"],
+          legacyDetach.io,
+        ),
+      ).toBe(78);
+      expect(JSON.parse(legacyDetach.stdout.join(""))).toMatchObject({
+        reasons: [{ code: "DETACH_METADATA_UNAVAILABLE" }],
+      });
     } finally {
       await temporary.cleanup();
     }

@@ -13,6 +13,13 @@ const stableInvariantIdSchema = z.string().regex(/^INV-[A-Z0-9][A-Z0-9-]*$/u);
 const stableSourceIdSchema = z.string().regex(/^SRC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableDecisionIdSchema = z.string().regex(/^DEC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableOutcomeIdSchema = z.string().regex(/^OUT-[A-Z0-9][A-Z0-9-]*$/u);
+const uniqueNonemptyStringArraySchema = z
+  .array(z.string().min(1))
+  .min(1)
+  .refine((values) => new Set(values).size === values.length, {
+    message: "expected unique values",
+  })
+  .meta({ uniqueItems: true });
 
 export const sourceManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
@@ -116,6 +123,7 @@ export const productContractSchema = z.strictObject({
       z.strictObject({
         id: stableOutcomeIdSchema,
         statement: z.string().min(1),
+        acceptanceIds: uniqueNonemptyStringArraySchema.optional(),
       }),
     )
     .min(1),
@@ -169,6 +177,7 @@ export const scenarioSchema = z.strictObject({
     .enum(["builder_visible", "reviewer_owned", "human_acceptance"])
     .default("builder_visible"),
   executionRef: z.string().min(1).optional(),
+  recipeOracle: z.string().min(1).optional(),
   forbidden: z.array(z.string().min(1)).default([]),
 });
 
@@ -182,8 +191,13 @@ export const outcomeSchema = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1),
   acceptance: z.array(z.string().min(1)).min(1),
+  acceptanceIds: uniqueNonemptyStringArraySchema.optional(),
   dependsOn: z.array(z.string().min(1)),
   status: z.enum(["proposed", "approved", "ready", "blocked", "closed"]),
+  taskRef: z
+    .string()
+    .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+(?:\/\*\*)?$/u)
+    .optional(),
 });
 
 export const outcomePlanSchema = z.strictObject({
@@ -283,6 +297,13 @@ const repositoryPathPatternSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+(?:\/\*\*)?$/u);
 
+const repositoryMountDirectorySchema = z
+  .string()
+  .regex(
+    /^(?!\.\.?$)(?!.*[,/])[^*?[\]\\]+$/u,
+    "expected a comma-free top-level repository directory",
+  );
+
 const githubReviewPolicySchema = z
   .strictObject({
     mode: z.enum(["local_only", "github_required"]),
@@ -327,6 +348,14 @@ export const millConfigSchema = z
       .strictObject({
         image: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
         network: z.literal("none"),
+        dependencies: z
+          .strictObject({
+            manager: z.literal("npm"),
+            registry: z.literal("https://registry.npmjs.org"),
+            targetPath: z.literal("node_modules"),
+            lockPaths: z.array(repositoryPathPatternSchema).min(1),
+          })
+          .optional(),
       })
       .optional(),
     propose: z
@@ -360,6 +389,7 @@ export const millConfigSchema = z
         required: z.boolean().default(true),
         timeoutSeconds: z.number().int().min(1).max(3600).default(600),
         execution: z.enum(["oci", "host"]).default("oci"),
+        writablePaths: z.array(repositoryMountDirectorySchema).optional(),
       }),
     ),
   })
@@ -731,6 +761,115 @@ export const millLockSchema = z.strictObject({
       digest: digestSchema,
     })
     .optional(),
+  integration: z
+    .strictObject({
+      mode: z.enum(["greenfield", "adoption"]),
+      planDigest: digestSchema,
+      baseCommit: z
+        .string()
+        .regex(/^[a-f0-9]{40}$/u)
+        .nullable(),
+      files: z.array(
+        z.strictObject({
+          path: repositoryPathPatternSchema,
+          ownership: z.enum(["mill_only", "generated_once", "managed"]),
+          templateDigest: digestSchema,
+          installedDigest: digestSchema,
+          preexistingDigest: digestSchema.nullable(),
+        }),
+      ),
+    })
+    .optional(),
+});
+
+export const recipeManifestSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  id: z.literal("node-typescript-next-web"),
+  version: exactSemverSchema,
+  status: z.enum(["supported", "experimental", "unsupported"]),
+  observedAt: z.iso.datetime(),
+  runtime: z.strictObject({
+    node: exactSemverSchema,
+    npm: exactSemverSchema,
+  }),
+  stack: z.strictObject({
+    next: exactSemverSchema,
+    react: exactSemverSchema,
+    reactDom: exactSemverSchema,
+    typescript: exactSemverSchema,
+    eslint: exactSemverSchema,
+    prettier: exactSemverSchema,
+    vitest: exactSemverSchema,
+    playwright: exactSemverSchema,
+  }),
+  verifierImage: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
+  registry: z.url(),
+  licensePolicy: z.strictObject({
+    allowed: z.array(z.string().min(1)).min(1),
+    reviewedPackages: z.array(
+      z.strictObject({ name: z.string().min(1), license: z.string().min(1) }),
+    ),
+  }),
+  commands: z.strictObject({
+    required: z.array(z.string().min(1)).min(1),
+    native: z.array(z.string().min(1)).min(1),
+  }),
+  oracles: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        commandId: z.string().min(1),
+        evidencePaths: z.array(repositoryPathPatternSchema).min(1),
+        proves: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(1),
+  writablePaths: z.array(repositoryMountDirectorySchema),
+  sources: z.array(z.url()).min(1),
+});
+
+const integrationFileSchema = z.strictObject({
+  path: repositoryPathPatternSchema,
+  ownership: z.enum(["mill_only", "generated_once", "managed"]),
+  action: z.enum(["create", "retain_identical"]),
+  contentDigest: digestSchema,
+  preexistingDigest: digestSchema.nullable(),
+});
+
+export const repositoryIntegrationPlanSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  planDigest: digestSchema,
+  generator: z.strictObject({
+    package: z.literal("@davidahmann/mill"),
+    version: exactSemverSchema,
+  }),
+  mode: z.enum(["greenfield", "adoption"]),
+  target: z.strictObject({
+    directoryName: z.string().min(1),
+    canonicalPathDigest: digestSchema,
+    baseCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+    scanDigest: digestSchema.nullable(),
+  }),
+  productProposalDigest: digestSchema,
+  productContractDigest: digestSchema,
+  recipe: z.strictObject({
+    id: z.literal("node-typescript-next-web"),
+    version: exactSemverSchema,
+    digest: digestSchema,
+    status: z.literal("supported"),
+    verifierImage: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
+  }),
+  approval: z.strictObject({
+    approvedBy: z.string().min(1),
+    approvedAt: z.iso.datetime(),
+  }),
+  files: z.array(integrationFileSchema).min(1),
+  commandIds: z.array(z.string().min(1)).min(1),
+  networkDisclosure: z.array(z.string().min(1)),
+  baseline: z.literal("unverified"),
 });
 
 export const contractSchemas = {
@@ -742,6 +881,8 @@ export const contractSchemas = {
   millLock: millLockSchema,
   outcomePlan: outcomePlanSchema,
   productContract: productContractSchema,
+  recipeManifest: recipeManifestSchema,
+  repositoryIntegrationPlan: repositoryIntegrationPlanSchema,
   reviewResult: reviewResultSchema,
   scenarioSet: scenarioSetSchema,
   sourceManifest: sourceManifestSchema,

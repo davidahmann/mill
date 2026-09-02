@@ -1,5 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdtemp, realpath, rm, stat, symlink } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  opendir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -245,8 +257,151 @@ async function verifierMountSource(root: string): Promise<{
   }
 }
 
+async function removeWorkspaceSkeleton(skeleton: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await rm(skeleton, { recursive: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      const code =
+        error instanceof Error && "code" in error ? error.code : undefined;
+      if (!new Set(["EACCES", "EBUSY", "ENOTEMPTY"]).has(String(code))) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  throw new MillError(
+    "VERIFIER_WORKSPACE_CLEANUP_FAILED",
+    "Mill could not remove its protected verifier workspace skeleton.",
+    ExitCode.temporary,
+    { cause: String(lastError) },
+  );
+}
+
+async function workspaceMountPlan(
+  root: string,
+  declaredMountPaths: readonly string[],
+): Promise<{
+  mounts: string[];
+  dispose(): Promise<void>;
+}> {
+  const mountPaths = [...new Set(declaredMountPaths)].sort();
+  for (const mountPath of mountPaths) {
+    if (
+      mountPath.includes("/") ||
+      mountPath.includes(",") ||
+      mountPath === "."
+    ) {
+      throw new MillError(
+        "VERIFIER_MOUNT_PATH_UNSUPPORTED",
+        "Writable and dependency mount targets must be top-level repository directories.",
+        ExitCode.configuration,
+        { path: mountPath },
+      );
+    }
+    try {
+      await lstat(path.join(root, mountPath));
+      throw new MillError(
+        "VERIFIER_WRITABLE_PATH_OCCUPIED",
+        "A verifier mount would hide candidate content.",
+        ExitCode.configuration,
+        { path: mountPath },
+      );
+    } catch (error) {
+      if (
+        error instanceof MillError ||
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      ) {
+        throw error;
+      }
+    }
+  }
+  const source = await verifierMountSource(root);
+  const skeleton = await mkdtemp(path.join(tmpdir(), "mill-workspace-"));
+  await chmod(skeleton, 0o700);
+  try {
+    for (const mountPath of mountPaths) {
+      await mkdir(path.join(skeleton, mountPath), { mode: 0o700 });
+    }
+    const handle = await opendir(root);
+    const entries = [];
+    for await (const entry of handle) entries.push(entry);
+    if (entries.length > 256) {
+      throw new MillError(
+        "VERIFIER_WORKSPACE_ENTRY_LIMIT_EXCEEDED",
+        "The verifier workspace exceeds its top-level mount-entry limit.",
+        ExitCode.configuration,
+      );
+    }
+    const mounts = [
+      "--mount",
+      `type=bind,source=${skeleton},target=/workspace,readonly`,
+    ];
+    for (const entry of entries.sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
+      if (mountPaths.includes(entry.name)) continue;
+      if (entry.name.includes(",")) {
+        throw new MillError(
+          "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+          "A top-level candidate entry contains a comma and cannot be bound safely.",
+          ExitCode.configuration,
+          { path: entry.name },
+        );
+      }
+      const information = await lstat(path.join(root, entry.name));
+      if (information.isSymbolicLink()) {
+        throw new MillError(
+          "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+          "A top-level candidate symbolic link cannot cross the verifier mount boundary.",
+          ExitCode.configuration,
+          { path: entry.name },
+        );
+      }
+      const target = path.join(skeleton, entry.name);
+      if (information.isDirectory()) {
+        await mkdir(target, { mode: 0o700 });
+      } else if (information.isFile()) {
+        await writeFile(target, "", { flag: "wx", mode: 0o600 });
+      } else {
+        throw new MillError(
+          "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+          "A top-level candidate entry has an unsupported filesystem type.",
+          ExitCode.configuration,
+          { path: entry.name },
+        );
+      }
+      mounts.push(
+        "--mount",
+        `type=bind,source=${path.join(source.source, entry.name)},target=/workspace/${entry.name},readonly`,
+      );
+    }
+    return {
+      mounts,
+      async dispose(): Promise<void> {
+        try {
+          await removeWorkspaceSkeleton(skeleton);
+        } finally {
+          await source.dispose();
+        }
+      },
+    };
+  } catch (error) {
+    try {
+      await removeWorkspaceSkeleton(skeleton);
+    } finally {
+      await source.dispose();
+    }
+    throw error;
+  }
+}
+
 export async function verifyDeclaredCommands(input: {
   root: string;
+  dependencyRoot?: string;
   candidateCommit: string;
   config: MillConfig;
   task: TaskPacket;
@@ -310,8 +465,73 @@ export async function verifyDeclaredCommands(input: {
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
   const canonicalRoot = await realpath(input.root);
-  const mount = await verifierMountSource(canonicalRoot);
+  const dependencyMounts: string[] = [];
+  let dependencyMount:
+    Awaited<ReturnType<typeof verifierMountSource>> | undefined;
+  if (input.config.verifier.dependencies !== undefined) {
+    if (input.dependencyRoot === undefined) {
+      throw new MillError(
+        "VERIFIER_DEPENDENCIES_UNAVAILABLE",
+        "The verifier requires a qualified local dependency installation.",
+        ExitCode.unavailable,
+      );
+    }
+    const canonicalDependencyRoot = await realpath(input.dependencyRoot);
+    for (const lockPath of input.config.verifier.dependencies.lockPaths) {
+      const [candidateLock, dependencyLock] = await Promise.all([
+        realpath(path.resolve(canonicalRoot, lockPath)),
+        realpath(path.resolve(canonicalDependencyRoot, lockPath)),
+      ]);
+      if (
+        !isWithin(canonicalRoot, candidateLock) ||
+        !isWithin(canonicalDependencyRoot, dependencyLock) ||
+        createHash("sha256")
+          .update(await readFile(candidateLock))
+          .digest("hex") !==
+          createHash("sha256")
+            .update(await readFile(dependencyLock))
+            .digest("hex")
+      ) {
+        throw new MillError(
+          "VERIFIER_DEPENDENCY_LOCK_DRIFT",
+          "The dependency installation is bound to different lock inputs.",
+          ExitCode.configuration,
+          { lockPath },
+        );
+      }
+    }
+    const dependencyPath = await realpath(
+      path.resolve(canonicalDependencyRoot, "node_modules"),
+    );
+    if (
+      !isWithin(canonicalDependencyRoot, dependencyPath) ||
+      !(await stat(dependencyPath)).isDirectory()
+    ) {
+      throw new MillError(
+        "VERIFIER_DEPENDENCIES_UNAVAILABLE",
+        "The configured dependency path is not a qualified local directory.",
+        ExitCode.unavailable,
+      );
+    }
+    dependencyMount = await verifierMountSource(dependencyPath);
+    dependencyMounts.push(
+      "--mount",
+      `type=bind,source=${dependencyMount.source},target=/workspace/${input.config.verifier.dependencies.targetPath},readonly`,
+    );
+  }
+  let workspace: Awaited<ReturnType<typeof workspaceMountPlan>> | undefined;
   try {
+    workspace = await workspaceMountPlan(canonicalRoot, [
+      ...(input.config.verifier.dependencies === undefined
+        ? []
+        : [input.config.verifier.dependencies.targetPath]),
+      ...input.task.commandIds.flatMap(
+        (commandId) =>
+          input.config.commands[commandId]?.writablePaths?.map(
+            (configuredPath) => configuredPath.replace(/\/\*\*$/u, ""),
+          ) ?? [],
+      ),
+    ]);
     for (let index = 0; index < input.task.commandIds.length; index += 1) {
       const commandId = input.task.commandIds[index];
       if (commandId === undefined) continue;
@@ -376,12 +596,31 @@ export async function verifyDeclaredCommands(input: {
         Date.now() + command.timeoutSeconds * 1000,
       );
       const containerName = `mill-${randomUUID()}`;
+      const writableMounts: string[] = [];
+      for (const configuredPath of command.writablePaths ?? []) {
+        const writablePath = configuredPath.replace(/\/\*\*$/u, "");
+        const absoluteWritablePath = path.resolve(canonicalRoot, writablePath);
+        if (!isWithin(canonicalRoot, absoluteWritablePath)) {
+          throw new MillError(
+            "VERIFIER_WRITABLE_PATH_INVALID",
+            "A verifier writable path escaped the candidate workspace.",
+            ExitCode.configuration,
+            { path: configuredPath },
+          );
+        }
+        writableMounts.push(
+          "--mount",
+          `type=tmpfs,target=/workspace/${writablePath},tmpfs-size=268435456,tmpfs-mode=1777`,
+        );
+      }
       let result: ProcessResult;
       try {
         result = await runProcess({
           executable: docker,
           args: [
             "run",
+            "--pull",
+            "never",
             "--name",
             containerName,
             "--label",
@@ -394,21 +633,30 @@ export async function verifyDeclaredCommands(input: {
             "--security-opt",
             "no-new-privileges",
             "--pids-limit",
-            "128",
+            "256",
             "--memory",
             "1g",
             "--cpus",
             "2",
             "--tmpfs",
             "/tmp:rw,noexec,nosuid,nodev,size=256m",
-            "--mount",
-            `type=bind,source=${mount.source},target=/workspace,readonly`,
+            "--tmpfs",
+            "/dev/shm:rw,nosuid,nodev,size=256m",
+            ...workspace.mounts,
+            ...dependencyMounts,
+            ...writableMounts,
             "--workdir",
             containerCwd,
             "--user",
             `${uid}:${gid}`,
             "--env",
             "HOME=/tmp",
+            "--env",
+            "CI=1",
+            "--env",
+            "NEXT_TELEMETRY_DISABLED=1",
+            "--env",
+            "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
             "--entrypoint",
             commandExecutable,
             input.config.verifier.image,
@@ -468,6 +716,10 @@ export async function verifyDeclaredCommands(input: {
       ...(input.scenarios === undefined ? {} : { scenarios: input.scenarios }),
     });
   } finally {
-    await mount.dispose();
+    try {
+      await workspace?.dispose();
+    } finally {
+      await dependencyMount?.dispose();
+    }
   }
 }

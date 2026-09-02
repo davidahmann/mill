@@ -37,6 +37,30 @@ export interface ProcessResult {
   cancelled: boolean;
 }
 
+export interface ProcessCancellationScope {
+  signal: AbortSignal;
+  dispose(): void;
+}
+
+export function processCancellationScope(
+  parent?: AbortSignal,
+): ProcessCancellationScope {
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  process.once("SIGINT", abort);
+  process.once("SIGTERM", abort);
+  parent?.addEventListener("abort", abort, { once: true });
+  if (parent?.aborted === true) abort();
+  return {
+    signal: controller.signal,
+    dispose(): void {
+      process.removeListener("SIGINT", abort);
+      process.removeListener("SIGTERM", abort);
+      parent?.removeEventListener("abort", abort);
+    },
+  };
+}
+
 function terminate(pid: number, signal: NodeJS.Signals): void {
   try {
     if (process.platform === "win32") {

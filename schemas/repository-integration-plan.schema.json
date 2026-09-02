@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "planDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "generator": {
+      "type": "object",
+      "properties": {
+        "package": { "type": "string", "const": "@davidahmann/mill" },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        }
+      },
+      "required": ["package", "version"],
+      "additionalProperties": false
+    },
+    "mode": { "type": "string", "enum": ["greenfield", "adoption"] },
+    "target": {
+      "type": "object",
+      "properties": {
+        "directoryName": { "type": "string", "minLength": 1 },
+        "canonicalPathDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "baseCommit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "scanDigest": {
+          "anyOf": [
+            { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": [
+        "directoryName",
+        "canonicalPathDigest",
+        "baseCommit",
+        "scanDigest"
+      ],
+      "additionalProperties": false
+    },
+    "productProposalDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "productContractDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "recipe": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "const": "node-typescript-next-web" },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "status": { "type": "string", "const": "supported" },
+        "verifierImage": {
+          "type": "string",
+          "pattern": "^[^@\\s]+@sha256:[a-f0-9]{64}$"
+        }
+      },
+      "required": ["id", "version", "digest", "status", "verifierImage"],
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "approvedBy": { "type": "string", "minLength": 1 },
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": ["approvedBy", "approvedAt"],
+      "additionalProperties": false
+    },
+    "files": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+          },
+          "ownership": {
+            "type": "string",
+            "enum": ["mill_only", "generated_once", "managed"]
+          },
+          "action": {
+            "type": "string",
+            "enum": ["create", "retain_identical"]
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "preexistingDigest": {
+            "anyOf": [
+              { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "ownership",
+          "action",
+          "contentDigest",
+          "preexistingDigest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "commandIds": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "networkDisclosure": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "baseline": { "type": "string", "const": "unverified" }
+  },
+  "required": [
+    "schemaVersion",
+    "planDigest",
+    "generator",
+    "mode",
+    "target",
+    "productProposalDigest",
+    "productContractDigest",
+    "recipe",
+    "approval",
+    "files",
+    "commandIds",
+    "networkDisclosure",
+    "baseline"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/repository-integration-plan.schema.json",
+  "title": "RepositoryIntegrationPlan"
+}

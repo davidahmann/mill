@@ -166,6 +166,13 @@ describe("runtime CLI contracts", () => {
         ]),
       ).toMatchObject({ exitCode: 0, value: { ok: true } });
 
+      expect(
+        await jsonCommand(["--cwd", fixture.root, "cancel", "--run", runId]),
+      ).toMatchObject({
+        exitCode: 0,
+        value: { data: { run: { status: "cancelled" } } },
+      });
+
       const second = await jsonCommand([
         "--cwd",
         fixture.root,

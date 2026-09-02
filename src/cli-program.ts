@@ -10,6 +10,13 @@ import { asMillError, ExitCode, MillError } from "./errors.js";
 import { inspectPrd } from "./intake/prd.js";
 import { scanRepository } from "./repository/scan.js";
 import {
+  applyAdoptionIntegration,
+  applyGreenfieldIntegration,
+  planAdoptionIntegration,
+  planDetach,
+  planGreenfieldIntegration,
+} from "./repository/integration.js";
+import {
   assessSpecificationProposal,
   loadPlanningSources,
   loadSpecificationProposal,
@@ -44,6 +51,11 @@ import {
 import { commandResult, formatHuman, type CommandResult } from "./result.js";
 import { safeReadText } from "./security/safe-path.js";
 import { MILL_VERSION } from "./version.js";
+import {
+  prepareRepositoryDependencies,
+  startNextReadyOutcome,
+  startFounderDelivery,
+} from "./workflows/founder.js";
 
 export interface CliIo {
   stdout: { write(value: string): unknown };
@@ -68,6 +80,63 @@ function emit(io: CliIo, json: boolean, result: CommandResult<unknown>): void {
 
 function globals(program: Command): GlobalOptions {
   return program.opts<GlobalOptions>();
+}
+
+function requiredValue(value: string | undefined, option: string): string {
+  if (value === undefined || value.trim().length === 0) {
+    throw new MillError(
+      "USAGE_ERROR",
+      `${option} is required for this operation.`,
+      ExitCode.usage,
+    );
+  }
+  return value;
+}
+
+interface IntegrationCliOptions {
+  prd?: string;
+  sources?: string;
+  proposal?: string;
+  approveProduct?: string;
+  approvePlan?: string;
+  repositoryId?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  authorName?: string;
+  authorEmail?: string;
+  attended?: boolean;
+}
+
+function integrationOptions(
+  root: string,
+  options: IntegrationCliOptions,
+): {
+  sourceRoot: string;
+  prdPath: string;
+  sourceManifestPath: string;
+  proposalPath: string;
+  productApprovalDigest: string;
+  repositoryId: string;
+  approvedBy: string;
+  approvedAt: string;
+  authorName: string;
+  authorEmail: string;
+} {
+  return {
+    sourceRoot: root,
+    prdPath: requiredValue(options.prd, "--prd"),
+    sourceManifestPath: requiredValue(options.sources, "--sources"),
+    proposalPath: requiredValue(options.proposal, "--proposal"),
+    productApprovalDigest: requiredValue(
+      options.approveProduct,
+      "--approve-product",
+    ),
+    repositoryId: requiredValue(options.repositoryId, "--repository-id"),
+    approvedBy: requiredValue(options.approvedBy, "--approved-by"),
+    approvedAt: requiredValue(options.approvedAt, "--approved-at"),
+    authorName: requiredValue(options.authorName, "--author-name"),
+    authorEmail: requiredValue(options.authorEmail, "--author-email"),
+  };
 }
 
 export function createProgram(io: CliIo, jsonErrors = false): Command {
@@ -147,58 +216,275 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     });
 
   program
+    .command("new <directory>")
+    .description("preview or transactionally create the supported web recipe")
+    .option("--dry-run", "return the exact approved file plan without writes")
+    .option("--apply", "apply the exact approved file plan")
+    .option("--prd <path>", "PRD path inside the selected root")
+    .option("--sources <path>", "source manifest path")
+    .option("--proposal <path>", "approved specification proposal path")
+    .option("--approve-product <digest>", "exact specification approval digest")
+    .option("--approve-plan <digest>", "exact integration-plan approval digest")
+    .option("--repository-id <uuid>", "new stable repository UUID")
+    .option("--approved-by <identity>", "human integration approver")
+    .option("--approved-at <time>", "exact ISO approval time")
+    .option("--author-name <name>", "initial commit author name")
+    .option("--author-email <email>", "initial commit author email")
+    .option("--attended", "approve disclosed registry and local Git effects")
+    .action(
+      async (
+        directory: string,
+        options: IntegrationCliOptions & { dryRun?: boolean; apply?: boolean },
+      ) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        if (options.dryRun === options.apply) {
+          throw new MillError(
+            "USAGE_ERROR",
+            "Choose exactly one of --dry-run or --apply.",
+            ExitCode.usage,
+          );
+        }
+        const common = {
+          ...integrationOptions(root, options),
+          targetDirectory: directory,
+        };
+        if (options.dryRun === true) {
+          const planned = await planGreenfieldIntegration(common);
+          emit(
+            io,
+            global.json === true,
+            commandResult({
+              command: "new.plan",
+              ok: true,
+              data: {
+                plan: planned.plan,
+                approvalDigest: planned.approvalDigest,
+              },
+            }),
+          );
+          return;
+        }
+        if (options.attended !== true) {
+          throw new MillError(
+            "ATTENDANCE_REQUIRED",
+            "Greenfield apply requires attended registry and local Git authority.",
+            ExitCode.configuration,
+          );
+        }
+        const result = await applyGreenfieldIntegration({
+          ...common,
+          attended: true,
+          planApprovalDigest: requiredValue(
+            options.approvePlan,
+            "--approve-plan",
+          ),
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "new.apply", ok: true, data: result }),
+        );
+      },
+    );
+
+  program
     .command("adopt")
     .description(
-      "inspect an existing repository without executing its commands",
+      "scan, plan, or transactionally integrate an existing repository",
     )
-    .requiredOption("--scan-only", "perform only the static adoption scan")
+    .option("--scan-only", "perform only the static adoption scan")
+    .option("--plan", "return an exact adoption file plan")
+    .option("--apply", "apply an approved plan in an isolated branch")
+    .option("--prd <path>", "repo-native PRD path")
+    .option("--sources <path>", "source manifest path")
+    .option("--proposal <path>", "approved specification proposal path")
+    .option("--approve-product <digest>", "exact specification approval digest")
+    .option("--approve-plan <digest>", "exact integration-plan approval digest")
+    .option("--repository-id <uuid>", "new stable repository UUID")
+    .option("--approved-by <identity>", "human integration approver")
+    .option("--approved-at <time>", "exact ISO approval time")
+    .option("--author-name <name>", "adoption commit author name")
+    .option("--author-email <email>", "adoption commit author email")
+    .option("--attended", "approve isolated local branch creation")
+    .action(
+      async (
+        options: IntegrationCliOptions & {
+          scanOnly?: boolean;
+          plan?: boolean;
+          apply?: boolean;
+        },
+      ) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const selected = [options.scanOnly, options.plan, options.apply].filter(
+          (value) => value === true,
+        ).length;
+        if (selected !== 1) {
+          throw new MillError(
+            "USAGE_ERROR",
+            "Choose exactly one of --scan-only, --plan, or --apply.",
+            ExitCode.usage,
+          );
+        }
+        if (options.plan === true || options.apply === true) {
+          const common = {
+            ...integrationOptions(root, options),
+            repositoryRoot: root,
+          };
+          if (options.plan === true) {
+            const planned = await planAdoptionIntegration(common);
+            emit(
+              io,
+              global.json === true,
+              commandResult({
+                command: "adopt.plan",
+                ok: true,
+                data: {
+                  plan: planned.plan,
+                  approvalDigest: planned.approvalDigest,
+                },
+              }),
+            );
+            return;
+          }
+          if (options.attended !== true) {
+            throw new MillError(
+              "ATTENDANCE_REQUIRED",
+              "Adoption apply requires attended local branch authority.",
+              ExitCode.configuration,
+            );
+          }
+          const result = await applyAdoptionIntegration({
+            ...common,
+            attended: true,
+            planApprovalDigest: requiredValue(
+              options.approvePlan,
+              "--approve-plan",
+            ),
+          });
+          emit(
+            io,
+            global.json === true,
+            commandResult({ command: "adopt.apply", ok: true, data: result }),
+          );
+          return;
+        }
+        const report = await scanRepository(root);
+        const blocked =
+          report.gitConfigHazards.length > 0 ||
+          report.truncatedDirectories.length > 0 ||
+          report.symlinksSkipped.length > 0 ||
+          report.secretReferences.length > 0;
+        const reasons = [
+          ...(report.gitConfigHazards.length > 0
+            ? [
+                {
+                  code: "UNSAFE_GIT_CONFIGURATION",
+                  message:
+                    "Repository Git configuration requires human disposition.",
+                },
+              ]
+            : []),
+          ...(report.truncatedDirectories.length > 0
+            ? [
+                {
+                  code: "SCAN_INCOMPLETE",
+                  message:
+                    "Repository scan reached its depth limit and is incomplete.",
+                },
+              ]
+            : []),
+          ...(report.symlinksSkipped.length > 0
+            ? [
+                {
+                  code: "SYMLINKS_UNSUPPORTED",
+                  message:
+                    "Repository symbolic links require human disposition before adoption.",
+                },
+              ]
+            : []),
+          ...(report.secretReferences.length > 0
+            ? [
+                {
+                  code: "SENSITIVE_PATHS_PRESENT",
+                  message:
+                    "Repository credential-like files require human disposition before adoption.",
+                },
+              ]
+            : []),
+        ];
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "adopt.scan",
+            ok: !blocked,
+            status: blocked ? "blocked" : "ok",
+            data: report,
+            reasons,
+          }),
+        );
+        if (blocked) {
+          throw new MillError(
+            reasons[0]?.code ?? "SCAN_INCOMPLETE",
+            reasons[0]?.message ?? "Repository scan is incomplete.",
+            ExitCode.configuration,
+            { resultAlreadyEmitted: true },
+          );
+        }
+      },
+    );
+
+  const dependencies = program
+    .command("dependencies")
+    .description("manage exact local verifier dependency snapshots");
+  dependencies
+    .command("prepare")
+    .description("prepare one lock-bound snapshot through the exact OCI image")
+    .requiredOption(
+      "--attended",
+      "approve disclosed npm registry network access",
+    )
     .action(async () => {
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
-      const report = await scanRepository(root);
-      const blocked =
-        report.gitConfigHazards.length > 0 ||
-        report.truncatedDirectories.length > 0;
-      const reasons = [
-        ...(report.gitConfigHazards.length > 0
-          ? [
-              {
-                code: "UNSAFE_GIT_CONFIGURATION",
-                message:
-                  "Repository Git configuration requires human disposition.",
-              },
-            ]
-          : []),
-        ...(report.truncatedDirectories.length > 0
-          ? [
-              {
-                code: "SCAN_INCOMPLETE",
-                message:
-                  "Repository scan reached its depth limit and is incomplete.",
-              },
-            ]
-          : []),
-      ];
+      const result = await prepareRepositoryDependencies(root, true);
       emit(
         io,
         global.json === true,
         commandResult({
-          command: "adopt.scan",
-          ok: !blocked,
-          status: blocked ? "blocked" : "ok",
-          data: report,
-          reasons,
+          command: "dependencies.prepare",
+          ok: true,
+          data: result ?? { configured: false },
         }),
       );
-      if (blocked) {
-        throw new MillError(
-          reasons[0]?.code ?? "SCAN_INCOMPLETE",
-          reasons[0]?.message ?? "Repository scan is incomplete.",
-          ExitCode.configuration,
-          { resultAlreadyEmitted: true },
-        );
-      }
+    });
+
+  const detach = program
+    .command("detach")
+    .description("inspect manual Mill detachment");
+  detach
+    .command("plan")
+    .description(
+      "report Mill-only removals and downstream-owned retained files",
+    )
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "detach.plan",
+          ok: true,
+          data: await planDetach(root),
+        }),
+      );
     });
 
   program
@@ -502,35 +788,112 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       }
     });
 
-  program
+  const run = program
     .command("run")
     .description(
       "build one explicitly approved task in an isolated local worktree",
     )
-    .requiredOption("--task <path>", "approved task packet path")
+    .option("--task <path>", "approved task packet path")
+    .option(
+      "--approve <digest>",
+      "approval digest from successful matching baseline qualification",
+    )
+    .option("--attended", "acknowledge attended trusted-host Codex execution")
+    .action(
+      async (options: {
+        task?: string;
+        approve?: string;
+        attended?: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        if (options.attended !== true) {
+          throw new MillError(
+            "ATTENDANCE_REQUIRED",
+            "Run requires attended trusted-host Codex authority.",
+            ExitCode.configuration,
+          );
+        }
+        const result = await startLocalRun({
+          root,
+          taskPath: requiredValue(options.task, "--task"),
+          approvalDigest: requiredValue(options.approve, "--approve"),
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "run", ok: true, data: result }),
+        );
+      },
+    );
+  run
+    .command("next")
+    .description(
+      "run the one ready approved outcome through the existing lifecycle",
+    )
     .requiredOption(
       "--approve <digest>",
       "approval digest from successful matching baseline qualification",
     )
-    .requiredOption(
-      "--attended",
-      "acknowledge attended trusted-host Codex execution",
-    )
-    .action(async (options: { task: string; approve: string }) => {
+    .requiredOption("--attended", "acknowledge attended trusted-host execution")
+    .action(async (options: { approve: string }) => {
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
-      const result = await startLocalRun({
+      const started = await startNextReadyOutcome({
         root,
-        taskPath: options.task,
         approvalDigest: options.approve,
       });
       emit(
         io,
         global.json === true,
-        commandResult({ command: "run", ok: true, data: result }),
+        commandResult({
+          command: "run.next",
+          ok: true,
+          data: { outcome: started.outcome, ...started.result },
+        }),
       );
     });
+
+  program
+    .command("start")
+    .description(
+      "advance the one ready outcome through the resumable founder path",
+    )
+    .requiredOption("--prd <path>", "approved repo-native PRD path")
+    .option("--repo <path>", "managed repository path")
+    .option(
+      "--draft-pr",
+      "prepare the later exact reviewed candidate's draft-PR plan",
+    )
+    .requiredOption(
+      "--attended",
+      "approve attended dependency, model, and scoped forge use",
+    )
+    .action(
+      async (options: { prd: string; repo?: string; draftPr?: boolean }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(options.repo ?? global.cwd);
+        await enforceExactVersion(root);
+        const inspectedPrd = path
+          .normalize(options.prd)
+          .split(path.sep)
+          .join("/");
+        await safeReadText(root, inspectedPrd, 2 * 1024 * 1024);
+        const result = await startFounderDelivery({
+          root,
+          prdPath: inspectedPrd,
+          attended: true,
+          draftPr: options.draftPr === true,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "start", ok: true, data: result }),
+        );
+      },
+    );
 
   program
     .command("status")
@@ -829,6 +1192,68 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         );
       }
     });
+
+  program
+    .command("ship")
+    .description(
+      "plan or open one draft PR through the existing delivery state machine",
+    )
+    .requiredOption("--draft", "limit shipping to one draft pull request")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "reviewed run identifier")
+    .option(
+      "--approve <digest>",
+      "exact unexpired digest returned by this wrapper",
+    )
+    .option("--attended", "acknowledge attended GitHub authority")
+    .action(
+      async (options: {
+        task: string;
+        run: string;
+        approve?: string;
+        attended?: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        if (options.approve === undefined) {
+          const result = await planDraftPr({
+            root,
+            taskPath: options.task,
+            runId: options.run,
+          });
+          emit(
+            io,
+            global.json === true,
+            commandResult({
+              command: "ship.draft.plan",
+              ok: true,
+              data: result,
+            }),
+          );
+          return;
+        }
+        if (options.attended !== true) {
+          throw new MillError(
+            "ATTENDANCE_REQUIRED",
+            "Draft shipping requires attended use of the operator-owned GitHub session.",
+            ExitCode.configuration,
+          );
+        }
+        const result = await openDraftPr({
+          root,
+          taskPath: options.task,
+          runId: options.run,
+          approvalDigest: options.approve,
+          attended: true,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "ship.draft.open", ok: true, data: result }),
+        );
+      },
+    );
 
   program
     .command("cancel")

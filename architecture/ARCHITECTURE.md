@@ -81,6 +81,85 @@ same transaction that clears its active-process binding. A possibly started
 mutating invocation becomes uncertain and is reconciled from candidate, process,
 and worktree state instead of being blindly replayed.
 
+Wave 4B turns those approved contracts into repository integration without
+adding another executor. The bundled `node-typescript-next-web` recipe binds one
+manifest digest to every exact generated asset, dependency version, runtime
+patch, native command, license allowlist, and digest-pinned verifier image. A
+greenfield plan is staged outside its destination, receives a separate exact
+human approval, prepares lock-bound dependencies through attended registry
+network, runs the complete recipe gate, creates one canonical DCO commit, and
+only then reserves the still-absent target without replacement. It materializes
+files without `.git` and atomically renames the complete staged `.git` directory
+into place as the final authority-publication boundary; the reserved path is not
+a repository before that operation. A target-scoped exclusive lock prevents
+concurrent Mill apply, while the exclusive reservation preserves a target
+created by another process after approval. Greenfield publication is a two-phase
+cancellation boundary: target materialization stays cancellable and rechecks
+immediately before the atomic `.git` rename; once that rename is invoked, Mill
+completes and reports the exact published result. Failure removes staging, the
+Mill-owned reservation, and only state created by that attempt. Adoption first
+performs the static scanner and exact compatibility checks, rejects symbolic
+links and credential-like files including `.npmrc`, and requires the approved
+PRD to remain outside generated builder-writable source scopes. It then records
+only non-conflicting integration files on an isolated branch; the operator
+checkout does not move. Adopted commands retain their native scripts only when
+they and their recipe-owned oracle files match the exact qualified closure; Mill
+does not guess an arbitrary repository's test graph. `mill.lock` records recipe
+and plan identity, base commit, file ownership, template bytes, installed bytes,
+and preexisting bytes so detachment can remain an inspectable manual decision.
+The approved plan identity excludes its derived lock bytes to avoid a digest
+cycle, binds every other plan field and file action including a digest of the
+canonical absolute target, and is then recorded unchanged in both the plan and
+`mill.lock`. Planning also proves that the approved blueprint selects the exact
+bundled recipe, version, and runtime. Packable template aliases are rendered to
+required dotfiles, and product values are emitted as syntax-safe source and
+Markdown literals. A generated product task may use recipe command evidence only
+when its approved scenario names a matching recipe oracle. That oracle declares
+the specific delivered behavior, command, and evidence paths; a generic `check`
+label alone grants no product evidence. Selected invariants must be
+command-verifiable, and scenarios cannot cross the selected outcome's acceptance
+closure. The integration identity also binds the exact Mill generator
+package/version. Greenfield targets are canonicalized beneath the selected root
+and reject symbolic-link or non-directory ancestors before plan or apply
+effects. Integration writes independently reject unsafe file ancestors rather
+than trusting a previous scan. Generated task risk is derived from affected
+invariant criticality; medium- and high-risk outcomes need an approved
+executable non-normal scenario.
+
+Dependency preparation and candidate verification are separate authorities.
+Preparation uses the exact verifier image, an explicit npm manager and HTTPS
+registry origin, disabled lifecycle scripts, bounded resources, and an attended
+network disclosure. The exported boundary independently requires build trust and
+attendance. It copies approved lock inputs to staging before identity, rejects
+an absent root `package-lock.json`, alternate or credential/query-bearing
+sources, unsupported links/workspaces, malformed or incomplete SHA-512
+integrity, and absent or symbolic dependency output, then rechecks the frozen
+inputs before atomically publishing a snapshot keyed by verifier image, manager,
+registry, target, and lock bytes. The marker also binds a deterministic digest
+of every installed directory, regular-file byte stream, executable bit, and
+contained symbolic-link target; both preparation reuse and verification
+recompute it. Operator cancellation reaches the networked installer process
+group and cleanup completes before the cancellation result is returned.
+Verification never installs or pulls. It mounts that snapshot read-only, mounts
+each top-level source entry read-only through a protected workspace skeleton,
+and exposes only declared comma-free top-level scratch directories as bounded
+tmpfs. This preserves a read-only candidate while supporting framework and
+browser outputs. Nested scratch paths, occupied mount targets, symbolic links,
+unsupported entries, and ambiguous comma-bearing entry names fail closed.
+
+The founder commands are coordinators, not new state machines. `run next`
+resolves exactly one ready outcome and calls the existing run boundary. `start`
+binds that outcome, its product-contract digest, approved impact, acceptance
+set, and task before registry or model spend, inventories all nonterminal runs
+rather than trusting recency, then advances the same sole durable build,
+verification, review, remote-readback, and closure states. Remote readback and
+closure do not re-run build preflight or dependency preparation. `ship --draft`
+retains the existing separate exact proposal and attended open operations. None
+of these commands can mark ready, merge, deploy, or interpret an unapproved PRD
+as execution authority. The lifecycle boundary repeats the no-active-run check
+under the same exclusive writer lease that creates a run, so two coordinators
+cannot pass a stale preflight and create parallel lifecycles.
+
 The GitHub adapter is isolated behind the delivery coordinator. Planning reads
 the live delegated actor, repository node identity, clone URL, fork status and
 default branch, then binds them with the candidate commit/tree, task/config,
@@ -179,12 +258,13 @@ allowing writes. There is no background daemon or implicit retry.
 - GitHub shipper, effect journal, readback, and closure;
 - audits and qualification/release commands.
 
-The first qualified greenfield recipe is a Node.js 24 TypeScript web modular
-monolith using Next.js 16 App Router and the React 19.2 family. It is
-deliberately one recipe, not a generalized stack claim. Wave 4B must freeze
-exact dependency and OCI identities, generate native
-lint/type/unit/integration/browser/build gates, and prove the repository works
-without Mill before applying it.
+The first qualified greenfield recipe is a Node.js 24.18.1 and npm 11.16.0
+TypeScript web modular monolith using Next.js 16.3.4, React 19.2.8, and
+Playwright 1.62.1. These runtime patches truthfully match the selected exact OCI
+image and are intentionally independent of Mill's Node 24.20.0 maintainer
+runtime. The recipe generates native format, lint, type, unit, integration,
+browser, build, and package gates and remains independently operable with npm.
+It is deliberately one qualified recipe, not a generalized stack claim.
 
 ## Identity and authority
 
@@ -197,18 +277,22 @@ before the call and reconciles unknown outcomes before retry.
 ## Containment claim
 
 Selected verification commands run against a clean exact candidate in a
-digest-pinned OCI environment with no network, a read-only root and workspace,
-dropped capabilities, no-new-privileges, resource bounds, and no implicit image
-pull. Every command receives an opaque Mill-owned container name and evidence is
-withheld until an unconditional, separately bounded `docker rm --force`
-succeeds. If a canonical workspace path contains a comma, Mill mounts it through
-a mode-restricted, exact-realpath temporary alias so Docker's comma-delimited
-long syntax does not truncate the source. Codex runs in attended trusted-host
-mode using workspace-write sandboxing and promotion-time Git scope and identity
-checks. Mill does not claim this prevents all host access. Stronger containment
-requires a separately qualified container/VM worker with controlled model
-authentication and no host-home, Docker-socket, keychain, or forge credential
-access.
+digest-pinned OCI environment with no network, a read-only root, individually
+read-only top-level source mounts, dropped capabilities, no-new-privileges,
+bounded PID/memory/CPU/shared-memory/output/deadline resources, and no implicit
+image pull. Declared top-level dependency inputs mount read-only and declared
+top-level scratch outputs mount as bounded tmpfs; they may not hide candidate
+content. Every command receives an opaque Mill-owned container name and evidence
+is withheld until an unconditional, separately bounded `docker rm --force`
+succeeds. If the canonical workspace or dependency source path contains a comma,
+Mill uses a mode-restricted exact-realpath alias so Docker's comma-delimited
+long syntax cannot truncate it. A top-level candidate entry containing a comma
+is not representable by this verifier and blocks. Codex runs in attended
+trusted-host mode using workspace-write sandboxing and promotion-time Git scope
+and identity checks. Mill does not claim this prevents all host access. Stronger
+containment requires a separately qualified container/VM worker with controlled
+model authentication and no host-home, Docker-socket, keychain, or forge
+credential access.
 
 ## Release trust
 

@@ -14,10 +14,13 @@ published eventually as `@davidahmann/mill` to avoid collision with the existing
 
 Wave 4A adds source-backed planning contracts, stable product invariants,
 approved per-slice impact, scenario-specific semantic evidence, and durable
-worker admission. Its planning commands are deliberately read-only: today an
-operator supplies the structured proposal, while Wave 4B will coordinate the
-qualified planner and transactionally apply the first Node.js 24/Next.js 16 web
-recipe.
+worker admission. Wave 4B adds one exact Node.js 24/Next.js 16 web recipe,
+transactional greenfield and compatible-adoption integration, lock-bound
+dependency preparation, offline read-only recipe verification, manual detach
+planning, and resumable founder commands. Planning remains deliberately honest:
+in this pre-alpha, an operator supplies the structured proposal that Mill
+assesses and freezes; live autonomous research and proposal generation are not
+implemented.
 
 Mill's v1 boundary is deliberately narrow:
 
@@ -43,6 +46,84 @@ node dist/cli.js doctor --mode inspect
 node dist/cli.js inspect --prd product/PRD.md
 node dist/cli.js adopt --scan-only
 ```
+
+## Onboard one supported repository
+
+The first supported recipe is exact: Node.js 24.18.1, npm 11.16.0, Next.js
+16.3.4, React 19.2.8, TypeScript 6.0.3, and Playwright 1.62.1 in a digest-pinned
+OCI image. Mill itself uses Node.js 24.20.0; the recipe patches follow the
+contents of its verifier image.
+
+First run the read-only specification assessment and copy its exact approval
+digest. Then preview a greenfield or adoption plan. Apply is a second explicit,
+attended operation bound to that exact plan:
+
+```sh
+node dist/cli.js --json plan specification \
+  --prd product/PRD.md --sources product/sources.yaml \
+  --proposal product/proposal.yaml
+
+node dist/cli.js --json new my-product --dry-run \
+  --prd product/PRD.md --sources product/sources.yaml \
+  --proposal product/proposal.yaml --approve-product sha256:<product> \
+  --repository-id <uuid> --approved-by <identity> --approved-at <iso-time> \
+  --author-name <name> --author-email <email>
+
+node dist/cli.js --json new my-product --apply --attended \
+  --prd product/PRD.md --sources product/sources.yaml \
+  --proposal product/proposal.yaml --approve-product sha256:<product> \
+  --approve-plan sha256:<integration-plan> --repository-id <uuid> \
+  --approved-by <identity> --approved-at <iso-time> \
+  --author-name <name> --author-email <email>
+```
+
+For an existing compatible repository, use `adopt --plan` and then
+`adopt --apply --attended` with the same authority fields. Adoption supports
+only the exact recipe-compatible Next.js tuple, blocks conflicting repository
+truth, a missing or drifted recipe-native oracle closure, or unsafe Git state.
+The adoption boundary compares the exact qualified dependency lock, runtime,
+native scripts, and oracle bytes; existence alone is never compatibility. It
+creates an isolated branch and leaves the operator checkout unchanged; arbitrary
+existing test graphs are not inferred. Adoption also blocks symbolic links and
+credential-like files, including `.npmrc`, rather than allowing generated writes
+or builder context to follow them. The approved PRD must remain outside the
+generated `app`, `public`, and `src` builder scopes. Greenfield apply stages the
+complete target and, only after qualification succeeds, reserves the absent path
+without replacement. It copies non-authoritative files first and atomically
+installs the complete `.git` directory last; the target is not a repository
+before that final boundary. The integration approval digest is a
+non-self-referential identity over the approved target, including its
+canonical-path digest, product, recipe, policy, and every non-lock file action.
+`mill.lock` is deterministically derived from and records that same digest. An
+approved blueprint selecting any other recipe, version, or runtime blocks. The
+plan also exposes and binds the exact Mill generator package/version. Greenfield
+paths are canonicalized beneath the selected root, and any symbolic link or
+non-directory ancestor blocks before staging or registry access. Approval
+timestamps must be exact ISO datetimes that are already active, never
+future-dated declarations.
+
+Dependency installation is a distinct attended step with disclosed npm-registry
+network and disabled lifecycle scripts. The config declares npm and the exact
+`https://registry.npmjs.org` origin; preparation rejects resolved lock entries
+outside that HTTPS origin, credential-bearing or query-bearing URLs, entries
+without a complete SHA-512 source identity, and unsupported links/workspaces.
+The root `package-lock.json` consumed by `npm ci` must be included and is always
+the lock graph validated, regardless of other bound locks. Mill copies lock
+inputs first, keys and validates the frozen copies, and rechecks them after
+installation before atomic publication. Its marker binds and revalidates the
+installed dependency-tree bytes and filesystem shape before reuse and
+verification. Cancellation stops the installer process group and completes
+container cleanup. Preparation requires both attendance and build trust at the
+exported runtime boundary. Later verification has no network and never writes
+source:
+
+```sh
+node dist/cli.js --json dependencies prepare --attended
+node dist/cli.js --json detach plan
+```
+
+`detach plan` reports Mill-only files to remove and downstream-owned files to
+retain or review. It does not mutate the repository.
 
 ## Run one attended local task
 
@@ -75,6 +156,34 @@ node dist/cli.js --json verify --task product/tasks/TASK.yaml --run <run-id>
 node dist/cli.js --json review --task product/tasks/TASK.yaml --run <run-id>
 node dist/cli.js --json status --run <run-id>
 ```
+
+A managed repository may instead select exactly one ready outcome and use the
+founder wrappers:
+
+```sh
+node dist/cli.js --json qualify --baseline \
+  --task product/tasks/<outcome>.yaml
+node dist/cli.js --json run next --approve sha256:<baseline> --attended
+node dist/cli.js --json start --prd product/PRD.md --attended
+node dist/cli.js --json ship --draft \
+  --task product/tasks/<outcome>.yaml --run <run-id>
+# Inspect the returned proposal, then:
+node dist/cli.js --json ship --draft \
+  --task product/tasks/<outcome>.yaml --run <run-id> \
+  --approve sha256:<delivery-plan> --attended
+```
+
+`start` proves the selected PRD and task authority before registry or model
+spend, including identical product-plan, product-contract, impact, and
+acceptance sets. It inventories every nonterminal run, even when a newer run is
+already terminal, then resumes the sole matching durable lifecycle. New-run
+admission repeats that check under the writer lease that creates the run.
+`run next` applies the same authority comparison before it can create a run.
+With `--draft-pr`, `start` prepares and returns the exact draft-PR plan digest;
+`ship --draft --approve` remains the separate attended mutation. A later `start`
+can resume remote readback and closure without requiring Codex or repeating
+dependency preparation. It still cannot mark ready, merge, or deploy. The expert
+lifecycle commands remain available for inspection and recovery.
 
 `run` creates the candidate on a Mill-owned branch in a disposable worktree; it
 does not modify the operator checkout. `resume` reconciles an interrupted
@@ -193,10 +302,11 @@ excluded material untracked and outside the repository.
 
 Not published. Local attended delivery and the bounded draft-PR lifecycle are
 implemented, and the first disposable real-Codex/GitHub canary was human-merged,
-verified on resulting main, and truthfully finalized. Product-continuity and
-worker-admission contracts are implemented. Transactional recipe application,
-retrofit, the founder `start` coordinator, stronger hostile-host containment,
-genesis release, and generalized stack-compatibility claims remain pending their
+verified on resulting main, and truthfully finalized. Product continuity, worker
+admission, transactional application of one exact web recipe, compatible
+adoption, and the resumable founder path are implemented. Autonomous planning,
+stronger hostile-host worker containment, longitudinal qualification, genesis
+release, and generalized stack-compatibility claims remain pending their
 explicit gates.
 
 ## License

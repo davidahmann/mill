@@ -24,7 +24,7 @@ sources:
   - id: SRC-PRD
     class: user_evidence
     uri: product/PRD.md
-    revision: sha256:3d61c3632c38c65d3994623166a4d003c35e7d363c170c7d347fd561aa7fa992
+    revision: sha256:0647e22a5bae4001dad81d842a67925715f1c70605770ebd7de66ae9d26c283f
     observedAt: "2026-09-02T11:00:00.000Z"
     freshness: current
     authority: constraint

@@ -54,7 +54,7 @@ export async function inspectPrd(
     .slice(0, 50);
 
   return {
-    path: path.relative(root, path.resolve(root, requestedPath)) || ".",
+    path: path.relative(root, path.resolve(root, requestedPath)),
     digest: canonicalDigest(source),
     bytes: Buffer.byteLength(source),
     headings,

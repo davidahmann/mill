@@ -53,7 +53,7 @@ function continuityFixture() {
         id: "SRC-PRD",
         class: "user_evidence",
         uri: "product/PRD.md",
-        revision: "sha256:prd",
+        revision: `sha256:${"a".repeat(64)}`,
         observedAt: "2026-09-02T00:00:00.000Z",
         freshness: "current",
         authority: "constraint",
@@ -239,7 +239,7 @@ describe("product continuity planning", () => {
     expect(blueprint).toMatchObject({
       productContractDigest: digest(inputs.product),
       recipe: "node-typescript-next-web",
-      runtime: "node-24-active-lts",
+      runtime: "node-24.18.1-npm-11.16.0",
     });
   });
 
@@ -253,6 +253,24 @@ describe("product continuity planning", () => {
       sourceManifestDigest: fixture.sourceManifestDigest,
     });
     expect(assessment).toMatchObject({ promotable: true, blockers: [] });
+    const prdUnboundProposal = specificationProposalSchema.parse({
+      ...fixture.proposal,
+      productContract: {
+        ...fixture.product,
+        sourceRefs: ["SRC-NODE"],
+      },
+    });
+    expect(
+      assessSpecificationProposal({
+        proposal: prdUnboundProposal,
+        prdPath: "product/PRD.md",
+        prdDigest: fixture.prdDigest,
+        sourceManifest: fixture.sources,
+        sourceManifestDigest: fixture.sourceManifestDigest,
+      }).blockers,
+    ).toContain(
+      "product contract does not bind the inspected PRD source: SRC-PRD",
+    );
     expect(
       promoteSpecificationProposal({
         proposal: fixture.proposal,

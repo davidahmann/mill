@@ -9,7 +9,8 @@ bookkeeping, closure, tests, or docs into micro-PRs.
 3. Exact commit to draft PR, reconciliation, and closure.
 4. Product continuity, one greenfield web recipe, retrofit, and founder golden
    path. Wave 4A establishes the read-only contracts and durable worker
-   boundary; Wave 4B applies them transactionally.
+   boundary; Wave 4B applies them transactionally through exact product and
+   integration approvals.
 5. Audits, clean-room qualification, genesis distribution, and public alpha.
 
 For each wave:
@@ -36,6 +37,30 @@ it does not prevent readback or closure of an effect already attempted. A
 current candidate may add future oracles, but those changed oracles do not
 independently certify that same candidate.
 
-Current Factory skills are optional maintainer-side bootstrap tools. Their
-prompts, profiles, artifacts, or state are not Mill runtime or product
-dependencies. Native repository commands remain sufficient and authoritative.
+Factory skills may be used externally as optional maintainer-side delivery
+tools, but Mill does not track a Factory profile, verifier, pack, or runtime
+dependency. Mill's native repository commands, Git workflow, and GitHub checks
+remain sufficient and authoritative for development and shipping.
+
+For greenfield or adoption onboarding, first assess and explicitly approve the
+source-backed product proposal, then inspect and separately approve the exact
+repository integration plan. Greenfield apply publishes no target until the
+recipe's full native gate passes. Adoption apply writes one isolated branch and
+does not alter the operator checkout. Registry access is a separate attended
+dependency-preparation effect; later candidate verification has no network and
+mounts source read-only.
+
+A recipe-generated task may cite command evidence only through a named oracle
+declared by that exact recipe and selected by the approved scenario. The oracle
+binds its delivered behavior and evidence paths. Greenfield path ancestors,
+adoption lock/oracle bytes, the generator version, trust mode, and attendance
+are revalidated at the exported apply/effect boundary rather than trusted from
+the CLI wrapper.
+
+After onboarding, `run next` selects exactly one ready approved outcome. `start`
+may resume that outcome through the existing run, verify, review, delivery
+observation, and closure states. `ship --draft` remains a wrapper over the same
+exact proposal-digest and attended GitHub effect boundary. Wrappers do not mark
+a draft ready, merge, deploy, or create a second lifecycle. Selection compares
+the plan, product contract, impact, acceptance IDs, and task exactly and scans
+all nonterminal runs, not only the newest record, before any spend.

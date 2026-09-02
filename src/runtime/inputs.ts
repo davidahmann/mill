@@ -179,11 +179,33 @@ export async function loadRuntimeInputs(
     ...Object.values(config.commands).flatMap(
       (command) => command.controlPaths,
     ),
+    ...(config.verifier?.dependencies?.lockPaths ?? []),
+    ...(config.verifier?.dependencies === undefined
+      ? []
+      : [config.verifier.dependencies.targetPath]),
+    ...Object.values(config.commands).flatMap(
+      (command) => command.writablePaths ?? [],
+    ),
   ]) {
     validateRelative(candidate.replace(/\/\*\*$/u, ""), "Runtime path");
   }
   for (const candidate of [...task.allowedPaths, ...config.sensitivePaths]) {
     validatePathPattern(candidate, "Runtime path pattern");
+  }
+  const dependencyTarget = config.verifier?.dependencies?.targetPath;
+  if (dependencyTarget !== undefined) {
+    for (const command of Object.values(config.commands)) {
+      for (const writablePath of command.writablePaths ?? []) {
+        if (patternsOverlap(dependencyTarget, writablePath)) {
+          throw new MillError(
+            "VERIFIER_MOUNT_OVERLAP",
+            "A verifier dependency target cannot overlap a writable scratch mount.",
+            ExitCode.configuration,
+            { dependencyTarget, writablePath },
+          );
+        }
+      }
+    }
   }
   for (const commandId of task.commandIds) {
     if (!Object.hasOwn(config.commands, commandId)) {
@@ -197,12 +219,14 @@ export async function loadRuntimeInputs(
   const selectedControlPaths = task.commandIds.flatMap(
     (commandId) => config.commands[commandId]?.controlPaths ?? [],
   );
+  const dependencyLockPaths = config.verifier?.dependencies?.lockPaths ?? [];
   const protectedPaths = [
     "mill.yaml",
     taskPath,
     ...Object.values(task.authority).map((reference) => reference.path),
     ...task.contextPaths,
     ...selectedControlPaths,
+    ...dependencyLockPaths,
     ".gitattributes",
     ".gitmodules",
   ].filter((candidate, index, values) => values.indexOf(candidate) === index);

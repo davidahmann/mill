@@ -3,18 +3,22 @@ id: node-typescript-web
 productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
 recipe: node-typescript-next-web
 recipeVersion: 1.0.0
-runtime: node-24-active-lts
+runtime: node-24.18.1-npm-11.16.0
 architecture:
   - TypeScript modular monolith
   - Next.js 16 App Router with React 19.2 family
   - server components by default and explicit client boundaries
   - native lint, typecheck, unit, integration, browser, build, and package gates
   - repository-local exact runtime and dependency lock
+  - exact Playwright 1.62.1 OCI verifier image with offline read-only source
+  - top-level .next and .mill-output scratch trees isolated as tmpfs
   - portable Node server or OCI deployment with no hosting-vendor requirement
 risks:
   - framework and dependency patches require source refresh and explicit recipe
     revision
   - browser acceptance needs a qualified Playwright image and deterministic
     fixtures
+  - recipe Node and npm patch pins follow the exact verifier image and can lag
+    Mill's maintainer runtime within the Node 24 family
   - persistence, identity, billing, and deployment are product decisions, not
     recipe defaults

@@ -27,7 +27,28 @@
           "type": "string",
           "pattern": "^[^@\\s]+@sha256:[a-f0-9]{64}$"
         },
-        "network": { "type": "string", "const": "none" }
+        "network": { "type": "string", "const": "none" },
+        "dependencies": {
+          "type": "object",
+          "properties": {
+            "manager": { "type": "string", "const": "npm" },
+            "registry": {
+              "type": "string",
+              "const": "https://registry.npmjs.org"
+            },
+            "targetPath": { "type": "string", "const": "node_modules" },
+            "lockPaths": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+              }
+            }
+          },
+          "required": ["manager", "registry", "targetPath", "lockPaths"],
+          "additionalProperties": false
+        }
       },
       "required": ["image", "network"],
       "additionalProperties": false
@@ -161,6 +182,13 @@
             "default": "oci",
             "type": "string",
             "enum": ["oci", "host"]
+          },
+          "writablePaths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?!\\.\\.?$)(?!.*[,/])[^*?[\\]\\\\]+$"
+            }
           }
         },
         "required": ["argv", "cwd", "controlPaths", "capability"],

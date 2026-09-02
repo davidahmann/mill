@@ -51,3 +51,94 @@ scenarios:
     executionRef: test:coverage
     forbidden:
       - replaying the same admitted invocation identity
+  - id: SCN-TRANSACTIONAL-GREENFIELD
+    kind: normal
+    given:
+      - an approved source-backed product proposal and exact greenfield plan
+      - the supported recipe and exact OCI dependency snapshot are available
+    when:
+      - the attended operator applies the approved plan
+    then:
+      - one clean canonical Git commit contains the exact planned files
+      - the plan and mill.lock expose the same non-cyclic approval identity
+      - the complete native web gate passes before the target is published
+      - a concurrent target is rejected and prior repository state is preserved
+    oracleOwner: repository
+    acceptanceRefs: [ACC-CONTINUITY]
+    invariantRefs: [INV-EXACT-EVIDENCE, INV-DOWNSTREAM-INDEPENDENT]
+    coverage: both
+    visibility: builder_visible
+    executionRef: test:coverage
+    forbidden:
+      - exposing a partial target after qualification failure
+      - deleting state created by an earlier integration instance
+      - using Mill as the downstream build system
+  - id: SCN-ADOPTION-CONFLICT
+    kind: authority
+    given:
+      - an existing compatible Node and Next.js repository
+    when:
+      - Mill scans, plans, or applies repository integration
+    then:
+      - existing product truth and native commands are retained
+      - missing or drifted recipe-owned oracle closure blocks without inference
+      - unsafe Git state, conflicting authority, or incompatible versions block
+    oracleOwner: repository
+    acceptanceRefs: [ACC-CONTINUITY, ACC-TRUTHFUL-RECOVERY]
+    invariantRefs:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-DOWNSTREAM-INDEPENDENT
+    coverage: both
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      - overwriting existing repository truth
+      - mutating the operator checkout
+  - id: SCN-READONLY-WEB-RECIPE
+    kind: adversarial
+    given:
+      - the exact recipe lock and pre-pulled digest-pinned Playwright image
+    when:
+      - the complete native recipe gate runs with network disabled
+    then:
+      - source remains read-only and only declared top-level scratch trees write
+      - unit, integration, browser, build, and package evidence all pass
+      - dependency preparation rejects untrusted origins or invalid output
+      - the packed recipe renders required dotfiles and syntax-safe product text
+    oracleOwner: repository
+    acceptanceRefs: [ACC-CONTINUITY]
+    invariantRefs: [INV-EXACT-EVIDENCE, INV-DOWNSTREAM-INDEPENDENT]
+    coverage: both
+    visibility: reviewer_owned
+    executionRef: test:package
+    forbidden:
+      - writing dependency or generated output into candidate source
+      - pulling an image or package during verification
+  - id: SCN-FOUNDER-RESUME
+    kind: recovery
+    given:
+      - exactly one approved outcome is ready in a managed repository
+    when:
+      - the operator reruns the attended founder coordinator after a checkpoint
+    then:
+      - the selected PRD matches exact source and product-contract authority
+      - the selected outcome matches the task impact and acceptance authority
+      - the existing run advances through its authoritative lifecycle state
+      - another nonterminal task, failed baseline, or unresolved effect blocks
+        without replay while a terminal prior task permits the next outcome
+      - remote observation and closure do not require Codex or dependency setup
+    oracleOwner: repository
+    acceptanceRefs: [ACC-TRUTHFUL-RECOVERY]
+    invariantRefs:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    coverage: both
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      - starting a second outcome while another task owns the active run
+      - executing a task approved for another outcome
+      - spending registry or model budget before PRD and task authority passes
+      - granting merge authority to the coordinator
