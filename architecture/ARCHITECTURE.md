@@ -59,11 +59,12 @@ explicit later coordinator step, not an implied crawler. Approved product
 contracts carry stable acceptance, invariant, decision, and scenario IDs. Each
 material task binds an exact human-approved impact manifest, and validation
 reports new-behavior and preservation evidence separately. Scenario and
-invariant evidence must execute their own approved command or carry a scoped,
-unexpired human attestation; a generic passing command cannot certify them.
-Task-packet version 1 remains a byte-stable, resume-only legacy shape for
-in-flight runs. Every new run uses version 2, which requires the impact manifest
-and exact product-to-task semantic graph.
+invariant evidence must execute their own approved command or carry an unexpired
+human attestation with an exact kind, stable ID, and content-digest claim for
+that item; an acceptance claim or generic passing command cannot certify another
+semantic item. Task-packet version 1 remains a byte-stable, resume-only legacy
+shape for in-flight runs. Every new run uses version 2, which requires the
+impact manifest and exact product-to-task semantic graph.
 
 Codex remains the only worker implementation behind an internal `WorkerAdapter`.
 Before every builder, repair, or reviewer process starts, Mill records an
@@ -71,7 +72,10 @@ immutable redacted invocation envelope containing the task, context epoch,
 candidate when applicable, role profile, prompt-template digest, allowed scope,
 deadline, and output budget. Launch intent is durable before spawn. Exactly one
 terminal provider event settles an invocation, and reviewers must emit exactly
-one structured result. A possibly started mutating invocation becomes uncertain
+one structured result. Candidate publication is atomic with its mutating-worker
+settlement, and review-result publication is atomic with its reviewer
+settlement, so a crash cannot consume an attempt without preserving the
+corresponding result. A possibly started mutating invocation becomes uncertain
 and is reconciled from candidate, process, and worktree state instead of being
 replayed.
 
@@ -115,14 +119,17 @@ and credentials. Codex invocations ignore operator configuration and execution
 rules and disable host skill search to prevent globally installed workflows from
 silently changing task behavior or token use. They still use the operator-owned
 authentication home and honor repository-local instructions, so this is input
-control rather than host containment. `contextPaths` select frozen priority
-read-only context rather than limiting filesystem reads. The active task,
-`mill.yaml`, authority files, repository instructions, and selected-command
-`controlPaths` form the immutable oracle closure and cannot overlap candidate
-output scope. Build qualification rejects tracked symlinks and configured
-sensitive paths, Git replacement refs, and graft metadata before creating the
-worktree; lifecycle Git commands also disable replacement objects. Secrets must
-remain untracked and outside the repository.
+control rather than host containment. Mill freezes the effective per-directory
+`AGENTS.override.md` or `AGENTS.md` choice and re-enumerates the complete path
+set before every later worker wake; changed bytes, additions, removals, or
+precedence changes invalidate the context epoch. `contextPaths` select frozen
+priority read-only context rather than limiting filesystem reads. The active
+task, `mill.yaml`, authority files, repository instructions, and
+selected-command `controlPaths` form the immutable oracle closure and cannot
+overlap candidate output scope. Build qualification rejects tracked symlinks and
+configured sensitive paths, Git replacement refs, and graft metadata before
+creating the worktree; lifecycle Git commands also disable replacement objects.
+Secrets must remain untracked and outside the repository.
 
 Baseline qualification is part of build authority, not static inspection. The
 runtime enforces the repository trust ceiling before OCI discovery or command

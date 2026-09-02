@@ -29,6 +29,23 @@ afterEach(() => {
   else process.env.MILL_STATE_HOME = originalStateHome;
 });
 
+function startWorkerInvocation(
+  store: StateStore,
+  runId: string,
+  phase: "build" | "repair" | "review",
+): string {
+  const invocationId = randomUUID();
+  store.admitWorkerInvocation({
+    runId,
+    invocationId,
+    phase,
+    envelopeDigest: `sha256:${"d".repeat(64)}`,
+    envelopeJson: '{"redacted":true}',
+  });
+  store.markWorkerLaunchStarted(invocationId);
+  return invocationId;
+}
+
 describe("operational state", () => {
   it("persists transactional transitions and append-only redacted events with user-only permissions", async () => {
     const temporary = await temporaryDirectory("mill-state-");
@@ -232,6 +249,49 @@ describe("operational state", () => {
     }
   });
 
+  it("publishes exact review evidence and reviewer settlement atomically", async () => {
+    const temporary = await temporaryDirectory("mill-worker-review-atomic-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "atomic-review",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      store.transition(run.id, "ready", "run.ready");
+      store.transition(run.id, "running", "builder.started");
+      store.commitCandidate(run.id, "e".repeat(40), "f".repeat(40));
+      store.completeValidation(run.id, '{"passed":true}', true);
+      store.beginReviewAttempt(run.id, 1);
+      const invocationId = startWorkerInvocation(store, run.id, "review");
+      expect(() =>
+        store.completeReview(run.id, '{"findings":[]}', 0, false, randomUUID()),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+        }),
+      );
+      expect(store.getRun(run.id)).toMatchObject({ status: "verified" });
+      expect(store.getRun(run.id)).not.toHaveProperty("reviewJson");
+      expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
+      expect(
+        store.completeReview(run.id, '{"findings":[]}', 0, false, invocationId),
+      ).toMatchObject({
+        status: "reviewed",
+        reviewJson: '{"findings":[]}',
+      });
+      expect(store.workerInvocationStatus(invocationId)).toBe("settled");
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
   it("enforces transition, retry, validation, review, and cancellation invariants", async () => {
     const temporary = await temporaryDirectory("mill-state-machine-");
     process.env.MILL_STATE_HOME = temporary.path;
@@ -318,6 +378,7 @@ describe("operational state", () => {
         '{"findings":[1]}',
         1,
         false,
+        startWorkerInvocation(store, reviewed.id, "review"),
       );
       expect(findings).toMatchObject({
         status: "blocked",
@@ -337,7 +398,13 @@ describe("operational state", () => {
       store.commitCandidate(nonConverged.id, "3".repeat(40), "4".repeat(40));
       store.completeValidation(nonConverged.id, '{"passed":true}', true);
       expect(
-        store.completeReview(nonConverged.id, '{"findings":[1]}', 1, true),
+        store.completeReview(
+          nonConverged.id,
+          '{"findings":[1]}',
+          1,
+          true,
+          startWorkerInvocation(store, nonConverged.id, "review"),
+        ),
       ).toMatchObject({
         status: "blocked",
         blockCode: "REVIEW_NON_CONVERGENCE",
@@ -462,9 +529,20 @@ describe("operational state", () => {
       );
 
       const reviewEvidence = advanceToVerified("review-evidence-race");
+      const reviewInvocation = startWorkerInvocation(
+        store,
+        reviewEvidence.id,
+        "review",
+      );
       store.requestCancellation(reviewEvidence.id);
       expectCancellationToWin(() =>
-        store.completeReview(reviewEvidence.id, '{"findings":[]}', 0, false),
+        store.completeReview(
+          reviewEvidence.id,
+          '{"findings":[]}',
+          0,
+          false,
+          reviewInvocation,
+        ),
       );
     } finally {
       store.close();

@@ -80,19 +80,20 @@ acceptance_items:
     contract and cannot omit impact authority
   - W4A-A5 unresolved affected or uncertain impact blocks unless an exact
     scoped, expiring human exception is present
-  - W4A-A6 validation maps each required ID to executed command evidence,
-    explicit human attestation, or blocking unsupported state and reports new
+  - W4A-A6 validation maps each required ID to executed command evidence, exact
+    item-scoped human attestation, or blocking unsupported state and reports new
     behavior separately from preservation
   - W4A-A7 a digest, prompt mention, reviewer statement, skipped command, or
     builder-authored current-run oracle cannot count as semantic execution
   - W4A-A8 medium/high-risk tasks require a delivered-surface scenario and one
     relevant exception, degradation, adversarial, recovery, or novel-input case
-  - W4A-A9 context freezes supplied files, effective AGENTS instructions,
-    provider-visible scope, role profile, and content-addressed contextEpoch
-    before each worker wake
+  - W4A-A9 context freezes supplied files, effective AGENTS override precedence
+    and path set, provider-visible scope, role profile, and content-addressed
+    contextEpoch before each worker wake
   - W4A-A10 each worker invocation has one immutable durable admission and
     launch boundary; exact re-observation is idempotent and conflicting identity
-    reuse fails closed
+    reuse fails closed; candidate and review-result publication are atomic with
+    their matching worker settlement
   - W4A-A11 strict fake-worker and Codex decoder tests cover malformed/truncated
     framing, missing/conflicting settlement, cancellation, deadline/output
     exhaustion, context/profile drift, and safe uncertain-attempt disposition

@@ -969,34 +969,28 @@ export async function reviewRun(input: {
       });
       assertNotCancelled(store, run.id);
       await assertCandidateIdentity(candidate.worktree, candidate);
-      store.settleWorkerInvocation(admission.invocationId, "completed", {
-        candidateCommit: candidate.commit,
-        findings: result.review.findings.length,
-      });
+      const completed = store.completeReview(
+        run.id,
+        JSON.stringify(result.review),
+        result.review.findings.length,
+        run.repairCount >= 1,
+        admission.invocationId,
+        {
+          usageSource: result.usage.source,
+          costSource: result.usage.cost,
+          inputTokens: result.usage.inputTokens ?? null,
+          outputTokens: result.usage.outputTokens ?? null,
+        },
+      );
+      return {
+        run: publicRunRecord(completed),
+        review: result.review,
+        usage: result.usage,
+      };
     } catch (error) {
       settleWorkerFailure(store, admission.invocationId, "reviewer", error);
       throw error;
     }
-    store.recordEvent(run.id, "review.completed", {
-      candidateCommit: candidate.commit,
-      findings: result.review.findings.length,
-      usageSource: result.usage.source,
-      costSource: result.usage.cost,
-      inputTokens: result.usage.inputTokens ?? null,
-      outputTokens: result.usage.outputTokens ?? null,
-    });
-    return {
-      run: publicRunRecord(
-        store.completeReview(
-          run.id,
-          JSON.stringify(result.review),
-          result.review.findings.length,
-          run.repairCount >= 1,
-        ),
-      ),
-      review: result.review,
-      usage: result.usage,
-    };
   } catch (error) {
     const failure = asMillError(error);
     if (lease !== undefined) settleFailure(store, input.runId, failure);

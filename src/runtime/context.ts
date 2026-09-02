@@ -15,6 +15,8 @@ async function effectiveInstructionPaths(root: string): Promise<string[]> {
   const found: string[] = [];
   const visit = async (relative: string): Promise<void> => {
     const directory = await opendir(path.join(root, relative));
+    let agents: string | undefined;
+    let override: string | undefined;
     for await (const entry of directory) {
       if (entry.isSymbolicLink()) continue;
       if (
@@ -22,15 +24,20 @@ async function effectiveInstructionPaths(root: string): Promise<string[]> {
         ![".git", ".mill", "node_modules"].includes(entry.name)
       ) {
         await visit(path.join(relative, entry.name));
-      } else if (entry.isFile() && entry.name === "AGENTS.md") {
-        found.push(path.join(relative, entry.name).replaceAll(path.sep, "/"));
-        if (found.length > 256) {
-          throw new MillError(
-            "INSTRUCTION_SCOPE_EXCEEDED",
-            "The repository exposes too many effective AGENTS.md instruction files.",
-            ExitCode.configuration,
-          );
-        }
+      } else if (entry.isFile()) {
+        if (entry.name === "AGENTS.md") agents = entry.name;
+        if (entry.name === "AGENTS.override.md") override = entry.name;
+      }
+    }
+    const selected = override ?? agents;
+    if (selected !== undefined) {
+      found.push(path.join(relative, selected).replaceAll(path.sep, "/"));
+      if (found.length > 256) {
+        throw new MillError(
+          "INSTRUCTION_SCOPE_EXCEEDED",
+          "The repository exposes too many effective Codex instruction files.",
+          ExitCode.configuration,
+        );
       }
     }
   };
@@ -137,6 +144,41 @@ export async function assertContextFresh(
   worktree: string,
   manifest: ContextManifest,
 ): Promise<void> {
+  // Legacy manifests predate instruction inventorying. Preserve their exact
+  // canonical bytes and resume behavior instead of manufacturing new fields.
+  if (manifest.effectiveInstructions === undefined) {
+    for (const included of manifest.included) {
+      const source = await safeReadText(
+        worktree,
+        included.path,
+        2 * 1024 * 1024,
+      );
+      if (textDigest(source) !== included.digest) {
+        throw new MillError(
+          "CONTEXT_DRIFT",
+          `Frozen context changed: ${included.path}`,
+          ExitCode.configuration,
+        );
+      }
+    }
+    return;
+  }
+  const currentInstructionPaths = await effectiveInstructionPaths(worktree);
+  const frozenInstructionPaths = manifest.effectiveInstructions.map(
+    (instruction) => instruction.path,
+  );
+  if (
+    currentInstructionPaths.length !== frozenInstructionPaths.length ||
+    currentInstructionPaths.some(
+      (instruction, index) => instruction !== frozenInstructionPaths[index],
+    )
+  ) {
+    throw new MillError(
+      "INSTRUCTION_SET_DRIFT",
+      "The effective repository instruction set changed after worker admission.",
+      ExitCode.configuration,
+    );
+  }
   const instructionPaths = new Set(
     manifest.effectiveInstructions.map((instruction) => instruction.path),
   );

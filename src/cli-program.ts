@@ -292,7 +292,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           global.json === true,
           commandResult({
             command: "plan.specification",
-            ok: true,
+            ok: assessment.promotable,
             status: assessment.promotable ? "ok" : "blocked",
             data: assessment,
             reasons: assessment.blockers.map((message) => ({
@@ -301,6 +301,14 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
             })),
           }),
         );
+        if (!assessment.promotable) {
+          throw new MillError(
+            "SPECIFICATION_PROMOTION_BLOCKED",
+            "The specification proposal is not promotable.",
+            ExitCode.configuration,
+            { resultAlreadyEmitted: true },
+          );
+        }
       },
     );
   plan
@@ -403,7 +411,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           global.json === true,
           commandResult({
             command: "plan.impact",
-            ok: true,
+            ok: assessment.approved,
             status: assessment.approved ? "ok" : "blocked",
             data: assessment,
             reasons: assessment.blockers.map((message) => ({
@@ -412,6 +420,14 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
             })),
           }),
         );
+        if (!assessment.approved) {
+          throw new MillError(
+            "IMPACT_PROMOTION_BLOCKED",
+            "The impact manifest is not approved for execution.",
+            ExitCode.configuration,
+            { resultAlreadyEmitted: true },
+          );
+        }
       },
     );
 

@@ -679,6 +679,8 @@ export class StateStore {
     value: string,
     findings: number,
     nonConverged: boolean,
+    invocationId: string,
+    completionDetails: Record<string, string | number | boolean | null> = {},
   ): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
@@ -696,6 +698,20 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
+      const invocation = this.#database
+        .prepare("SELECT run_id, phase FROM worker_invocations WHERE id = ?")
+        .get(invocationId) as { run_id: string; phase: string } | undefined;
+      if (
+        invocation?.run_id !== id ||
+        invocation.phase !== "review" ||
+        this.workerInvocationStatus(invocationId) !== "launch_started"
+      ) {
+        throw new MillError(
+          "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+          "Review publication requires its one started reviewer invocation.",
+          ExitCode.configuration,
+        );
+      }
       const status: RunStatus = findings === 0 ? "reviewed" : "blocked";
       const code =
         findings === 0
@@ -708,11 +724,21 @@ export class StateStore {
           "UPDATE runs SET review_json = ?, status = ?, block_code = ?, updated_at = ? WHERE id = ?",
         )
         .run(value, status, code, new Date().toISOString(), id);
+      this.#event(id, "review.completed", {
+        ...completionDetails,
+        candidateCommit: current.candidateCommit ?? null,
+        findings,
+      });
       this.#event(id, findings === 0 ? "review.passed" : "review.blocked", {
         from: current.status,
         to: status,
         findings,
         ...(code === null ? {} : { code }),
+      });
+      this.#invocationEvent(invocationId, "settled", {
+        outcome: "completed",
+        candidateCommit: current.candidateCommit ?? null,
+        findings,
       });
     });
     return this.getRun(id);

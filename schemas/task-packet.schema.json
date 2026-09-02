@@ -253,6 +253,55 @@
           ],
           "additionalProperties": false
         },
+        "attestations": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^ATT-[A-Z0-9][A-Z0-9-]*$" },
+              "approvedBy": { "type": "string", "minLength": 1 },
+              "approvedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "claims": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["acceptance", "invariant", "scenario"]
+                    },
+                    "id": { "type": "string", "minLength": 1 },
+                    "digest": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": ["kind", "id", "digest"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "approvedBy",
+              "approvedAt",
+              "expiresAt",
+              "claims"
+            ],
+            "additionalProperties": false
+          }
+        },
         "acceptance": {
           "minItems": 1,
           "type": "array",
@@ -291,35 +340,12 @@
                     "type": "object",
                     "properties": {
                       "mode": { "type": "string", "const": "human" },
-                      "attestation": {
-                        "type": "object",
-                        "properties": {
-                          "approvedBy": { "type": "string", "minLength": 1 },
-                          "approvedAt": {
-                            "type": "string",
-                            "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                          },
-                          "expiresAt": {
-                            "type": "string",
-                            "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                          },
-                          "statementDigest": {
-                            "type": "string",
-                            "pattern": "^sha256:[a-f0-9]{64}$"
-                          }
-                        },
-                        "required": [
-                          "approvedBy",
-                          "approvedAt",
-                          "expiresAt",
-                          "statementDigest"
-                        ],
-                        "additionalProperties": false
+                      "attestationId": {
+                        "type": "string",
+                        "pattern": "^ATT-[A-Z0-9][A-Z0-9-]*$"
                       }
                     },
-                    "required": ["mode", "attestation"],
+                    "required": ["mode", "attestationId"],
                     "additionalProperties": false
                   },
                   {

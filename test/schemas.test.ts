@@ -372,6 +372,14 @@ describe("compact schemas", () => {
         schemaVersion: "2",
       }).success,
     ).toBe(false);
+    const legacyContext = samples.contextManifest as unknown as JsonValue;
+    const parsedContext = contractSchemas.contextManifest.parse(
+      samples.contextManifest,
+    );
+    expect(parsedContext).toEqual(samples.contextManifest);
+    expect(canonicalDigest(parsedContext as unknown as JsonValue)).toBe(
+      canonicalDigest(legacyContext),
+    );
   });
 
   it("keeps executable JSON Schemas aligned with runtime validators", async () => {

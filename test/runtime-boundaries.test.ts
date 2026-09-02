@@ -149,7 +149,7 @@ describe("runtime authority and repository boundaries", () => {
         inputs.taskDigest,
       );
       expect(
-        first.manifest.effectiveInstructions.map((item) => item.path),
+        first.manifest.effectiveInstructions?.map((item) => item.path),
       ).toEqual(["AGENTS.md", "src/AGENTS.md"]);
       expect(first.manifest.providerVisibleScope).toMatchObject({
         repositoryScope: "worktree",
@@ -175,6 +175,35 @@ describe("runtime authority and repository boundaries", () => {
       await expect(
         assertContextFresh(fixture.root, first.manifest),
       ).rejects.toMatchObject({ code: "INSTRUCTION_DRIFT" });
+      await writeFile(
+        path.join(fixture.root, "src", "AGENTS.md"),
+        "# Source rules\n",
+      );
+      await writeFile(
+        path.join(fixture.root, "src", "AGENTS.override.md"),
+        "# Source override\n",
+      );
+      await expect(
+        assertContextFresh(fixture.root, first.manifest),
+      ).rejects.toMatchObject({ code: "INSTRUCTION_SET_DRIFT" });
+      const overridden = await buildContextManifest(
+        fixture.root,
+        "a".repeat(40),
+        inputs.task,
+        inputs.config,
+        inputs.taskDigest,
+      );
+      expect(
+        overridden.manifest.effectiveInstructions?.map((item) => item.path),
+      ).toEqual(["AGENTS.md", "src/AGENTS.override.md"]);
+      await mkdir(path.join(fixture.root, "src", "nested"));
+      await writeFile(
+        path.join(fixture.root, "src", "nested", "AGENTS.md"),
+        "# New candidate instruction\n",
+      );
+      await expect(
+        assertContextFresh(fixture.root, overridden.manifest),
+      ).rejects.toMatchObject({ code: "INSTRUCTION_SET_DRIFT" });
     } finally {
       await fixture.cleanup();
     }

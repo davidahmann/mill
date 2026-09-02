@@ -170,21 +170,22 @@ exact-candidate evidence is accepted. Each verifier command has a unique
 Mill-owned container name, and Mill force-removes that exact container under a
 fresh cleanup deadline before accepting evidence. Mill ignores operator Codex
 configuration, disables host skill search, and ignores ambient execution rules
-for builder/reviewer invocations; repository-local `AGENTS.md` instructions
-still apply. Provider usage is measured when Codex reports it, while currency
-cost is reported as unavailable rather than estimated. Completion events in the
-redacted support bundle preserve that source-qualified token evidence for the
-initial build, retries, repairs, and review.
+for builder/reviewer invocations; repository-local `AGENTS.override.md` or
+`AGENTS.md` instructions still apply. Provider usage is measured when Codex
+reports it, while currency cost is reported as unavailable rather than
+estimated. Completion events in the redacted support bundle preserve that
+source-qualified token evidence for the initial build, retries, repairs, and
+review.
 
 The builder can read the non-sensitive tracked files in its disposable worktree;
 `contextPaths` are frozen, read-only priority inputs, not a filesystem read ACL.
-They, `mill.yaml`, the active task, authority files, repository instructions,
-and each selected command's declared `controlPaths` cannot overlap task output
-scope or enter the candidate. `controlPaths` name the scripts, tests, manifests,
-or other repository files that define the selected command's acceptance oracle.
-Qualification therefore rejects tracked symlinks and any tracked path matched by
-`sensitivePaths`. Keep secrets and other excluded material untracked and outside
-the repository.
+They, `mill.yaml`, the active task, authority files, the frozen effective
+repository-instruction set, and each selected command's declared `controlPaths`
+cannot overlap task output scope or enter the candidate. `controlPaths` name the
+scripts, tests, manifests, or other repository files that define the selected
+command's acceptance oracle. Qualification therefore rejects tracked symlinks
+and any tracked path matched by `sensitivePaths`. Keep secrets and other
+excluded material untracked and outside the repository.
 
 ## Status
 

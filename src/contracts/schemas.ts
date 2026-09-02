@@ -383,10 +383,19 @@ const authorityReferenceSchema = z.strictObject({
 });
 
 const humanAttestationSchema = z.strictObject({
+  id: z.string().regex(/^ATT-[A-Z0-9][A-Z0-9-]*$/u),
   approvedBy: z.string().min(1),
   approvedAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),
-  statementDigest: digestSchema,
+  claims: z
+    .array(
+      z.strictObject({
+        kind: z.enum(["acceptance", "invariant", "scenario"]),
+        id: z.string().min(1),
+        digest: digestSchema,
+      }),
+    )
+    .min(1),
 });
 
 const evidenceDispositionSchema = z.discriminatedUnion("mode", [
@@ -396,7 +405,7 @@ const evidenceDispositionSchema = z.discriminatedUnion("mode", [
   }),
   z.strictObject({
     mode: z.literal("human"),
-    attestation: humanAttestationSchema,
+    attestationId: z.string().regex(/^ATT-[A-Z0-9][A-Z0-9-]*$/u),
   }),
   z.strictObject({
     mode: z.literal("unsupported"),
@@ -452,6 +461,7 @@ export const taskPacketV2Schema = z.strictObject({
     policy: authorityReferenceSchema,
     impactManifest: authorityReferenceSchema,
   }),
+  attestations: z.array(humanAttestationSchema).default([]),
   acceptance: z
     .array(
       z.strictObject({
@@ -528,7 +538,7 @@ export const contextManifestSchema = z.strictObject({
   contextEpoch: digestSchema.optional(),
   effectiveInstructions: z
     .array(z.strictObject({ path: z.string().min(1), digest: digestSchema }))
-    .default([]),
+    .optional(),
   providerVisibleScope: z
     .strictObject({
       repositoryScope: z.literal("worktree"),

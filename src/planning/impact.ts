@@ -8,8 +8,7 @@ import {
   productContractSchema,
   scenarioSetSchema,
 } from "../contracts/schemas.js";
-import { canonicalDigest } from "../contracts/canonical.js";
-import { textDigest } from "../runtime/inputs.js";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { ExitCode, MillError } from "../errors.js";
 import { safeReadText } from "../security/safe-path.js";
 
@@ -95,6 +94,24 @@ function unique(values: readonly string[]): boolean {
   return new Set(values).size === values.length;
 }
 
+function duplicates(values: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) repeated.add(value);
+    seen.add(value);
+  }
+  return [...repeated].sort();
+}
+
+export function semanticClaimDigest(
+  kind: "acceptance" | "invariant" | "scenario",
+  id: string,
+  value: JsonValue,
+): string {
+  return canonicalDigest({ kind, id, value });
+}
+
 export function assessImpactManifest(input: {
   manifest: ImpactManifest;
   product: ContinuityProductContract;
@@ -113,6 +130,14 @@ export function assessImpactManifest(input: {
   const scenarios = new Map(
     input.scenarios.scenarios.map((scenario) => [scenario.id, scenario]),
   );
+  for (const duplicate of duplicates([
+    ...input.product.acceptance.map((item) => item.id),
+    ...input.product.invariants.map((item) => item.id),
+    ...input.product.decisions.map((item) => item.id),
+    ...input.scenarios.scenarios.map((item) => item.id),
+  ])) {
+    blockers.push(`stable ID is reused: ${duplicate}`);
+  }
   if (input.manifest.productContractDigest !== productDigest) {
     blockers.push("impact manifest is bound to another product contract");
   }
@@ -166,6 +191,21 @@ export function assessImpactManifest(input: {
         `selected scenario is outside impact closure: ${scenario.id}`,
       );
     }
+    if (
+      scenario.oracleOwner === "repository" &&
+      scenario.executionRef === undefined
+    ) {
+      blockers.push(
+        `repository scenario lacks an execution command: ${scenario.id}`,
+      );
+    } else if (
+      scenario.executionRef !== undefined &&
+      !input.manifest.commandIds.includes(scenario.executionRef)
+    ) {
+      blockers.push(
+        `scenario command is outside approved impact: ${scenario.id}:${scenario.executionRef}`,
+      );
+    }
   }
   for (const id of input.manifest.acceptanceIds) {
     if (
@@ -188,6 +228,19 @@ export function assessImpactManifest(input: {
     if (decision === undefined) blockers.push(`decision is unresolved: ${id}`);
     else if (decision.status !== "approved") {
       blockers.push(`decision is not approved: ${id}`);
+    }
+  }
+  for (const id of input.manifest.affectedInvariantIds) {
+    const invariant = input.product.invariants.find((item) => item.id === id);
+    if (
+      invariant?.verification.mode === "command" &&
+      !input.manifest.commandIds.includes(invariant.verification.ref)
+    ) {
+      blockers.push(
+        `invariant command is outside approved impact: ${id}:${invariant.verification.ref}`,
+      );
+    } else if (invariant?.verification.mode === "unsupported") {
+      blockers.push(`affected invariant has unsupported verification: ${id}`);
     }
   }
   const now = input.now ?? new Date();
@@ -227,7 +280,11 @@ export function assessImpactManifest(input: {
   }
   if (input.manifest.riskClass !== "low") {
     if (
-      !selectedScenarios.some((scenario) => scenario.executionRef !== undefined)
+      !selectedScenarios.some(
+        (scenario) =>
+          scenario.executionRef !== undefined &&
+          input.manifest.commandIds.includes(scenario.executionRef),
+      )
     ) {
       blockers.push(
         "medium/high risk impact lacks a delivered-surface scenario",
@@ -289,6 +346,43 @@ export function buildSemanticEvidence(input: {
   }
   const task = input.task;
   const now = input.now ?? new Date();
+  if (!unique(task.attestations.map((attestation) => attestation.id))) {
+    throw new MillError(
+      "DUPLICATE_ATTESTATION_ID",
+      "Human attestation IDs must be unique within a task packet.",
+      ExitCode.configuration,
+    );
+  }
+  const activeAttestation = (
+    attestationId: string,
+  ): (typeof task.attestations)[number] | undefined => {
+    const attestation = task.attestations.find(
+      (candidate) => candidate.id === attestationId,
+    );
+    if (
+      attestation === undefined ||
+      Date.parse(attestation.approvedAt) > now.getTime() ||
+      Date.parse(attestation.expiresAt) <= now.getTime()
+    ) {
+      return undefined;
+    }
+    return attestation;
+  };
+  const claimedBy = (
+    kind: "acceptance" | "invariant" | "scenario",
+    id: string,
+    digest: string,
+    attestationId?: string,
+  ) =>
+    task.attestations.find(
+      (attestation) =>
+        (attestationId === undefined || attestation.id === attestationId) &&
+        activeAttestation(attestation.id) !== undefined &&
+        attestation.claims.some(
+          (claim) =>
+            claim.kind === kind && claim.id === id && claim.digest === digest,
+        ),
+    );
   const commands = new Map(
     input.commandResults.map((command) => [command.commandId, command.status]),
   );
@@ -339,17 +433,23 @@ export function buildSemanticEvidence(input: {
       continue;
     }
     if (acceptance.evidence.mode === "human") {
-      const attestation = acceptance.evidence.attestation;
-      const valid =
-        Date.parse(attestation.approvedAt) <= now.getTime() &&
-        Date.parse(attestation.expiresAt) > now.getTime() &&
-        attestation.statementDigest === textDigest(acceptance.statement);
+      const attestation = claimedBy(
+        "acceptance",
+        id,
+        semanticClaimDigest("acceptance", id, {
+          statement: acceptance.statement,
+        }),
+        acceptance.evidence.attestationId,
+      );
+      const valid = attestation !== undefined;
       items.push({
         kind: "acceptance",
         id,
         coverage: acceptance.coverage,
         status: valid ? "attested" : "blocked",
-        evidenceRefs: [`human:${attestation.approvedBy}`],
+        evidenceRefs: [
+          `attestation:${acceptance.evidence.attestationId}:acceptance:${id}`,
+        ],
         ...(valid
           ? {}
           : { reason: "human attestation is stale or mismatched" }),
@@ -396,7 +496,15 @@ export function buildSemanticEvidence(input: {
     const humanPassed =
       invariant?.verification.mode === "human" &&
       evidence.length > 0 &&
-      evidence.every((item) => item.status === "attested");
+      evidence.every((item) => item.status !== "blocked") &&
+      claimedBy(
+        "invariant",
+        id,
+        semanticClaimDigest("invariant", id, {
+          statement: invariant.statement,
+          verificationRef: invariant.verification.ref,
+        }),
+      ) !== undefined;
     const passed = linkedPassed && (commandPassed || humanPassed);
     items.push({
       kind: "invariant",
@@ -406,6 +514,7 @@ export function buildSemanticEvidence(input: {
       evidenceRefs: [
         ...evidence.map((item) => `acceptance:${item.id}`),
         ...(commandPassed ? [`command:${commandRef}`] : []),
+        ...(humanPassed ? [`attestation:invariant:${id}`] : []),
       ],
       ...(passed
         ? {}
@@ -445,7 +554,12 @@ export function buildSemanticEvidence(input: {
       scenario !== undefined &&
       scenario.oracleOwner !== "repository" &&
       evidence.length > 0 &&
-      evidence.every((item) => item.status === "attested");
+      evidence.every((item) => item.status !== "blocked") &&
+      claimedBy(
+        "scenario",
+        id,
+        semanticClaimDigest("scenario", id, scenario as unknown as JsonValue),
+      ) !== undefined;
     const passed = linkedPassed && (commandPassed || humanPassed);
     items.push({
       kind: "scenario",
@@ -455,6 +569,7 @@ export function buildSemanticEvidence(input: {
       evidenceRefs: [
         ...evidence.map((item) => `acceptance:${item.id}`),
         ...(commandPassed ? [`command:${commandRef}`] : []),
+        ...(humanPassed ? [`attestation:scenario:${id}`] : []),
       ],
       ...(passed ? {} : { reason: "scenario lacks passing evidence" }),
     });

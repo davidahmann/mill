@@ -17,6 +17,7 @@ import {
   assessImpactManifest,
   buildSemanticEvidence,
   loadImpactPlanningInputs,
+  semanticClaimDigest,
 } from "../src/planning/impact.js";
 import {
   assertNewRunTaskContract,
@@ -825,12 +826,6 @@ describe("impact and semantic evidence", () => {
       ],
       approval: null,
     });
-    const attestation = (statement: string, approvedAt: string) => ({
-      approvedBy: "operator",
-      approvedAt,
-      expiresAt: "2026-09-03T00:00:00.000Z",
-      statementDigest: textDigest(statement),
-    });
     const task = taskPacketSchema.parse({
       schemaVersion: "2",
       id: "evidence-dispositions",
@@ -856,6 +851,55 @@ describe("impact and semantic evidence", () => {
       contextPaths: ["WORKFLOW.md"],
       allowedPaths: ["src/**"],
       commandIds: ["test"],
+      attestations: [
+        {
+          id: "ATT-HUMAN",
+          approvedBy: "operator",
+          approvedAt: "2026-09-01T00:00:00.000Z",
+          expiresAt: "2026-09-03T00:00:00.000Z",
+          claims: [
+            {
+              kind: "acceptance",
+              id: "ACC-HUMAN",
+              digest: semanticClaimDigest("acceptance", "ACC-HUMAN", {
+                statement: "HUMAN evidence statement",
+              }),
+            },
+            {
+              kind: "invariant",
+              id: "INV-HUMAN",
+              digest: semanticClaimDigest("invariant", "INV-HUMAN", {
+                statement: "A human verifies this invariant.",
+                verificationRef: "operator-attestation",
+              }),
+            },
+            {
+              kind: "scenario",
+              id: "SCN-HUMAN",
+              digest: semanticClaimDigest(
+                "scenario",
+                "SCN-HUMAN",
+                scenarios.scenarios[0] as unknown as JsonValue,
+              ),
+            },
+          ],
+        },
+        {
+          id: "ATT-FUTURE",
+          approvedBy: "operator",
+          approvedAt: "2026-09-03T00:00:00.000Z",
+          expiresAt: "2026-09-04T00:00:00.000Z",
+          claims: [
+            {
+              kind: "acceptance",
+              id: "ACC-FUTURE",
+              digest: semanticClaimDigest("acceptance", "ACC-FUTURE", {
+                statement: "FUTURE evidence statement",
+              }),
+            },
+          ],
+        },
+      ],
       acceptance: [
         {
           id: "ACC-HUMAN",
@@ -865,10 +909,7 @@ describe("impact and semantic evidence", () => {
           coverage: "new_behavior",
           evidence: {
             mode: "human",
-            attestation: attestation(
-              "HUMAN evidence statement",
-              "2026-09-01T00:00:00.000Z",
-            ),
+            attestationId: "ATT-HUMAN",
           },
         },
         {
@@ -895,10 +936,7 @@ describe("impact and semantic evidence", () => {
           coverage: "new_behavior",
           evidence: {
             mode: "human",
-            attestation: attestation(
-              "FUTURE evidence statement",
-              "2026-09-03T00:00:00.000Z",
-            ),
+            attestationId: "ATT-FUTURE",
           },
         },
       ],
@@ -940,6 +978,30 @@ describe("impact and semantic evidence", () => {
           id: "SCN-REPOSITORY-NO-ORACLE",
           status: "blocked",
         }),
+      ]),
+    );
+    if (task.schemaVersion !== "2") throw new Error("expected version 2 task");
+    const acceptanceOnly = taskPacketSchema.parse({
+      ...task,
+      attestations: task.attestations.map((attestation) =>
+        attestation.id === "ATT-HUMAN"
+          ? { ...attestation, claims: [attestation.claims[0]] }
+          : attestation,
+      ),
+    });
+    const unscoped = buildSemanticEvidence({
+      task: acceptanceOnly,
+      manifest,
+      product,
+      scenarios,
+      commandResults: [{ commandId: "test", status: "passed" }],
+      now: new Date("2026-09-02T00:00:00.000Z"),
+    });
+    expect(unscoped.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ACC-HUMAN", status: "attested" }),
+        expect.objectContaining({ id: "INV-HUMAN", status: "blocked" }),
+        expect.objectContaining({ id: "SCN-HUMAN", status: "blocked" }),
       ]),
     );
   });
@@ -1135,5 +1197,38 @@ describe("impact and semantic evidence", () => {
         scenarios,
       }).blockers,
     ).toContain("impact approval is not bound to the exact proposal");
+
+    const duplicateProduct = productContractSchema.parse({
+      ...fixture.product,
+      acceptance: [
+        ...fixture.product.acceptance,
+        fixture.product.acceptance[0],
+      ],
+    });
+    expect(
+      assessImpactManifest({
+        manifest: fixture.impact,
+        product: duplicateProduct,
+        scenarios: fixture.scenarios,
+      }).blockers,
+    ).toContain(`stable ID is reused: ${fixture.product.acceptance[0]?.id}`);
+
+    const unboundCommands = impactManifestSchema.parse({
+      ...fixture.impact,
+      commandIds: ["outside"],
+      approval: null,
+    });
+    expect(
+      assessImpactManifest({
+        manifest: unboundCommands,
+        product: fixture.product,
+        scenarios: fixture.scenarios,
+      }).blockers,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("scenario command is outside approved impact"),
+        expect.stringContaining("invariant command is outside approved impact"),
+      ]),
+    );
   });
 });

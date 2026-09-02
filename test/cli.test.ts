@@ -455,6 +455,65 @@ describe("CLI contracts", () => {
         status: "ok",
         data: { approved: true, blockers: [] },
       });
+      await writeFile(
+        path.join(temporary.path, "proposal.json"),
+        JSON.stringify({
+          ...proposal,
+          sourceManifestDigest: `sha256:${"0".repeat(64)}`,
+        }),
+      );
+      const blockedSpecification = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "plan",
+            "specification",
+            "--prd",
+            "PRD.md",
+            "--sources",
+            "sources.json",
+            "--proposal",
+            "proposal.json",
+          ],
+          blockedSpecification.io,
+        ),
+      ).not.toBe(0);
+      expect(JSON.parse(blockedSpecification.stdout.join(""))).toMatchObject({
+        command: "plan.specification",
+        ok: false,
+        status: "blocked",
+      });
+      await writeFile(
+        path.join(temporary.path, "impact.json"),
+        JSON.stringify({ ...impact, commandIds: ["outside"] }),
+      );
+      const blockedImpact = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "plan",
+            "impact",
+            "--product",
+            "product.json",
+            "--scenarios",
+            "scenarios.json",
+            "--manifest",
+            "impact.json",
+          ],
+          blockedImpact.io,
+        ),
+      ).not.toBe(0);
+      expect(JSON.parse(blockedImpact.stdout.join(""))).toMatchObject({
+        command: "plan.impact",
+        ok: false,
+        status: "blocked",
+      });
       expect((await readdir(temporary.path)).sort()).toEqual(before);
     } finally {
       await temporary.cleanup();
