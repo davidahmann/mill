@@ -35,6 +35,15 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   freezing, and strict provider-event settlement.
 - A source-qualified Node.js 24, Next.js 16, and React 19.2 web-recipe decision
   for the Wave 4B greenfield path.
+- One exact bundled Node.js 24.18.1, npm 11.16.0, Next.js 16.3.4, React 19.2.8,
+  and Playwright 1.62.1 web recipe with native format, lint, type, unit,
+  integration, browser, build, package, and CI gates.
+- Deterministic separately approved greenfield and compatible-adoption plans,
+  transactional apply, generated-file ownership in `mill.lock`, manual detach
+  planning, and isolated adoption branches.
+- Attended lock/image-bound dependency preparation plus `run next`, resumable
+  `start`, and two-step `ship --draft` founder commands over existing lifecycle
+  authority.
 
 ### Changed
 
@@ -42,8 +51,32 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   incompatible major upgrades require an intentional toolchain qualification.
 - Executable JSON Schemas are generated from runtime contract inputs and checked
   for exact drift in the native gate.
+- Repository apply now uses target-scoped exclusion, no-replace reservation, and
+  final atomic Git-authority publication; dependency snapshots bind npm/registry
+  identity, validate lock origins and installed-tree content, stop and clean up
+  on cancellation, and founder start binds the selected PRD before spend.
 - New baseline qualifications and runs require task-packet version 2 with exact
   continuity authority; version 1 remains byte-stable for in-flight resume.
+- OCI command scratch is explicit and limited to comma-free top-level tmpfs
+  directories; dependency inputs remain exact-lock-bound and read-only.
+- Repository plans use one non-self-referential approval identity recorded in
+  the returned plan and `mill.lock`; founder resume selects preflight and
+  dependency work from the persisted lifecycle stage.
+- Recipe tasks require named behavior-specific oracles; integration plans bind
+  the generator version and canonical target, adoption binds exact lock/oracle
+  bytes, and dependency snapshots derive identity from frozen lock copies.
+- Canonical target identity is digest-bound, final greenfield publication never
+  replaces a late-created target, adoption blocks symbolic links and
+  credential-like files, and integration writes reject unsafe ancestors.
+- Generated impact and task risk now follows affected invariant criticality,
+  medium/high risk requires non-normal scenario evidence, and active-run
+  admission is serialized with run creation.
+- Founder resume preflights exact remote-review and interrupted recovery before
+  spending its bounded repair, and integration approvals must be active ISO
+  timestamps.
+- Recipe integration rejects cross-outcome scenarios, duplicate acceptance
+  references, unprovable invariant modes, builder-writable PRDs, `.npmrc`, and
+  non-root or credential/query-bearing npm lock-source bypasses.
 
 ### Deprecated
 
@@ -55,6 +88,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
+- Complete SHA-512 integrity parsing and CommonMark punctuation escaping close
+  truncated-integrity and product-title interpretation gaps.
 - Exact-version recovery, DCO parsing, per-job workflow bounds, JSON usage
   errors, malformed-contract classification, operator-tool discovery, Node
   readiness, valid `..name` paths, Git-root lock authority, JSON help isolation,
@@ -105,6 +140,10 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   expired effect authority cannot strand readback or truthful closure.
 - Worker exit evidence and active-process clearing now commit atomically, so a
   controller crash after process exit leaves a safely reconcilable invocation.
+- Recipe verification uses a read-only workspace skeleton with individually
+  bound source entries, bounded writable scratch and browser shared memory,
+  delayed-mount cleanup handling, and fail-closed occupied or unrepresentable
+  mount targets.
 
 ### Security
 

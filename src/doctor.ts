@@ -175,7 +175,7 @@ export async function doctor(
   };
   const tools = await Promise.all([
     tool("git", root, true),
-    tool("codex", root, mode !== "inspect"),
+    tool("codex", root, mode === "build"),
     tool("gh", root, mode === "propose"),
   ]);
   return { mode, root, runtime, tools, lock: await readLockStatus(root) };

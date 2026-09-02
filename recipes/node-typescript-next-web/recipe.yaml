@@ -1,0 +1,71 @@
+schemaVersion: "1"
+id: node-typescript-next-web
+version: 1.0.0
+status: supported
+observedAt: "2026-09-02T14:15:00.000Z"
+runtime:
+  node: 24.18.1
+  npm: 11.16.0
+stack:
+  next: 16.3.4
+  react: 19.2.8
+  reactDom: 19.2.8
+  typescript: 6.0.3
+  eslint: 9.39.5
+  prettier: 3.9.6
+  vitest: 4.1.11
+  playwright: 1.62.1
+verifierImage: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+registry: https://registry.npmjs.org
+licensePolicy:
+  allowed:
+    - 0BSD
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - BlueOak-1.0.0
+    - CC-BY-4.0
+    - CC0-1.0
+    - ISC
+    - LGPL-3.0-or-later
+    - MIT
+    - MPL-2.0
+    - Python-2.0
+  reviewedPackages:
+    - { name: next, license: MIT }
+    - { name: react, license: MIT }
+    - { name: react-dom, license: MIT }
+    - { name: "@playwright/test", license: Apache-2.0 }
+commands:
+  required: [check]
+  native:
+    - format:check
+    - lint
+    - typecheck
+    - test:unit
+    - test:integration
+    - test:browser
+    - test:package
+    - check
+oracles:
+  - id: web-title-and-health
+    commandId: test:browser
+    evidencePaths:
+      - app/page.tsx
+      - app/api/health/route.ts
+      - src/health.ts
+      - test/browser/home.spec.ts
+    proves:
+      - the approved product title renders on the delivered web surface
+      - the delivered health endpoint returns the stable healthy payload
+writablePaths: [.mill-output, .next]
+sources:
+  - https://nodejs.org/en/about/previous-releases
+  - https://nextjs.org/docs/app/getting-started/installation
+  - https://nextjs.org/docs/app/getting-started/deploying
+  - https://react.dev/versions
+  - https://registry.npmjs.org/next/16.3.4
+  - https://registry.npmjs.org/react/19.2.8
+  - https://registry.npmjs.org/react-dom/19.2.8
+  - https://registry.npmjs.org/@playwright/test/1.62.1
+  - https://mcr.microsoft.com/v2/playwright/manifests/v1.62.1-noble

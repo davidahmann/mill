@@ -42,6 +42,9 @@ describe("doctor", () => {
       expect(propose.tools.find((tool) => tool.name === "gh")?.required).toBe(
         true,
       );
+      expect(
+        propose.tools.find((tool) => tool.name === "codex")?.required,
+      ).toBe(false);
     } finally {
       await temporary.cleanup();
     }

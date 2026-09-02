@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readFile,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -627,6 +634,60 @@ describe("runtime authority and repository boundaries", () => {
         maxOutputBytes: 1024 * 1024,
       });
       expect(evidence.passed).toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("rejects verifier mounts that hide content or cannot be represented exactly", async () => {
+    const fixture = await runtimeFixture();
+    process.env.MILL_DOCKER_PATH = fixture.dockerPath;
+    try {
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const command = inputs.config.commands.test;
+      if (command === undefined) throw new Error("fixture command missing");
+      const call = (writablePaths: string[]) =>
+        verifyDeclaredCommands({
+          root: fixture.root,
+          candidateCommit: "a".repeat(40),
+          config: {
+            ...inputs.config,
+            commands: {
+              ...inputs.config.commands,
+              test: { ...command, writablePaths },
+            },
+          },
+          task: inputs.task,
+          deadlineMs: Date.now() + 30_000,
+          maxOutputBytes: 1024 * 1024,
+        });
+
+      await expect(call(["nested/output"])).rejects.toMatchObject({
+        code: "VERIFIER_MOUNT_PATH_UNSUPPORTED",
+      });
+      await expect(call(["scratch,output"])).rejects.toMatchObject({
+        code: "VERIFIER_MOUNT_PATH_UNSUPPORTED",
+      });
+      await expect(call(["."])).rejects.toMatchObject({
+        code: "VERIFIER_MOUNT_PATH_UNSUPPORTED",
+      });
+      await expect(call(["src"])).rejects.toMatchObject({
+        code: "VERIFIER_WRITABLE_PATH_OCCUPIED",
+      });
+
+      const commaEntry = path.join(fixture.root, "hostile,name");
+      await writeFile(commaEntry, "candidate\n");
+      await expect(call([])).rejects.toMatchObject({
+        code: "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+      });
+      await unlink(commaEntry);
+
+      const symbolicEntry = path.join(fixture.root, "hostile-link");
+      await symlink("src", symbolicEntry);
+      await expect(call([])).rejects.toMatchObject({
+        code: "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+      });
+      await unlink(symbolicEntry);
     } finally {
       await fixture.cleanup();
     }

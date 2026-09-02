@@ -14,6 +14,8 @@ documents use the same data model.
 - `impact-manifest.schema.json`
 - `mill-config.schema.json`
 - `mill-lock.schema.json`
+- `recipe-manifest.schema.json`
+- `repository-integration-plan.schema.json`
 - `task-packet.schema.json`
 - `context-manifest.schema.json`
 - `worker-profile.schema.json`
@@ -33,6 +35,17 @@ Task packet version `1` remains byte-stable for in-flight Wave 1-3 runs but
 cannot start new work. Version `2` is the continuity contract: it requires an
 approved impact manifest and explicit acceptance, invariant, scenario, coverage,
 and evidence bindings. Every new run requires version `2`.
+
+Recipe manifests bind the one supported generated stack, exact assets, and named
+behavior-specific oracles. Approved scenarios must select a matching recipe
+oracle before generated tasks can use its command evidence. Repository
+integration plans bind greenfield or adoption target identity, approval,
+generator version, file actions, recipe identity, and baseline posture.
+`mill.lock` records the installed integration and ownership map. Verifier
+dependency targets are currently the literal `node_modules`; writable paths are
+comma-free top-level directories because they become explicit read-only or tmpfs
+OCI mounts. Dependency configuration also binds the supported npm manager and
+exact HTTPS registry origin; those fields participate in snapshot identity.
 
 JSON Schemas are generated from the runtime Zod contracts in input mode. Run
 `npm run schemas:generate` after an intentional contract change;

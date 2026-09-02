@@ -326,12 +326,86 @@ const samples = {
     ],
     passed: true,
   },
+  recipeManifest: {
+    schemaVersion: "1",
+    id: "node-typescript-next-web",
+    version: "1.0.0",
+    status: "supported",
+    observedAt: "2026-09-02T14:15:00.000Z",
+    runtime: { node: "24.18.1", npm: "11.16.0" },
+    stack: {
+      next: "16.3.4",
+      react: "19.2.8",
+      reactDom: "19.2.8",
+      typescript: "6.0.3",
+      eslint: "9.39.5",
+      prettier: "3.9.6",
+      vitest: "4.1.11",
+      playwright: "1.62.1",
+    },
+    verifierImage: `playwright@${digest}`,
+    registry: "https://registry.npmjs.org",
+    licensePolicy: {
+      allowed: ["MIT"],
+      reviewedPackages: [{ name: "next", license: "MIT" }],
+    },
+    commands: { required: ["check"], native: ["check"] },
+    oracles: [
+      {
+        id: "web-title-and-health",
+        commandId: "check",
+        evidencePaths: ["test/browser/home.spec.ts"],
+        proves: ["the delivered web surface is healthy"],
+      },
+    ],
+    writablePaths: [".mill-output", ".next"],
+    sources: ["https://nextjs.org/docs"],
+  },
+  repositoryIntegrationPlan: {
+    schemaVersion: "1",
+    planDigest: digest,
+    generator: { package: "@davidahmann/mill", version: "1.0.0" },
+    mode: "greenfield",
+    target: {
+      directoryName: "product",
+      canonicalPathDigest: digest,
+      baseCommit: null,
+      scanDigest: null,
+    },
+    productProposalDigest: digest,
+    productContractDigest: digest,
+    recipe: {
+      id: "node-typescript-next-web",
+      version: "1.0.0",
+      digest,
+      status: "supported",
+      verifierImage: `playwright@${digest}`,
+    },
+    approval: {
+      approvedBy: "David Ahmann",
+      approvedAt: "2026-09-02T14:15:00.000Z",
+    },
+    files: [
+      {
+        path: "package.json",
+        ownership: "generated_once",
+        action: "create",
+        contentDigest: digest,
+        preexistingDigest: null,
+      },
+    ],
+    commandIds: ["check"],
+    networkDisclosure: ["HTTPS package installation"],
+    baseline: "unverified",
+  },
 } as const;
 
 const schemaFiles = {
   sourceManifest: "source-manifest.schema.json",
   managedRepository: "managed-repository.schema.json",
   productContract: "product-contract.schema.json",
+  recipeManifest: "recipe-manifest.schema.json",
+  repositoryIntegrationPlan: "repository-integration-plan.schema.json",
   specificationProposal: "specification-proposal.schema.json",
   blueprint: "blueprint.schema.json",
   scenarioSet: "scenario-set.schema.json",
@@ -409,6 +483,32 @@ describe("compact schemas", () => {
     }
   });
 
+  it("rejects duplicate outcome acceptance references in both validators", async () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validate = ajv.compile(
+      JSON.parse(
+        await readFile(
+          path.join("schemas", "product-contract.schema.json"),
+          "utf8",
+        ),
+      ),
+    );
+    const duplicate = {
+      ...samples.productContract,
+      outcomes: [
+        {
+          id: "OUT-REVIEWED-PR",
+          statement: "Reviewed PR",
+          acceptanceIds: ["ACC-ONE", "ACC-ONE"],
+        },
+      ],
+    };
+    expect(validate(duplicate)).toBe(false);
+    expect(contractSchemas.productContract.safeParse(duplicate).success).toBe(
+      false,
+    );
+  });
+
   it("rejects mutable or local Mill lock selectors in both validators", async () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     const validate = ajv.compile(
@@ -483,6 +583,43 @@ describe("compact schemas", () => {
     expect(millConfig(configWithUnsafeControlPath)).toBe(false);
     expect(
       contractSchemas.millConfig.safeParse(configWithUnsafeControlPath).success,
+    ).toBe(false);
+
+    for (const writablePath of ["nested/output", "scratch,output", "."]) {
+      const configWithUnsupportedWritablePath = {
+        ...samples.millConfig,
+        commands: {
+          test: {
+            ...samples.millConfig.commands.test,
+            writablePaths: [writablePath],
+          },
+        },
+      };
+      expect(millConfig(configWithUnsupportedWritablePath)).toBe(false);
+      expect(
+        contractSchemas.millConfig.safeParse(configWithUnsupportedWritablePath)
+          .success,
+      ).toBe(false);
+    }
+
+    const configWithUnsupportedDependencyTarget = {
+      ...samples.millConfig,
+      verifier: {
+        image: `node@${digest}`,
+        network: "none",
+        dependencies: {
+          manager: "npm",
+          registry: "https://registry.npmjs.org",
+          targetPath: "deps",
+          lockPaths: ["package-lock.json"],
+        },
+      },
+    };
+    expect(millConfig(configWithUnsupportedDependencyTarget)).toBe(false);
+    expect(
+      contractSchemas.millConfig.safeParse(
+        configWithUnsupportedDependencyTarget,
+      ).success,
     ).toBe(false);
 
     const millLock = ajv.compile(

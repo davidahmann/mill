@@ -29,7 +29,12 @@ const documentationNames = new Set([
   "README.md",
   "WORKFLOW.md",
 ]);
-const secretReferenceNames = [/^\.env(?:\.|$)/u, /secret/iu, /credential/iu];
+const secretReferenceNames = [
+  /^\.env(?:\.|$)/u,
+  /^\.npmrc$/u,
+  /secret/iu,
+  /credential/iu,
+];
 const maximumEntries = 5_000;
 const maximumDepth = 8;
 

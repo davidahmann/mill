@@ -1,0 +1,42 @@
+schemaVersion: "1"
+id: mill-wave-4b-founder-path
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: repository-integration
+    kind: system
+    change: Apply one exact supported recipe or compatible adoption plan.
+  - id: native-web-verification
+    kind: system
+    change: Verify the complete recipe through read-only offline OCI execution.
+  - id: founder-coordinator
+    kind: user
+    change: Resume one approved outcome through existing lifecycle boundaries.
+scenarioIds:
+  - SCN-TRANSACTIONAL-GREENFIELD
+  - SCN-ADOPTION-CONFLICT
+  - SCN-READONLY-WEB-RECIPE
+  - SCN-FOUNDER-RESUME
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-NODE-24
+  - DEC-WEB-RECIPE
+  - DEC-OPERATOR-SESSIONS
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-02T15:00:00.000Z"
+  proposalDigest: sha256:6d192e7b8fab97ad2ca2d65f39c16c246bb263e02b7ec106e5fec59fd87aac85

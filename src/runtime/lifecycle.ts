@@ -51,8 +51,13 @@ import {
   type RunRecord,
 } from "./state.js";
 import { createWorkerInvocation } from "./worker.js";
+import { dependencySnapshotDirectory } from "./dependencies.js";
 import { verifyDeclaredCommands, type ValidationEvidence } from "./verifier.js";
-import { processIdentityStatus, type ActiveProcess } from "./process.js";
+import {
+  processCancellationScope,
+  processIdentityStatus,
+  type ActiveProcess,
+} from "./process.js";
 import { MILL_VERSION } from "../version.js";
 
 interface RunContext {
@@ -106,23 +111,6 @@ function baselineApprovalDigest(input: {
     schemaVersion: "1",
     ...input,
   });
-}
-
-function lifecycleSignals(): {
-  signal: AbortSignal;
-  dispose(): void;
-} {
-  const controller = new AbortController();
-  const abort = (): void => controller.abort();
-  process.once("SIGINT", abort);
-  process.once("SIGTERM", abort);
-  return {
-    signal: controller.signal,
-    dispose(): void {
-      process.removeListener("SIGINT", abort);
-      process.removeListener("SIGTERM", abort);
-    },
-  };
 }
 
 function assertBuildAuthorized(inputs: RuntimeInputs): void {
@@ -565,7 +553,7 @@ export async function startLocalRun(input: {
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   let provisionalWorktree: string | undefined;
   let provisionalBranch: string | undefined;
-  const signals = lifecycleSignals();
+  const signals = processCancellationScope();
   try {
     assertNewRunTaskContract(inputs.task);
     const qualified = await qualifyRepositoryForBuild(
@@ -587,6 +575,23 @@ export async function startLocalRun(input: {
       }
     }
     lease = await acquireWriterLease(store);
+    const activeRuns = store
+      .runs()
+      .filter((candidate) => !isTerminalRun(candidate.status));
+    if (activeRuns.length > 0) {
+      throw new MillError(
+        "ACTIVE_OUTCOME_CONFLICT",
+        "A new run cannot be created while another nonterminal lifecycle exists.",
+        ExitCode.configuration,
+        {
+          activeRuns: activeRuns.map((candidate) => ({
+            runId: candidate.id,
+            taskId: candidate.taskId,
+            status: candidate.status,
+          })),
+        },
+      );
+    }
     if (
       !store.hasBaselineQualification({
         approvalDigest: input.approvalDigest,
@@ -740,7 +745,7 @@ export async function qualifyBaseline(input: {
   const inputs = await loadRuntimeInputs(input.root, input.taskPath);
   assertNewRunTaskContract(inputs.task);
   assertBuildAuthorized(inputs);
-  const signals = lifecycleSignals();
+  const signals = processCancellationScope();
   const signal =
     input.signal === undefined
       ? signals.signal
@@ -767,8 +772,14 @@ export async function qualifyBaseline(input: {
         destination,
         qualified.baseCommit,
       );
+      const dependencyRoot = await dependencySnapshotDirectory({
+        root: input.root,
+        stateDirectory: store.directory,
+        config: inputs.config,
+      });
       const evidence = await verifyDeclaredCommands({
         root: destination,
+        ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
         candidateCommit: qualified.baseCommit,
         config: inputs.config,
         task: inputs.task,
@@ -819,7 +830,7 @@ export async function verifyRun(input: {
   const context = await openRunContext(input.root, input.taskPath);
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
-  const signals = lifecycleSignals();
+  const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
     const run = store.getRun(input.runId);
@@ -833,8 +844,14 @@ export async function verifyRun(input: {
     const deadlineMs = persistedRunDeadline(run);
     const candidate = await assertRunBindings(input.root, run, inputs);
     const hooks = lifecycleHooks(store, run.id);
+    const dependencyRoot = await dependencySnapshotDirectory({
+      root: input.root,
+      stateDirectory: store.directory,
+      config: inputs.config,
+    });
     const evidence = await verifyDeclaredCommands({
       root: candidate.worktree,
+      ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
       candidateCommit: candidate.commit,
       config: inputs.config,
       task: inputs.task,
@@ -889,7 +906,7 @@ export async function reviewRun(input: {
   const context = await openRunContext(input.root, input.taskPath);
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
-  const signals = lifecycleSignals();
+  const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
@@ -1018,7 +1035,7 @@ export async function resumeRun(input: {
   const context = await openRunContext(input.root, input.taskPath);
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
-  const signals = lifecycleSignals();
+  const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
@@ -1323,6 +1340,19 @@ export async function runStatus(input: {
     } finally {
       store.close();
     }
+  }
+}
+
+export async function runInventory(input: {
+  root: string;
+}): Promise<PublicRunRecord[]> {
+  const config = await loadMillConfig(input.root);
+  const commonDirectory = await commonGitDirectory(input.root);
+  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  try {
+    return store.runs().map(publicRunRecord);
+  } finally {
+    store.close();
   }
 }
 

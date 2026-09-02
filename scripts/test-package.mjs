@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 import { canonicalDigest } from "../dist/contracts/canonical.js";
 
@@ -75,6 +76,8 @@ try {
     "schemas/delivery-record.schema.json",
     "schemas/impact-manifest.schema.json",
     "schemas/mill-config.schema.json",
+    "schemas/recipe-manifest.schema.json",
+    "schemas/repository-integration-plan.schema.json",
     "schemas/review-result.schema.json",
     "schemas/source-manifest.schema.json",
     "schemas/specification-proposal.schema.json",
@@ -82,6 +85,9 @@ try {
     "schemas/validation-evidence.schema.json",
     "schemas/worker-invocation.schema.json",
     "schemas/worker-profile.schema.json",
+    "recipes/node-typescript-next-web/recipe.yaml",
+    "recipes/node-typescript-next-web/gitignore.template",
+    "recipes/node-typescript-next-web/package-lock.json",
   ]) {
     if (!files.includes(required)) {
       throw new Error(`packed artifact is missing ${required}`);
@@ -127,6 +133,49 @@ try {
   if (packageJson.scripts?.postinstall !== undefined) {
     throw new Error("packed package must not define postinstall");
   }
+  const installedPackageRoot = path.join(
+    temporary,
+    "node_modules",
+    "@davidahmann",
+    "mill",
+  );
+  const installedMill = await import(
+    pathToFileURL(path.join(installedPackageRoot, "dist", "index.js")).href
+  );
+  const renderedRecipe = await installedMill.renderNodeWebRecipe({
+    projectName: "packed-recipe",
+    productTitle: 'Packed "Recipe" # Draft & Review',
+  });
+  const renderedIgnore = renderedRecipe.find(
+    (entry) => entry.path === ".gitignore",
+  );
+  if (
+    renderedIgnore === undefined ||
+    !renderedIgnore.content.includes("node_modules")
+  ) {
+    throw new Error("packed recipe does not render its .gitignore contract");
+  }
+  const renderedLayout = renderedRecipe.find(
+    (entry) => entry.path === "app/layout.tsx",
+  );
+  if (
+    !renderedLayout?.content.includes(
+      'title: "Packed \\"Recipe\\" # Draft & Review"',
+    )
+  ) {
+    throw new Error("packed recipe does not syntax-escape its product title");
+  }
+  const renderedReadme = renderedRecipe.find(
+    (entry) => entry.path === "README.md",
+  );
+  if (
+    !renderedReadme?.content.startsWith(
+      '# Packed \\"Recipe\\" \\# Draft \\& Review\n',
+    ) ||
+    renderedReadme.content.includes("MILL_PRODUCT_TITLE")
+  ) {
+    throw new Error("packed recipe does not Markdown-escape its product title");
+  }
   const schemaImport = spawnSync(
     process.execPath,
     [
@@ -146,7 +195,11 @@ try {
     );
   }
   for (const command of [
+    "new",
+    "adopt",
     "auth",
+    "dependencies",
+    "detach",
     "plan",
     "qualify",
     "run",
@@ -154,6 +207,8 @@ try {
     "verify",
     "review",
     "pr",
+    "ship",
+    "start",
     "resume",
     "cancel",
     "state",
@@ -440,10 +495,11 @@ import path from "node:path";
 const args=process.argv.slice(2);
 if(args[0]==="image"&&args[1]==="inspect"){process.exit(0)}
 if(args[0]==="rm"){process.exit(0)}
-const mount=args[args.indexOf("--mount")+1]??"";
+const mounts=args.flatMap((value,index)=>value==="--mount"?[args[index+1]??""]:[]);
+const mount=mounts.find((value)=>value.includes("target=/workspace/src,"))??"";
 const source=/source=([^,]+)/u.exec(mount)?.[1];
 if(!source||!mount.includes("readonly"))process.exit(2);
-const value=await readFile(path.join(source,"src/value.js"),"utf8");
+const value=await readFile(path.join(source,"value.js"),"utf8");
 process.exit(/value = [1-9]/u.test(value)?0:1);
 `,
     { mode: 0o700 },

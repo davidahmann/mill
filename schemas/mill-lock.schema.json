@@ -34,6 +34,59 @@
       },
       "required": ["id", "version", "digest"],
       "additionalProperties": false
+    },
+    "integration": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["greenfield", "adoption"] },
+        "planDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "baseCommit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+              },
+              "ownership": {
+                "type": "string",
+                "enum": ["mill_only", "generated_once", "managed"]
+              },
+              "templateDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "installedDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "preexistingDigest": {
+                "anyOf": [
+                  { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "ownership",
+              "templateDigest",
+              "installedDigest",
+              "preexistingDigest"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["mode", "planDigest", "baseCommit", "files"],
+      "additionalProperties": false
     }
   },
   "required": ["schemaVersion", "mill"],

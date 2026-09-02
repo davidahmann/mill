@@ -48,6 +48,7 @@ export async function runtimeFixture(
   const state = await temporaryDirectory("mill-runtime-state-");
   const tools = await temporaryDirectory("mill-runtime-tools-");
   const root = repository.path;
+  const prd = "# Fixture PRD\n\nKeep the exported value positive.\n";
   await Promise.all([
     writeFile(path.join(root, ".gitignore"), "ignored-output\n"),
     mkdir(path.join(root, "product", "tasks"), { recursive: true }),
@@ -132,6 +133,35 @@ scenarios:
   });
   const policy = "# Fixture policy\n\nOnly src/value.js may change.\n";
   await Promise.all([
+    writeFile(path.join(root, "product", "PRD.md"), prd),
+    writeFile(
+      path.join(root, "product", "sources.yaml"),
+      stringifyYaml({
+        schemaVersion: "1",
+        trigger: "bootstrap",
+        providers: [
+          {
+            id: "operator",
+            name: "Test operator",
+            queries: [],
+            networkDisclosure: "No network access",
+          },
+        ],
+        sources: [
+          {
+            id: "SRC-PRD",
+            class: "user_evidence",
+            uri: "product/PRD.md",
+            revision: textDigest(prd),
+            digest: textDigest(prd),
+            observedAt: "2026-09-02T00:00:00.000Z",
+            freshness: "current",
+            authority: "constraint",
+            claims: ["The exported value remains positive."],
+          },
+        ],
+      }),
+    ),
     writeFile(path.join(root, "product", "contract.yaml"), product),
     writeFile(path.join(root, "product", "impact.yaml"), impact),
     writeFile(path.join(root, "quality", "scenarios.yaml"), scenarios),
@@ -306,10 +336,11 @@ const args=process.argv.slice(2);
 if(args[0]==="--version"){console.log("Docker version 29.7.2");process.exit(0)}
 if(args[0]==="image"&&args[1]==="inspect"){console.log("[]");process.exit(0)}
 if(args[0]==="rm"){process.exit(0)}
-const mount=args[args.indexOf("--mount")+1]??"";
-const source=/source=([^,]+)/u.exec(mount)?.[1];
-if(!source||!mount.includes("readonly"))process.exit(2);
-const value=await readFile(path.join(source,"src/value.js"),"utf8");
+const mounts=args.filter((value)=>value.startsWith("type="));
+const sourceMount=mounts.find((value)=>value.includes("target=/workspace/src,readonly"))??"";
+const source=/source=([^,]+)/u.exec(sourceMount)?.[1];
+if(!source)process.exit(2);
+const value=await readFile(path.join(source,"value.js"),"utf8");
 process.exit(/value = [1-9]/u.test(value)?0:1);
 `,
     { mode: 0o755 },

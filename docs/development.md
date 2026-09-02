@@ -90,6 +90,38 @@ and selected web-recipe contracts. Those tests prove contract behavior; they do
 not replace exact-candidate review or CI because a candidate cannot certify
 itself by changing its own oracle.
 
+Wave 4B adds deterministic greenfield and adoption plan/apply fixtures, exact
+recipe-asset digesting, ownership/detach checks, failed-staging cleanup,
+lock/image-bound dependency preparation, installed-tree drift rejection,
+cancellation cleanup, and founder coordinator recovery. Adversarial cases cover
+target-lock contention, preserved preexisting state, symbolic-link target
+ancestors, direct API attendance and trust bypasses, untrusted or incomplete npm
+lock sources, frozen-lock drift, missing installer output, exact
+PRD/source/outcome/acceptance authority, canonical-target aliasing, target
+creation between approval and reservation, future approval times,
+credential-like adoption files including `.npmrc`, PRDs inside builder-writable
+source scope, cross-outcome scenarios, unprovable invariant modes, unsafe
+generated-file ancestors, risk evidence understatement, older nonterminal runs
+hidden by newer terminal records, and adoption with missing or modified oracle
+bytes. Dependency cases validate the root lock consumed by npm even when another
+lock is listed first and reject credential/query-bearing registry URLs.
+Recipe-generated task evidence requires a named recipe-specific oracle; a
+generic command reference blocks. The recipe itself is also exercised in the
+exact pinned Playwright image with network disabled, a read-only root and source
+tree, read-only dependencies, declared top-level tmpfs scratch, bounded Chromium
+shared memory, and native
+format/lint/type/unit/integration/browser/build/package commands. This is one
+qualified recipe tuple, not evidence for arbitrary stacks.
+
+The npm dependency target is exactly `node_modules`; writable scratch paths must
+be comma-free top-level repository directories. They cannot already exist in the
+exact candidate because a mount would hide candidate content. The verifier also
+rejects more than 256 top-level entries, top-level symbolic links, unsupported
+filesystem entries, and top-level names containing commas. The workspace path
+itself may contain commas because Mill creates and verifies an exact temporary
+alias. These restrictions are current product limits, not silent portability
+claims.
+
 Task-packet version `1` is accepted only to resume or inspect work that began
 before the continuity contract. Baseline qualification and every new run require
 version `2`, including an approved impact manifest and explicit acceptance,
@@ -105,7 +137,13 @@ ready, merge, deploy, or rerun remote checks.
 The completed Wave 3 canary is recorded in
 [`docs/canaries/wave-3-real-github.md`](canaries/wave-3-real-github.md). It also
 shows why provider-authoritative usage must be budgeted: even a tiny task can
-consume substantial context tokens while currency cost remains unavailable.
+consume substantial context tokens while currency cost remains unavailable. The
+Wave 4B recipe qualification is recorded in
+[`docs/canaries/wave-4b-recipe.md`](canaries/wave-4b-recipe.md). The package
+test must load the installed tarball's recipe and assert that packable aliases
+render required dotfiles and untrusted product strings remain valid source
+literals. Integration tests must also prove the same approved plan digest
+appears in the plan result and generated `mill.lock`.
 
 ## Architecture questions
 

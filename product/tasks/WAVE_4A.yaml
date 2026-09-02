@@ -1,5 +1,5 @@
 task_id: mill-wave-4a-continuity
-status: active
+status: closed
 objective: >-
   Add source-backed product planning, stable behavioral invariants, approved
   per-slice impact manifests, item-level semantic validation, and durable
@@ -145,3 +145,11 @@ docs_sync_refs:
   - architecture/ARCHITECTURE.md
   - docs/development.md
   - WORKFLOW.md
+closure:
+  pull_request: https://github.com/davidahmann/mill/pull/5
+  candidate_commit: 19e56665d47a318e7e6805d2c9ad1074b7f35f05
+  merge_commit: 39ae11f55f7f72e048c10baef3a1754fecc83286
+  resulting_tree: 42c8a238edfb75b0522d1c22dadb1a448f8aa421
+  merged_at: "2026-09-02T14:11:54.000Z"
+  required_checks: [validate, codeql, dependency-review]
+  result: closed

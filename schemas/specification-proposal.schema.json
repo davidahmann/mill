@@ -31,7 +31,13 @@
             "type": "object",
             "properties": {
               "id": { "type": "string", "pattern": "^OUT-[A-Z0-9][A-Z0-9-]*$" },
-              "statement": { "type": "string", "minLength": 1 }
+              "statement": { "type": "string", "minLength": 1 },
+              "acceptanceIds": {
+                "minItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "uniqueItems": true
+              }
             },
             "required": ["id", "statement"],
             "additionalProperties": false
@@ -309,6 +315,7 @@
                 ]
               },
               "executionRef": { "type": "string", "minLength": 1 },
+              "recipeOracle": { "type": "string", "minLength": 1 },
               "forbidden": {
                 "default": [],
                 "type": "array",
