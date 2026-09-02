@@ -527,7 +527,7 @@ export async function verifyDeclaredCommands(input: {
         : [input.config.verifier.dependencies.targetPath]),
       ...input.task.commandIds.flatMap(
         (commandId) =>
-          input.config.commands[commandId]?.writablePaths.map(
+          input.config.commands[commandId]?.writablePaths?.map(
             (configuredPath) => configuredPath.replace(/\/\*\*$/u, ""),
           ) ?? [],
       ),
@@ -597,7 +597,7 @@ export async function verifyDeclaredCommands(input: {
       );
       const containerName = `mill-${randomUUID()}`;
       const writableMounts: string[] = [];
-      for (const configuredPath of command.writablePaths) {
+      for (const configuredPath of command.writablePaths ?? []) {
         const writablePath = configuredPath.replace(/\/\*\*$/u, "");
         const absoluteWritablePath = path.resolve(canonicalRoot, writablePath);
         if (!isWithin(canonicalRoot, absoluteWritablePath)) {
@@ -619,6 +619,8 @@ export async function verifyDeclaredCommands(input: {
           executable: docker,
           args: [
             "run",
+            "--pull",
+            "never",
             "--name",
             containerName,
             "--label",

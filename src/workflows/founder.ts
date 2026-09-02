@@ -275,7 +275,6 @@ function requiresBuildPreflight(
     (run.status === "blocked" &&
       [
         "REVIEW_FINDINGS",
-        "REVIEW_NON_CONVERGENCE",
         "REMOTE_REVIEW_FINDINGS",
         "INTERRUPTED_RUN",
         "CODEX_CANCELLED",
@@ -296,7 +295,6 @@ function requiresDependencyPreparation(
     (run.status === "blocked" &&
       [
         "REVIEW_FINDINGS",
-        "REVIEW_NON_CONVERGENCE",
         "REMOTE_REVIEW_FINDINGS",
         "INTERRUPTED_RUN",
         "CODEX_CANCELLED",
@@ -305,6 +303,46 @@ function requiresDependencyPreparation(
         "CODEX_EXECUTION_FAILED",
       ].includes(run.blockCode ?? ""))
   );
+}
+
+async function authorizeExistingBuildSpend(
+  root: string,
+  outcome: NextOutcome,
+  run: NonNullable<Awaited<ReturnType<typeof runStatus>>["run"]>,
+): Promise<void> {
+  const inputs = await loadRuntimeInputs(root, outcome.taskPath);
+  assertOutcomeAuthority(outcome, inputs);
+  if (
+    run.taskDigest !== inputs.taskDigest ||
+    run.configDigest !== inputs.configDigest
+  ) {
+    throw new MillError(
+      "RUN_POLICY_DRIFT",
+      "Task or repository configuration changed after approval.",
+      ExitCode.configuration,
+    );
+  }
+  const deadline = Date.parse(run.deadlineAt);
+  if (!Number.isSafeInteger(deadline) || deadline <= Date.now()) {
+    throw new MillError(
+      "RUN_DEADLINE_EXCEEDED",
+      "The approved run deadline has elapsed; a fresh qualification and run are required.",
+      ExitCode.temporary,
+      { deadlineAt: run.deadlineAt },
+    );
+  }
+  const qualification = await qualifyRepositoryForBuild(
+    root,
+    inputs.task.baseRef,
+    inputs.config.sensitivePaths,
+  );
+  if (qualification.baseCommit !== run.baseCommit) {
+    throw new MillError(
+      "BASE_REF_DRIFT",
+      "The approved base reference moved after the run started.",
+      ExitCode.configuration,
+    );
+  }
 }
 
 export async function startFounderDelivery(input: {
@@ -362,6 +400,11 @@ export async function startFounderDelivery(input: {
       authorizingInputs.task.baseRef,
       authorizingInputs.config.sensitivePaths,
     );
+  } else if (
+    status.run !== undefined &&
+    requiresDependencyPreparation(status.run)
+  ) {
+    await authorizeExistingBuildSpend(input.root, outcome, status.run);
   }
   const dependencyPreparation = requiresDependencyPreparation(status.run)
     ? await prepareRepositoryDependencies(input.root, input.attended)

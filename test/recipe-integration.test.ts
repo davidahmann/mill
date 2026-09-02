@@ -624,9 +624,7 @@ describe("qualified repository integration", { concurrent: false }, () => {
           ...authority.options,
           targetDirectory: "new-parent/nested-app",
         }),
-      ).resolves.toMatchObject({
-        plan: { target: { directoryName: "new-parent/nested-app" } },
-      });
+      ).rejects.toMatchObject({ code: "GREENFIELD_TARGET_ANCESTOR_UNSAFE" });
       await mkdir(path.join(workspace.path, "real-parent"));
       await expect(
         planGreenfieldIntegration({
@@ -1032,6 +1030,18 @@ describe("qualified repository integration", { concurrent: false }, () => {
     const repository = await temporaryDirectory("mill-adoption-");
     try {
       const authority = await seedCompatibleRepository(repository.path);
+      const ignorePath = path.join(repository.path, ".gitignore");
+      await writeFile(
+        ignorePath,
+        `${await readFile(ignorePath, "utf8")}\nmill.*\n`,
+      );
+      await git(repository.path, ["add", ".gitignore"]);
+      await git(repository.path, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: ignore generated mill control files",
+      ]);
       const base = (await git(repository.path, ["rev-parse", "HEAD"])).trim();
       const planned = await planAdoptionIntegration({
         ...authority.options,
@@ -1051,6 +1061,24 @@ describe("qualified repository integration", { concurrent: false }, () => {
           attended: false,
         }),
       ).rejects.toMatchObject({ code: "ATTENDANCE_REQUIRED" });
+      const cancelled = new AbortController();
+      cancelled.abort();
+      await expect(
+        applyAdoptionIntegration({
+          ...authority.options,
+          repositoryRoot: repository.path,
+          planApprovalDigest: planned.approvalDigest,
+          attended: true,
+          signal: cancelled.signal,
+        }),
+      ).rejects.toMatchObject({ code: "ADOPTION_CANCELLED" });
+      await expect(
+        git(repository.path, [
+          "rev-parse",
+          "--verify",
+          `refs/heads/mill/adopt-${planned.approvalDigest.slice(7, 19)}`,
+        ]),
+      ).rejects.toBeDefined();
       const applied = await applyAdoptionIntegration({
         ...authority.options,
         repositoryRoot: repository.path,
@@ -1097,6 +1125,56 @@ describe("qualified repository integration", { concurrent: false }, () => {
       ).rejects.toMatchObject({ code: "ADOPTION_CHECKOUT_DIRTY" });
     } finally {
       await repository.cleanup();
+    }
+  });
+
+  it("binds adoption compatibility to the exact visible base tree", async () => {
+    const ignored = await temporaryDirectory("mill-adoption-ignored-");
+    const hidden = await temporaryDirectory("mill-adoption-hidden-");
+    try {
+      const ignoredAuthority = await seedCompatibleRepository(ignored.path);
+      const ignorePath = path.join(ignored.path, ".gitignore");
+      await writeFile(
+        ignorePath,
+        `${await readFile(ignorePath, "utf8")}\npackage.json\n`,
+      );
+      await git(ignored.path, ["rm", "--cached", "package.json"]);
+      await git(ignored.path, ["add", ".gitignore"]);
+      await git(ignored.path, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: leave ignored manifest outside the base",
+      ]);
+      await expect(
+        planAdoptionIntegration({
+          ...ignoredAuthority.options,
+          repositoryRoot: ignored.path,
+        }),
+      ).rejects.toMatchObject({ code: "ADOPTION_MANIFEST_INVALID" });
+
+      const hiddenAuthority = await seedCompatibleRepository(hidden.path);
+      const packagePath = path.join(hidden.path, "package.json");
+      const packageSource = await readFile(packagePath, "utf8");
+      await git(hidden.path, [
+        "update-index",
+        "--skip-worktree",
+        "package.json",
+      ]);
+      await writeFile(packagePath, `${packageSource} `);
+      await expect(
+        planAdoptionIntegration({
+          ...hiddenAuthority.options,
+          repositoryRoot: hidden.path,
+        }),
+      ).rejects.toMatchObject({ code: "HIDDEN_GIT_INDEX_STATE" });
+      await git(hidden.path, [
+        "update-index",
+        "--no-skip-worktree",
+        "package.json",
+      ]);
+    } finally {
+      await Promise.all([ignored.cleanup(), hidden.cleanup()]);
     }
   });
 
@@ -1618,6 +1696,19 @@ describe("qualified repository integration", { concurrent: false }, () => {
       expect(prepared.reused).toBe(false);
       const markerPath = path.join(prepared.directory, "marker.json");
       const markerSource = await readFile(markerPath, "utf8");
+      await writeFile(markerPath, "{}\n");
+      const preparationLock = `${prepared.directory}.lock`;
+      await mkdir(preparationLock);
+      await expect(
+        prepareDependencySnapshot({
+          root: repository.path,
+          stateDirectory: state.path,
+          config,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "DEPENDENCY_PREPARATION_ACTIVE" });
+      await rm(preparationLock, { recursive: true });
+      await writeFile(markerPath, markerSource);
       for (const invalidMarker of ["{not-json\n", "{}\n"]) {
         await writeFile(markerPath, invalidMarker);
         await expect(
@@ -1718,8 +1809,16 @@ describe("qualified repository integration", { concurrent: false }, () => {
       const verifier = calls.find(
         (args) => args[0] === "run" && args.includes("dev.mill.owner=verifier"),
       );
+      const installer = calls.find(
+        (args) =>
+          args[0] === "run" &&
+          args.includes("dev.mill.owner=dependency-preparation"),
+      );
+      expect(installer).toEqual(expect.arrayContaining(["--pull", "never"]));
       expect(verifier).toEqual(
         expect.arrayContaining([
+          "--pull",
+          "never",
           expect.stringContaining("target=/workspace/node_modules,readonly"),
           "type=tmpfs,target=/workspace/.mill-output,tmpfs-size=268435456,tmpfs-mode=1777",
         ]),

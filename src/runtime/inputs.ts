@@ -184,7 +184,7 @@ export async function loadRuntimeInputs(
       ? []
       : [config.verifier.dependencies.targetPath]),
     ...Object.values(config.commands).flatMap(
-      (command) => command.writablePaths,
+      (command) => command.writablePaths ?? [],
     ),
   ]) {
     validateRelative(candidate.replace(/\/\*\*$/u, ""), "Runtime path");
@@ -195,7 +195,7 @@ export async function loadRuntimeInputs(
   const dependencyTarget = config.verifier?.dependencies?.targetPath;
   if (dependencyTarget !== undefined) {
     for (const command of Object.values(config.commands)) {
-      for (const writablePath of command.writablePaths) {
+      for (const writablePath of command.writablePaths ?? []) {
         if (patternsOverlap(dependencyTarget, writablePath)) {
           throw new MillError(
             "VERIFIER_MOUNT_OVERLAP",

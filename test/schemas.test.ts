@@ -540,6 +540,10 @@ describe("compact schemas", () => {
         await readFile(path.join("schemas", "mill-config.schema.json"), "utf8"),
       ),
     );
+    const legacyConfig = contractSchemas.millConfig.parse(samples.millConfig);
+    expect(
+      Object.hasOwn(legacyConfig.commands.test ?? {}, "writablePaths"),
+    ).toBe(false);
     const configWithEmptyKey = {
       ...samples.millConfig,
       commands: {

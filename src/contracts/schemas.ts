@@ -389,7 +389,7 @@ export const millConfigSchema = z
         required: z.boolean().default(true),
         timeoutSeconds: z.number().int().min(1).max(3600).default(600),
         execution: z.enum(["oci", "host"]).default("oci"),
-        writablePaths: z.array(repositoryMountDirectorySchema).default([]),
+        writablePaths: z.array(repositoryMountDirectorySchema).optional(),
       }),
     ),
   })

@@ -535,6 +535,8 @@ async function prepareDependencySnapshotWithSignal(input: {
   await chmod(parent, 0o700);
   const temporary = await mkdtemp(path.join(parent, ".prepare-"));
   await chmod(temporary, 0o700);
+  let lockDirectory: string | undefined;
+  let lockAcquired = false;
   try {
     const canonicalRoot = await realpath(input.root);
     for (const relative of dependencies.lockPaths) {
@@ -560,8 +562,26 @@ async function prepareDependencySnapshotWithSignal(input: {
     const identity = await dependencyIdentity(temporary, input.config);
     await validateNpmLock(temporary, dependencies.lockPaths);
     const destination = path.join(parent, identity.key);
+    lockDirectory = `${destination}.lock`;
+    try {
+      await mkdir(lockDirectory, { mode: 0o700 });
+      lockAcquired = true;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "EEXIST"
+      ) {
+        throw new MillError(
+          "DEPENDENCY_PREPARATION_ACTIVE",
+          "Another process owns preparation of this exact dependency snapshot.",
+          ExitCode.temporary,
+          { snapshot: identity.key },
+        );
+      }
+      throw error;
+    }
     if (await markerMatches(destination, identity.marker)) {
-      await rm(temporary, { recursive: true, force: true });
       return {
         directory: destination,
         reused: true,
@@ -619,6 +639,8 @@ async function prepareDependencySnapshotWithSignal(input: {
         executable: docker,
         args: [
           "run",
+          "--pull",
+          "never",
           "--name",
           containerName,
           "--label",
@@ -729,7 +751,6 @@ async function prepareDependencySnapshotWithSignal(input: {
       await rename(temporary, destination);
     } catch (error) {
       if (!(await markerMatches(destination, identity.marker))) throw error;
-      await rm(temporary, { recursive: true, force: true });
     }
     return {
       directory: destination,
@@ -737,9 +758,14 @@ async function prepareDependencySnapshotWithSignal(input: {
       network:
         "HTTPS to https://registry.npmjs.org through the exact verifier image; lifecycle scripts disabled",
     };
-  } catch (error) {
-    await rm(temporary, { recursive: true, force: true });
-    throw error;
+  } finally {
+    try {
+      await rm(temporary, { recursive: true, force: true });
+    } finally {
+      if (lockAcquired && lockDirectory !== undefined) {
+        await rm(lockDirectory, { recursive: true });
+      }
+    }
   }
 }
 

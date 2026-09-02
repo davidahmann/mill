@@ -43,7 +43,10 @@ import {
 import { isWithin, safeReadText } from "../security/safe-path.js";
 import { MILL_PACKAGE, MILL_VERSION } from "../version.js";
 import { processCancellationScope, runProcess } from "../runtime/process.js";
-import { resolveCommit } from "../runtime/repository.js";
+import {
+  assertVisibleIndexState,
+  resolveCommit,
+} from "../runtime/repository.js";
 import { textDigest } from "../runtime/inputs.js";
 import { prepareDependencySnapshot } from "../runtime/dependencies.js";
 import { repositoryStateDirectory } from "../runtime/state.js";
@@ -105,12 +108,20 @@ function slug(value: string): string {
   return normalized.length === 0 ? "first-outcome" : normalized;
 }
 
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
+
 function assertRelativePath(value: string, label: string): void {
   if (
     value.length === 0 ||
     path.isAbsolute(value) ||
     value.split(/[\\/]/u).includes("..") ||
-    value.includes("\0")
+    hasControlCharacter(value)
   ) {
     throw new MillError(
       "INVALID_INTEGRATION_PATH",
@@ -124,7 +135,6 @@ function assertRelativePath(value: string, label: string): void {
 async function greenfieldTarget(
   sourceRoot: string,
   targetDirectory: string,
-  createParent: boolean,
 ): Promise<{ target: string; parent: string }> {
   assertRelativePath(targetDirectory, "Target directory");
   const canonicalRoot = await realpath(sourceRoot);
@@ -143,61 +153,41 @@ async function greenfieldTarget(
         );
       }
     } catch (error) {
-      if (!(
+      if (
         error instanceof Error &&
         "code" in error &&
         error.code === "ENOENT"
-      ))
-        throw error;
-      break;
+      ) {
+        throw new MillError(
+          "GREENFIELD_TARGET_ANCESTOR_UNSAFE",
+          "Greenfield target parents must already exist as real directories inside the approved source root.",
+          ExitCode.configuration,
+          { path: segments.slice(0, index + 1).join("/") },
+        );
+      }
+      throw error;
     }
   }
-  const target = path.resolve(canonicalRoot, targetDirectory);
-  const parent = path.dirname(target);
-  if (!isWithin(canonicalRoot, target)) {
+  const requestedTarget = path.resolve(canonicalRoot, targetDirectory);
+  if (!isWithin(canonicalRoot, requestedTarget)) {
     throw new MillError(
       "GREENFIELD_TARGET_OUTSIDE_ROOT",
       "The greenfield target must remain inside the approved source root.",
       ExitCode.configuration,
     );
   }
-  if (createParent) {
-    await mkdir(parent, { recursive: true, mode: 0o700 });
-    let verified = canonicalRoot;
-    for (const segment of segments.slice(0, -1)) {
-      verified = path.join(verified, segment);
-      const information = await lstat(verified);
-      if (information.isSymbolicLink() || !information.isDirectory()) {
-        throw new MillError(
-          "GREENFIELD_TARGET_ANCESTOR_UNSAFE",
-          "Greenfield target ancestors must remain real directories through apply.",
-          ExitCode.configuration,
-          { path: path.relative(canonicalRoot, verified) },
-        );
-      }
-    }
+  const canonicalParent = await realpath(path.dirname(requestedTarget));
+  if (!isWithin(canonicalRoot, canonicalParent)) {
+    throw new MillError(
+      "GREENFIELD_TARGET_ANCESTOR_UNSAFE",
+      "The greenfield target parent resolved outside the approved source root.",
+      ExitCode.configuration,
+    );
   }
-  try {
-    const canonicalParent = await realpath(parent);
-    if (!isWithin(canonicalRoot, canonicalParent)) {
-      throw new MillError(
-        "GREENFIELD_TARGET_ANCESTOR_UNSAFE",
-        "The greenfield target parent resolved outside the approved source root.",
-        ExitCode.configuration,
-      );
-    }
-  } catch (error) {
-    if (
-      !createParent &&
-      error instanceof Error &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
-      return { target, parent };
-    }
-    throw error;
-  }
-  return { target, parent };
+  return {
+    target: path.join(canonicalParent, path.basename(requestedTarget)),
+    parent: canonicalParent,
+  };
 }
 
 function assertIdentity(input: IntegrationOptions): void {
@@ -883,6 +873,78 @@ async function existingMap(
   );
 }
 
+async function commitFile(
+  root: string,
+  commit: string,
+  relative: string,
+  maxOutputBytes = 8 * 1024 * 1024,
+): Promise<ExistingFile | undefined> {
+  assertRelativePath(relative, "Committed integration file");
+  const listing = await git(
+    root,
+    [
+      "ls-tree",
+      "-z",
+      "--full-tree",
+      "--format=%(objectmode)%x09%(objecttype)%x09%(path)",
+      commit,
+      "--",
+      relative,
+    ],
+    undefined,
+    256 * 1024,
+  );
+  if (listing.length === 0) return undefined;
+  const records = listing.split("\0").filter(Boolean);
+  if (records.length !== 1) {
+    throw new MillError(
+      "INTEGRATION_BASE_FILE_UNSAFE",
+      "An exact-base integration path did not resolve to one regular Git blob.",
+      ExitCode.configuration,
+      { path: relative },
+    );
+  }
+  const [mode, type, listedPath] = records[0]?.split("\t") ?? [];
+  if (
+    (mode !== "100644" && mode !== "100755") ||
+    type !== "blob" ||
+    listedPath !== relative
+  ) {
+    throw new MillError(
+      "INTEGRATION_BASE_FILE_UNSAFE",
+      "An exact-base integration path is not a bounded regular Git file.",
+      ExitCode.configuration,
+      { path: relative, mode, type },
+    );
+  }
+  const content = await git(
+    root,
+    ["cat-file", "blob", `${commit}:${relative}`],
+    undefined,
+    maxOutputBytes,
+  );
+  return { content, digest: digest(content) };
+}
+
+async function existingMapAtCommit(
+  root: string,
+  commit: string,
+  paths: readonly string[],
+): Promise<Map<string, ExistingFile>> {
+  const entries = await Promise.all(
+    [...new Set(paths)].map(
+      async (relative) =>
+        [relative, await commitFile(root, commit, relative)] as const,
+    ),
+  );
+  return new Map(
+    entries.filter(
+      (entry): entry is readonly [string, ExistingFile] =>
+        entry[1] !== undefined,
+    ),
+  );
+}
+
 function lockFile(input: {
   mode: "greenfield" | "adoption";
   planDigest: string;
@@ -1020,23 +1082,46 @@ function integrationPlan(input: {
 
 async function assertCompatibleAdoption(
   root: string,
+  baseCommit: string,
   productTitle: string,
 ): Promise<{ nativeCommands: string[] }> {
-  const [packageSource, lockSource] = await Promise.all([
-    safeReadText(root, "package.json", 2 * 1024 * 1024),
-    safeReadText(root, "package-lock.json", 8 * 1024 * 1024),
-  ]);
+  const [packageSource, lockSource, currentPackage, currentLock] =
+    await Promise.all([
+      commitFile(root, baseCommit, "package.json", 2 * 1024 * 1024),
+      commitFile(root, baseCommit, "package-lock.json", 8 * 1024 * 1024),
+      existingFile(root, "package.json"),
+      existingFile(root, "package-lock.json"),
+    ]);
+  if (packageSource === undefined || lockSource === undefined) {
+    throw new MillError(
+      "ADOPTION_MANIFEST_INVALID",
+      "Compatible adoption requires package.json and package-lock.json in the exact base commit.",
+      ExitCode.configuration,
+    );
+  }
   let packageJson: Record<string, unknown>;
   let packageLock: JsonValue;
   try {
-    packageJson = JSON.parse(packageSource) as Record<string, unknown>;
-    packageLock = JSON.parse(lockSource) as JsonValue;
+    packageJson = JSON.parse(packageSource.content) as Record<string, unknown>;
+    packageLock = JSON.parse(lockSource.content) as JsonValue;
+    JSON.parse(currentPackage?.content ?? "");
+    JSON.parse(currentLock?.content ?? "");
   } catch (error) {
     throw new MillError(
       "ADOPTION_MANIFEST_INVALID",
       "Compatible adoption requires valid package.json and package-lock.json files.",
       ExitCode.data,
       { cause: String(error) },
+    );
+  }
+  if (
+    currentPackage?.digest !== packageSource.digest ||
+    currentLock?.digest !== lockSource.digest
+  ) {
+    throw new MillError(
+      "ADOPTION_ORACLE_INCOMPATIBLE",
+      "Compatible adoption requires the working dependency manifests to match the exact base bytes.",
+      ExitCode.configuration,
     );
   }
   const projectName = packageJson.name;
@@ -1153,9 +1238,15 @@ async function assertCompatibleAdoption(
         "test/integration/health-route.test.ts",
         "test/browser/home.spec.ts",
       ].map(async (relative) => {
-        const actual = await safeReadText(root, relative, 2 * 1024 * 1024);
+        const [actual, current] = await Promise.all([
+          commitFile(root, baseCommit, relative, 2 * 1024 * 1024),
+          existingFile(root, relative),
+        ]);
         const expected = renderedByPath.get(relative);
-        if (digest(actual) !== expected?.contentDigest) {
+        if (
+          actual?.digest !== expected?.contentDigest ||
+          current?.digest !== actual?.digest
+        ) {
           throw new MillError(
             "ADOPTION_ORACLE_INCOMPATIBLE",
             "Compatible adoption requires exact qualified native oracle bytes.",
@@ -1201,7 +1292,6 @@ export async function planGreenfieldIntegration(
   const { target } = await greenfieldTarget(
     input.sourceRoot,
     input.targetDirectory,
-    false,
   );
   try {
     await lstat(target);
@@ -1274,6 +1364,8 @@ export async function planAdoptionIntegration(
   },
 ): Promise<PlannedIntegration> {
   const root = await realpath(input.repositoryRoot);
+  await assertVisibleIndexState(root);
+  const baseCommit = await resolveCommit(root, "HEAD");
   const [approved, recipe, scan] = await Promise.all([
     authority(input),
     loadNodeWebRecipe(),
@@ -1282,6 +1374,7 @@ export async function planAdoptionIntegration(
   assertApprovedRecipe(approved, recipe);
   const compatibility = await assertCompatibleAdoption(
     root,
+    baseCommit,
     approved.proposal.productContract.title,
   );
   if (
@@ -1302,7 +1395,6 @@ export async function planAdoptionIntegration(
       },
     );
   }
-  const baseCommit = await resolveCommit(root, "HEAD");
   const candidatePaths = [
     "WORKFLOW.md",
     "README.md",
@@ -1315,8 +1407,16 @@ export async function planAdoptionIntegration(
     "mill.yaml",
     "mill.lock",
   ];
-  const initialExisting = await existingMap(root, candidatePaths);
-  if (initialExisting.has("mill.yaml") || initialExisting.has("mill.lock")) {
+  const [initialExisting, workingExisting] = await Promise.all([
+    existingMapAtCommit(root, baseCommit, candidatePaths),
+    existingMap(root, candidatePaths),
+  ]);
+  if (
+    initialExisting.has("mill.yaml") ||
+    initialExisting.has("mill.lock") ||
+    workingExisting.has("mill.yaml") ||
+    workingExisting.has("mill.lock")
+  ) {
     throw new MillError(
       "REPOSITORY_ALREADY_MANAGED",
       "Adoption apply is only for a repository without an existing Mill integration.",
@@ -1332,11 +1432,19 @@ export async function planAdoptionIntegration(
     nativeCommands: compatibility.nativeCommands,
     existingByPath: initialExisting,
   });
-  const existingByPath = await existingMap(
-    root,
-    dynamic.map((file) => file.path),
-  );
+  const [existingByPath, workingDynamic] = await Promise.all([
+    existingMapAtCommit(
+      root,
+      baseCommit,
+      dynamic.map((file) => file.path),
+    ),
+    existingMap(
+      root,
+      dynamic.map((file) => file.path),
+    ),
+  ]);
   assertNoConflicts(dynamic, existingByPath);
+  assertNoConflicts(dynamic, workingDynamic);
   const withoutLock = dynamic.sort((left, right) =>
     left.path.localeCompare(right.path),
   );
@@ -1486,6 +1594,7 @@ async function git(
   root: string,
   args: readonly string[],
   signal?: AbortSignal,
+  maxOutputBytes = 2 * 1024 * 1024,
 ): Promise<string> {
   const executable = await findTrustedExecutable("git", root);
   if (executable === undefined) {
@@ -1507,7 +1616,7 @@ async function git(
     cwd: root,
     env: gitEnvironment,
     deadlineMs: Date.now() + 60_000,
-    maxOutputBytes: 2 * 1024 * 1024,
+    maxOutputBytes,
     ...(signal === undefined ? {} : { signal }),
   });
   if (
@@ -1530,9 +1639,14 @@ async function commitIntegration(
   root: string,
   input: IntegrationOptions,
   message: string,
+  files: readonly RecipeFile[],
   signal?: AbortSignal,
 ): Promise<string> {
-  await git(root, ["add", "--all"], signal);
+  await git(
+    root,
+    ["add", "--force", "--", ...files.map((file) => file.path)],
+    signal,
+  );
   await git(
     root,
     [
@@ -1550,7 +1664,19 @@ async function commitIntegration(
     ],
     signal,
   );
-  return (await git(root, ["rev-parse", "HEAD"], signal)).trim();
+  const commit = (await git(root, ["rev-parse", "HEAD"], signal)).trim();
+  for (const file of files) {
+    const committed = await commitFile(root, commit, file.path);
+    if (committed?.digest !== file.contentDigest) {
+      throw new MillError(
+        "INTEGRATION_COMMIT_MISMATCH",
+        "The resulting commit does not contain every exact approved integration file.",
+        ExitCode.data,
+        { path: file.path },
+      );
+    }
+  }
+  return commit;
 }
 
 function assertPlanApproval(
@@ -1592,7 +1718,6 @@ async function applyGreenfieldIntegrationWithSignal(
   const { target, parent } = await greenfieldTarget(
     input.sourceRoot,
     input.targetDirectory,
-    true,
   );
   const lockDirectory = path.join(
     parent,
@@ -1711,6 +1836,7 @@ async function applyGreenfieldIntegrationWithSignal(
       staging,
       input,
       "chore: bootstrap approved product repository",
+      planned.files,
       input.signal,
     );
     await publishGreenfieldStaging(staging, target);
@@ -1764,11 +1890,12 @@ export async function applyGreenfieldIntegration(
   }
 }
 
-export async function applyAdoptionIntegration(
+async function applyAdoptionIntegrationWithSignal(
   input: IntegrationOptions & {
     repositoryRoot: string;
     planApprovalDigest: string;
     attended: boolean;
+    signal: AbortSignal;
   },
 ): Promise<{
   branch: string;
@@ -1785,12 +1912,19 @@ export async function applyAdoptionIntegration(
   }
   const planned = await planAdoptionIntegration(input);
   assertPlanApproval(planned, input.planApprovalDigest);
+  if (input.signal.aborted) {
+    throw new MillError(
+      "ADOPTION_CANCELLED",
+      "Adoption apply was cancelled before creating Git authority.",
+      ExitCode.temporary,
+    );
+  }
   const root = await realpath(input.repositoryRoot);
-  const checkoutStatus = await git(root, [
-    "status",
-    "--porcelain=v1",
-    "--untracked-files=all",
-  ]);
+  const checkoutStatus = await git(
+    root,
+    ["status", "--porcelain=v1", "--untracked-files=all"],
+    input.signal,
+  );
   if (checkoutStatus.length > 0) {
     throw new MillError(
       "ADOPTION_CHECKOUT_DIRTY",
@@ -1814,18 +1948,22 @@ export async function applyAdoptionIntegration(
     path.join(path.dirname(root), ".mill-adopt-"),
   );
   await chmod(temporary, 0o700);
-  let branchCreated = false;
   try {
     await rm(temporary, { recursive: true });
-    await git(root, ["worktree", "add", "-b", branch, temporary, baseCommit]);
-    branchCreated = true;
+    await git(
+      root,
+      ["worktree", "add", "-b", branch, temporary, baseCommit],
+      input.signal,
+    );
     await writeFiles(temporary, planned.files);
     const commit = await commitIntegration(
       temporary,
       input,
       "chore: adopt Mill delivery contracts",
+      planned.files,
+      input.signal,
     );
-    await git(root, ["worktree", "remove", "--force", temporary]);
+    await git(root, ["worktree", "remove", "--force", temporary], input.signal);
     return {
       branch,
       commit,
@@ -1839,19 +1977,37 @@ export async function applyAdoptionIntegration(
       await rm(temporary, { recursive: true, force: true });
       await git(root, ["worktree", "prune", "--expire", "now"]);
     }
-    if (branchCreated) {
-      try {
-        await git(root, [
-          "update-ref",
-          "-d",
-          `refs/heads/${branch}`,
-          baseCommit,
-        ]);
-      } catch {
-        // Preserve the branch when it no longer equals the exact disposable base.
-      }
+    try {
+      await git(root, ["update-ref", "-d", `refs/heads/${branch}`, baseCommit]);
+    } catch {
+      // Preserve the branch when it contains a committed result or no longer
+      // equals the exact disposable base.
     }
     throw error;
+  }
+}
+
+export async function applyAdoptionIntegration(
+  input: IntegrationOptions & {
+    repositoryRoot: string;
+    planApprovalDigest: string;
+    attended: boolean;
+    signal?: AbortSignal;
+  },
+): Promise<{
+  branch: string;
+  commit: string;
+  planDigest: string;
+  baseline: "unverified";
+}> {
+  const signals = processCancellationScope(input.signal);
+  try {
+    return await applyAdoptionIntegrationWithSignal({
+      ...input,
+      signal: signals.signal,
+    });
+  } finally {
+    signals.dispose();
   }
 }
 

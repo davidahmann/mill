@@ -401,6 +401,7 @@ export async function qualifyRepositoryForBuild(
   baseRef: string,
   sensitivePatterns: readonly string[] = [],
 ): Promise<{ baseCommit: string; commonDirectory: string }> {
+  await assertVisibleIndexState(root);
   const scan = await scanRepository(root);
   if (
     scan.gitConfigHazards.length > 0 ||
@@ -526,7 +527,7 @@ async function candidateStatus(worktree: string): Promise<string> {
   return `${status}${ignored}`;
 }
 
-async function assertVisibleIndexState(worktree: string): Promise<void> {
+export async function assertVisibleIndexState(worktree: string): Promise<void> {
   const entries = (await git(worktree, ["ls-files", "-v", "-z"]))
     .split("\0")
     .filter((entry) => entry.length > 0);

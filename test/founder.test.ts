@@ -277,6 +277,23 @@ describe("founder workflow", { concurrent: false }, () => {
           approvalDigest: qualification.approvalDigest,
         }),
       ).rejects.toMatchObject({ code: "ACTIVE_OUTCOME_CONFLICT" });
+      const configPath = path.join(fixture.root, "mill.yaml");
+      const configSource = await readFile(configPath, "utf8");
+      await writeFile(
+        configPath,
+        configSource.replace("timeoutSeconds: 30", "timeoutSeconds: 31"),
+      );
+      process.env.MILL_DOCKER_PATH = path.join(fixture.root, "missing-docker");
+      await expect(
+        startFounderDelivery({
+          root: fixture.root,
+          prdPath: "product/PRD.md",
+          attended: true,
+          draftPr: false,
+        }),
+      ).rejects.toMatchObject({ code: "RUN_POLICY_DRIFT" });
+      await writeFile(configPath, configSource);
+      process.env.MILL_DOCKER_PATH = fixture.dockerPath;
       const result = await startFounderDelivery({
         root: fixture.root,
         prdPath: "product/PRD.md",
