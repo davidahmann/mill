@@ -12,6 +12,13 @@ CI/review observation, human merge, and truthful closure. The CLI is `millctl`,
 published eventually as `@davidahmann/mill` to avoid collision with the existing
 `mill` command and npm package.
 
+Wave 4A adds source-backed planning contracts, stable product invariants,
+approved per-slice impact, scenario-specific semantic evidence, and durable
+worker admission. Its planning commands are deliberately read-only: today an
+operator supplies the structured proposal, while Wave 4B will coordinate the
+qualified planner and transactionally apply the first Node.js 24/Next.js 16 web
+recipe.
+
 Mill's v1 boundary is deliberately narrow:
 
 - local and attended;
@@ -125,17 +132,19 @@ processes receive neither GitHub credentials nor mutation tools. Mill journals
 intent before push and PR creation, uses an expected-old-head lease, and reads
 GitHub back before claiming an effect. An uncertain outcome becomes
 `effect_unknown`; `pr reconcile` is read-only and must classify it before any
-retry. Exact readback proving absence authorizes one retry; a second absent
-outcome blocks. Required checks pass only when every latest exact-head result is
-successful. A configured `github_required` reviewer may complete a current-head
-`APPROVED` or `COMMENTED` review, but any current-head actionable finding still
-blocks, including a severity-tagged top-level review body. Mill stops at
-`awaiting_human`; draft readiness is not closure authority and Mill never
-changes it or merges. Finalization verifies the recorded merger against
-`allowedMergerLogins`. Because GitHub does not expose an authoritative
-distinction between a one-commit squash and rebase, the provable policy is
-`linear_tree_preserving`; Mill never guesses a specific linear method from its
-allowlist.
+retry. Expired impact authority blocks a new remote mutation but does not block
+readback, observation, or truthful finalization of an already attempted effect.
+Exact readback proving absence authorizes one retry only while current mutation
+authority remains valid; a second absent outcome blocks. Required checks pass
+only when every latest exact-head result is successful. A configured
+`github_required` reviewer may complete a current-head `APPROVED` or `COMMENTED`
+review, but any current-head actionable finding still blocks, including a
+severity-tagged top-level review body. Mill stops at `awaiting_human`; draft
+readiness is not closure authority and Mill never changes it or merges.
+Finalization verifies the recorded merger against `allowedMergerLogins`. Because
+GitHub does not expose an authoritative distinction between a one-commit squash
+and rebase, the provable policy is `linear_tree_preserving`; Mill never guesses
+a specific linear method from its allowlist.
 
 Use `--json` before the command for the stable machine-readable envelope.
 `--json --version` is machine-readable; help is human-only and combining it with
@@ -163,28 +172,32 @@ exact-candidate evidence is accepted. Each verifier command has a unique
 Mill-owned container name, and Mill force-removes that exact container under a
 fresh cleanup deadline before accepting evidence. Mill ignores operator Codex
 configuration, disables host skill search, and ignores ambient execution rules
-for builder/reviewer invocations; repository-local `AGENTS.md` instructions
-still apply. Provider usage is measured when Codex reports it, while currency
-cost is reported as unavailable rather than estimated. Completion events in the
-redacted support bundle preserve that source-qualified token evidence for the
-initial build, retries, repairs, and review.
+for builder/reviewer invocations; repository-local `AGENTS.override.md` or
+`AGENTS.md` instructions still apply. Provider usage is measured when Codex
+reports it, while currency cost is reported as unavailable rather than
+estimated. Completion events in the redacted support bundle preserve that
+source-qualified token evidence for the initial build, retries, repairs, and
+review.
 
 The builder can read the non-sensitive tracked files in its disposable worktree;
 `contextPaths` are frozen, read-only priority inputs, not a filesystem read ACL.
-They, `mill.yaml`, the active task, authority files, repository instructions,
-and each selected command's declared `controlPaths` cannot overlap task output
-scope or enter the candidate. `controlPaths` name the scripts, tests, manifests,
-or other repository files that define the selected command's acceptance oracle.
-Qualification therefore rejects tracked symlinks and any tracked path matched by
-`sensitivePaths`. Keep secrets and other excluded material untracked and outside
-the repository.
+They, `mill.yaml`, the active task, authority files, the frozen effective
+repository-instruction set, and each selected command's declared `controlPaths`
+cannot overlap task output scope or enter the candidate. `controlPaths` name the
+scripts, tests, manifests, or other repository files that define the selected
+command's acceptance oracle. Qualification therefore rejects tracked symlinks
+and any tracked path matched by `sensitivePaths`. Keep secrets and other
+excluded material untracked and outside the repository.
 
 ## Status
 
 Not published. Local attended delivery and the bounded draft-PR lifecycle are
-implemented and covered by fake-provider and packed-package canaries. The first
-attended disposable real-GitHub canary, hostile-host containment, release, and
-generalized stack-compatibility claims remain pending their explicit gates.
+implemented, and the first disposable real-Codex/GitHub canary was human-merged,
+verified on resulting main, and truthfully finalized. Product-continuity and
+worker-admission contracts are implemented. Transactional recipe application,
+retrofit, the founder `start` coordinator, stronger hostile-host containment,
+genesis release, and generalized stack-compatibility claims remain pending their
+explicit gates.
 
 ## License
 

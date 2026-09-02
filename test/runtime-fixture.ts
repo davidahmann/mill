@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
+import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import { temporaryDirectory } from "./helpers.js";
 
@@ -53,11 +55,85 @@ export async function runtimeFixture(
     mkdir(path.join(root, "src"), { recursive: true }),
     mkdir(path.join(root, "test"), { recursive: true }),
   ]);
-  const product = 'schemaVersion: "1"\nid: fixture\ntitle: Fixture\n';
-  const scenarios = 'schemaVersion: "1"\nscenarios: [positive-value]\n';
+  const product = `schemaVersion: "1"
+id: fixture
+title: Fixture
+primaryUser: Test operator
+jobToBeDone: Produce one exact positive-value candidate.
+outcomes:
+  - id: OUT-POSITIVE-VALUE
+    statement: The exported value is positive.
+nonGoals: []
+assumptions: []
+unknowns: []
+sourceRefs: [SRC-PRD]
+acceptance:
+  - id: ACC-POSITIVE
+    kind: functional
+    statement: The exported value is greater than one and the native test passes.
+    sourceRefs: [SRC-PRD]
+invariants:
+  - id: INV-POSITIVE
+    statement: The exported value remains positive.
+    owner: repository
+    criticality: high
+    surfaceRefs: [src/value.js]
+    verification:
+      mode: command
+      ref: test
+    sourceRefs: [SRC-PRD]
+    unknowns: []
+decisions: []
+`;
+  const parsedProduct: unknown = parseYaml(product);
+  const productDigest = canonicalDigest(parsedProduct as JsonValue);
+  const scenarios = `schemaVersion: "1"
+productContractDigest: "${productDigest}"
+scenarios:
+  - id: SCN-POSITIVE
+    kind: normal
+    given: [an approved positive-value task]
+    when: [the native test runs]
+    then: [the exported value remains positive]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-POSITIVE]
+    invariantRefs: [INV-POSITIVE]
+    coverage: both
+    visibility: builder_visible
+    executionRef: test
+    forbidden: []
+`;
+  const impactProposal = {
+    schemaVersion: "1",
+    id: "positive-value",
+    productContractDigest: productDigest,
+    outcomeId: "OUT-POSITIVE-VALUE",
+    riskClass: "low",
+    acceptanceIds: ["ACC-POSITIVE"],
+    affectedInvariantIds: ["INV-POSITIVE"],
+    uncertainInvariantIds: [],
+    surfaces: [
+      { id: "src/value.js", kind: "system", change: "Increase the value." },
+    ],
+    scenarioIds: ["SCN-POSITIVE"],
+    commandIds: ["test"],
+    materialDecisions: [],
+    unresolved: [],
+    exceptions: [],
+    approval: null,
+  } as const;
+  const impact = stringifyYaml({
+    ...impactProposal,
+    approval: {
+      approvedBy: "mill-test",
+      approvedAt: "2026-09-02T00:00:00.000Z",
+      proposalDigest: canonicalDigest(impactProposal),
+    },
+  });
   const policy = "# Fixture policy\n\nOnly src/value.js may change.\n";
   await Promise.all([
     writeFile(path.join(root, "product", "contract.yaml"), product),
+    writeFile(path.join(root, "product", "impact.yaml"), impact),
     writeFile(path.join(root, "quality", "scenarios.yaml"), scenarios),
     writeFile(path.join(root, "WORKFLOW.md"), policy),
     writeFile(path.join(root, "src", "value.js"), "export const value = 1;\n"),
@@ -117,7 +193,7 @@ ${proposalConfiguration}commands:
   const taskPath = "product/tasks/manual.yaml";
   await writeFile(
     path.join(root, taskPath),
-    `schemaVersion: "1"
+    `schemaVersion: "2"
 id: positive-value
 title: Keep the exported value positive
 objective: Change src/value.js to export a positive value greater than one.
@@ -133,6 +209,9 @@ authority:
   policy:
     path: WORKFLOW.md
     digest: "${textDigest(policy)}"
+  impactManifest:
+    path: product/impact.yaml
+    digest: "${textDigest(impact)}"
 contextPaths:
   - WORKFLOW.md
   - test/value.test.js
@@ -141,8 +220,14 @@ allowedPaths:
 commandIds:
   - test
 acceptance:
-  - id: FIX-A1
+  - id: ACC-POSITIVE
     statement: The exported value is greater than one and the native test passes.
+    invariantIds: [INV-POSITIVE]
+    scenarioIds: [SCN-POSITIVE]
+    coverage: both
+    evidence:
+      mode: command
+      commandId: test
 commit:
   message: "feat: increase fixture value"
   authorName: "Mill Test"
@@ -181,6 +266,7 @@ import {readFile,writeFile} from "node:fs/promises";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
+if(args[0]==="--version"){console.log("codex-cli fixture-1");process.exit(0)}
 if(args[0]==="login"){console.log("Logged in using ChatGPT");process.exit(0)}
 if(args.includes("--approve-for-me")){console.error("automatic escalation approval is forbidden");process.exit(2)}
 if(!args.some((value,index)=>value==="-c"&&args[index+1]==='approval_policy="never"')){console.error("approval policy must fail closed");process.exit(2)}
@@ -198,6 +284,7 @@ if(args.includes("--output-schema")){
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:findings.length?"repair required":"clean",findings});
   console.log(JSON.stringify({type:"thread.started",thread_id:"fake-review"}));
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
+  console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:10,output_tokens:5}}));
 }else{
   const value=prompt.includes("Repair this complete")?3:2;
   await writeFile(path.join(cwd,"src/value.js"),\`export const value = \${value};\\n\`);

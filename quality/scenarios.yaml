@@ -1,0 +1,53 @@
+schemaVersion: "1"
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+scenarios:
+  - id: SCN-CONTINUITY
+    kind: normal
+    given:
+      - an exact approved impact manifest and candidate
+    when:
+      - declared native gates and semantic verification run
+    then:
+      - new behavior and preservation evidence are reported separately
+      - every required item passes or blocks
+    oracleOwner: repository
+    acceptanceRefs: [ACC-CONTINUITY]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: both
+    visibility: builder_visible
+    executionRef: test:coverage
+    forbidden:
+      - treating a digest or reviewer statement as executed evidence
+  - id: SCN-TRUNCATED-WORKER
+    kind: adversarial
+    given:
+      - a worker stream with malformed, missing, duplicate, or conflicting
+        settlement
+    when:
+      - Mill decodes the provider event stream
+    then:
+      - the invocation fails closed without granting lifecycle authority
+    oracleOwner: repository
+    acceptanceRefs: [ACC-CONTINUITY]
+    invariantRefs: [INV-WORKER-LEAST-AUTHORITY]
+    coverage: preservation
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      - interpreting progress or final prose as settlement
+  - id: SCN-RESUME-NO-REPLAY
+    kind: recovery
+    given:
+      - a mutating worker invocation may have started before interruption
+    when:
+      - the operator resumes the run
+    then:
+      - durable state is reconciled and the invocation is not blindly replayed
+    oracleOwner: repository
+    acceptanceRefs: [ACC-TRUTHFUL-RECOVERY]
+    invariantRefs: [INV-EXACT-EVIDENCE, INV-WORKER-LEAST-AUTHORITY]
+    coverage: preservation
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      - replaying the same admitted invocation identity

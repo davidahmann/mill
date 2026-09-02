@@ -45,8 +45,9 @@ function operationDeadline(config: ProposeConfig): number {
 async function openDeliveryContext(
   root: string,
   taskPath: string,
+  authorityMode: "authorize" | "readback" = "authorize",
 ): Promise<DeliveryContext> {
-  const inputs = await loadRuntimeInputs(root, taskPath);
+  const inputs = await loadRuntimeInputs(root, taskPath, authorityMode);
   if (
     inputs.config.trustCeiling !== "propose" ||
     inputs.config.propose === undefined
@@ -1173,7 +1174,11 @@ export async function reconcileDraftPr(input: {
   adapter?: GitHubAdapter;
   signal?: AbortSignal;
 }): Promise<{ run: PublicRunRecord; delivery: DeliveryRecord }> {
-  const context = await openDeliveryContext(input.root, input.taskPath);
+  const context = await openDeliveryContext(
+    input.root,
+    input.taskPath,
+    "readback",
+  );
   const { inputs, config, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   try {
@@ -1355,7 +1360,11 @@ export async function observeDraftPr(input: {
   adapter?: GitHubAdapter;
   signal?: AbortSignal;
 }): Promise<{ run: PublicRunRecord; delivery: DeliveryRecord }> {
-  const context = await openDeliveryContext(input.root, input.taskPath);
+  const context = await openDeliveryContext(
+    input.root,
+    input.taskPath,
+    "readback",
+  );
   const { inputs, config, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   try {
@@ -1532,7 +1541,11 @@ export async function finalizeDraftPr(input: {
   adapter?: GitHubAdapter;
   signal?: AbortSignal;
 }): Promise<{ run: PublicRunRecord; delivery: DeliveryRecord }> {
-  const context = await openDeliveryContext(input.root, input.taskPath);
+  const context = await openDeliveryContext(
+    input.root,
+    input.taskPath,
+    "readback",
+  );
   const { inputs, config, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   try {

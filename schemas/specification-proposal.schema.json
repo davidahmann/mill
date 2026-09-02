@@ -1,0 +1,399 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "prd": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "required": ["path", "digest"],
+      "additionalProperties": false
+    },
+    "sourceManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "productContract": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "1" },
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "primaryUser": { "type": "string", "minLength": 1 },
+        "jobToBeDone": { "type": "string", "minLength": 1 },
+        "outcomes": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^OUT-[A-Z0-9][A-Z0-9-]*$" },
+              "statement": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id", "statement"],
+            "additionalProperties": false
+          }
+        },
+        "nonGoals": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "sourceRefs": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "acceptance": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": {
+                "type": "string",
+                "enum": ["functional", "quality", "operational"]
+              },
+              "statement": { "type": "string", "minLength": 1 },
+              "sourceRefs": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^SRC-[A-Z0-9][A-Z0-9-]*$"
+                }
+              }
+            },
+            "required": ["id", "kind", "statement", "sourceRefs"],
+            "additionalProperties": false
+          }
+        },
+        "invariants": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^INV-[A-Z0-9][A-Z0-9-]*$" },
+              "statement": { "type": "string", "minLength": 1 },
+              "owner": { "type": "string", "minLength": 1 },
+              "criticality": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "critical"]
+              },
+              "surfaceRefs": {
+                "minItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "verification": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": ["command", "human", "unsupported"]
+                  },
+                  "ref": { "type": "string", "minLength": 1 }
+                },
+                "required": ["mode", "ref"],
+                "additionalProperties": false
+              },
+              "sourceRefs": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^SRC-[A-Z0-9][A-Z0-9-]*$"
+                }
+              },
+              "unknowns": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            },
+            "required": [
+              "id",
+              "statement",
+              "owner",
+              "criticality",
+              "surfaceRefs",
+              "verification",
+              "sourceRefs",
+              "unknowns"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "decisions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^DEC-[A-Z0-9][A-Z0-9-]*$" },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "product",
+                  "architecture",
+                  "design",
+                  "accessibility",
+                  "research"
+                ]
+              },
+              "question": { "type": "string", "minLength": 1 },
+              "decision": { "type": "string", "minLength": 1 },
+              "rationale": { "type": "string", "minLength": 1 },
+              "sourceRefs": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^SRC-[A-Z0-9][A-Z0-9-]*$"
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": ["proposed", "approved", "rejected"]
+              },
+              "costlyToReverse": { "type": "boolean" }
+            },
+            "required": [
+              "id",
+              "kind",
+              "question",
+              "decision",
+              "rationale",
+              "sourceRefs",
+              "status",
+              "costlyToReverse"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "title",
+        "primaryUser",
+        "jobToBeDone",
+        "outcomes",
+        "nonGoals",
+        "assumptions",
+        "unknowns",
+        "sourceRefs"
+      ],
+      "additionalProperties": false
+    },
+    "blueprints": {
+      "minItems": 1,
+      "maxItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": { "type": "string", "const": "1" },
+          "id": { "type": "string", "minLength": 1 },
+          "productContractDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "recipe": { "type": "string", "minLength": 1 },
+          "recipeVersion": { "type": "string", "minLength": 1 },
+          "runtime": { "type": "string", "minLength": 1 },
+          "architecture": {
+            "minItems": 1,
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "risks": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "id",
+          "productContractDigest",
+          "recipe",
+          "recipeVersion",
+          "runtime",
+          "architecture",
+          "risks"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "scenarioSet": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "1" },
+        "productContractDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "scenarios": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "exception",
+                  "degradation",
+                  "recovery",
+                  "authority",
+                  "adversarial"
+                ]
+              },
+              "given": {
+                "minItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "when": {
+                "minItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "then": {
+                "minItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "oracleOwner": {
+                "type": "string",
+                "enum": ["repository", "human", "external"]
+              },
+              "acceptanceRefs": {
+                "default": [],
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "invariantRefs": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^INV-[A-Z0-9][A-Z0-9-]*$"
+                }
+              },
+              "coverage": {
+                "default": "both",
+                "type": "string",
+                "enum": ["new_behavior", "preservation", "both"]
+              },
+              "visibility": {
+                "default": "builder_visible",
+                "type": "string",
+                "enum": [
+                  "builder_visible",
+                  "reviewer_owned",
+                  "human_acceptance"
+                ]
+              },
+              "executionRef": { "type": "string", "minLength": 1 },
+              "forbidden": {
+                "default": [],
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            },
+            "required": ["id", "kind", "given", "when", "then", "oracleOwner"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["schemaVersion", "productContractDigest", "scenarios"],
+      "additionalProperties": false
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 1 },
+          "sourceRefs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^SRC-[A-Z0-9][A-Z0-9-]*$" }
+          }
+        },
+        "required": ["id", "statement", "sourceRefs"],
+        "additionalProperties": false
+      }
+    },
+    "contradictions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 1 },
+          "sourceRefs": {
+            "minItems": 2,
+            "type": "array",
+            "items": { "type": "string", "pattern": "^SRC-[A-Z0-9][A-Z0-9-]*$" }
+          },
+          "blocking": { "type": "boolean" }
+        },
+        "required": ["id", "statement", "sourceRefs", "blocking"],
+        "additionalProperties": false
+      }
+    },
+    "questions": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "prompt": { "type": "string", "minLength": 1 },
+          "recommendedDefault": { "type": "string", "minLength": 1 },
+          "reversible": { "type": "boolean" },
+          "blocking": { "type": "boolean" }
+        },
+        "required": [
+          "id",
+          "prompt",
+          "recommendedDefault",
+          "reversible",
+          "blocking"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "status": { "type": "string", "const": "proposed" }
+  },
+  "required": [
+    "schemaVersion",
+    "prd",
+    "sourceManifestDigest",
+    "productContract",
+    "blueprints",
+    "scenarioSet",
+    "assumptions",
+    "contradictions",
+    "questions",
+    "status"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/specification-proposal.schema.json",
+  "title": "SpecificationProposal"
+}

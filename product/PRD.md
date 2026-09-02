@@ -1,6 +1,6 @@
 # Mill product requirements
 
-Status: approved v1 contract Owner: David Ahmann Last updated: 2026-09-01
+Status: approved v1 contract Owner: David Ahmann Last updated: 2026-09-02
 
 ## Problem
 
@@ -32,6 +32,12 @@ Given a PRD and supporting evidence, Mill must:
 8. obtain isolated-context local review and at most one normal repair wave;
 9. push only the verified commit and open one draft PR through local `gh`;
 10. reconcile ambiguous external effects and observe human merge/main checks.
+
+For every material slice, Mill must also preserve product continuity: stable
+acceptance and invariant IDs, an approved impact manifest, a realistic scenario
+set, and item-level evidence that distinguishes new behavior from preservation.
+A generic passing test, model statement, digest, or current-run oracle change is
+not semantic evidence for an unrelated requirement.
 
 ## Trust modes
 
@@ -66,5 +72,8 @@ self-modification.
   authority from available credentials.
 - Native repo commands and typed contracts are authoritative.
 - Model output may vary; approved canonical bytes and exact candidates do not.
+- Research and planning propose product truth; they never approve themselves.
+- Durable worker admission precedes process launch, and a possibly started
+  mutating invocation is reconciled rather than blindly replayed.
 - Required pending, skipped, stale, or flaky evidence does not count as pass.
 - Downstream repositories work without Mill.

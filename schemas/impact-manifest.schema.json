@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "productContractDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "outcomeId": { "type": "string", "pattern": "^OUT-[A-Z0-9][A-Z0-9-]*$" },
+    "riskClass": { "type": "string", "enum": ["low", "medium", "high"] },
+    "acceptanceIds": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "affectedInvariantIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^INV-[A-Z0-9][A-Z0-9-]*$" }
+    },
+    "uncertainInvariantIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^INV-[A-Z0-9][A-Z0-9-]*$" }
+    },
+    "surfaces": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "user",
+              "system",
+              "interface",
+              "data",
+              "operations",
+              "design"
+            ]
+          },
+          "change": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id", "kind", "change"],
+        "additionalProperties": false
+      }
+    },
+    "scenarioIds": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "commandIds": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "materialDecisions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^DEC-[A-Z0-9][A-Z0-9-]*$" }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "scopeRefs": {
+            "minItems": 1,
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "reason": { "type": "string", "minLength": 1 },
+          "approvedBy": { "type": "string", "minLength": 1 },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "scopeRefs",
+          "reason",
+          "approvedBy",
+          "approvedAt",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "approval": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "approvedBy": { "type": "string", "minLength": 1 },
+            "approvedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "proposalDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": ["approvedBy", "approvedAt", "proposalDigest"],
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "productContractDigest",
+    "outcomeId",
+    "riskClass",
+    "acceptanceIds",
+    "affectedInvariantIds",
+    "uncertainInvariantIds",
+    "surfaces",
+    "scenarioIds",
+    "commandIds",
+    "materialDecisions",
+    "unresolved",
+    "exceptions",
+    "approval"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/impact-manifest.schema.json",
+  "title": "ImpactManifest"
+}

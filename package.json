@@ -33,6 +33,8 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "node scripts/clean.mjs",
     "check:workflows": "node scripts/check-workflows.mjs",
+    "schemas:generate": "npm run build && node scripts/generate-schemas.mjs",
+    "schemas:check": "npm run build && node scripts/generate-schemas.mjs --check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
@@ -40,7 +42,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:package": "npm run clean && npm run build && node scripts/test-package.mjs",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run check:workflows && npm run test:coverage && npm run test:package",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run check:workflows && npm run schemas:check && npm run test:coverage && npm run test:package",
     "prepack": "npm run clean && npm run build"
   },
   "dependencies": {

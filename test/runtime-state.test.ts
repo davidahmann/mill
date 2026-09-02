@@ -29,6 +29,23 @@ afterEach(() => {
   else process.env.MILL_STATE_HOME = originalStateHome;
 });
 
+function startWorkerInvocation(
+  store: StateStore,
+  runId: string,
+  phase: "build" | "repair" | "review",
+): string {
+  const invocationId = randomUUID();
+  store.admitWorkerInvocation({
+    runId,
+    invocationId,
+    phase,
+    envelopeDigest: `sha256:${"d".repeat(64)}`,
+    envelopeJson: '{"redacted":true}',
+  });
+  store.markWorkerLaunchStarted(invocationId);
+  return invocationId;
+}
+
 describe("operational state", () => {
   it("persists transactional transitions and append-only redacted events with user-only permissions", async () => {
     const temporary = await temporaryDirectory("mill-state-");
@@ -77,6 +94,257 @@ describe("operational state", () => {
       await lease.release();
       const next = await acquireWriterLease(store);
       await next.release();
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
+  it("admits immutable worker invocations before launch and never replays a possible start", async () => {
+    const temporary = await temporaryDirectory("mill-worker-admission-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "worker-admission",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const invocationId = randomUUID();
+      const admission = {
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"d".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      };
+      expect(store.admitWorkerInvocation(admission)).toBe("created");
+      expect(store.admitWorkerInvocation(admission)).toBe("existing");
+      expect(store.workerInvocationStatus(invocationId)).toBe("admitted");
+      expect(() =>
+        store.admitWorkerInvocation({
+          ...admission,
+          envelopeDigest: `sha256:${"e".repeat(64)}`,
+        }),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_IDENTITY_CONFLICT",
+        }),
+      );
+
+      store.markWorkerLaunchStarted(invocationId);
+      expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
+      expect(() => store.markWorkerLaunchStarted(invocationId)).toThrow(
+        expect.objectContaining({ code: "WORKER_INVOCATION_POSSIBLY_STARTED" }),
+      );
+      store.settleWorkerInvocation(invocationId, "completed");
+      expect(store.workerInvocationStatus(invocationId)).toBe("settled");
+      expect(() =>
+        store.settleWorkerInvocation(invocationId, "completed"),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+        }),
+      );
+
+      const uncertainId = randomUUID();
+      store.admitWorkerInvocation({
+        ...admission,
+        invocationId: uncertainId,
+        envelopeDigest: `sha256:${"f".repeat(64)}`,
+      });
+      store.markWorkerLaunchStarted(uncertainId);
+      store.settleWorkerInvocation(uncertainId, "uncertain", {
+        code: "CODEX_EXECUTION_FAILED",
+        processExited: true,
+      });
+      expect(store.workerInvocationStatus(uncertainId)).toBe("uncertain");
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([
+        {
+          invocationId: uncertainId,
+          phase: "build",
+          status: "uncertain",
+          processExited: true,
+        },
+      ]);
+      store.reconcileWorkerInvocation(
+        run.id,
+        uncertainId,
+        "process_exit_observed",
+      );
+      expect(store.workerInvocationStatus(uncertainId)).toBe("reconciled");
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([]);
+      expect(store.events(run.id).map((event) => event.type)).toEqual([
+        "run.created",
+        "worker.admitted",
+        "worker.admitted",
+        "worker.reconciled",
+      ]);
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
+  it("records worker exit and clears its process binding atomically", async () => {
+    const temporary = await temporaryDirectory("mill-worker-exit-atomic-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "worker-exit",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const invocationId = randomUUID();
+      store.admitWorkerInvocation({
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"d".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      });
+      store.markWorkerLaunchStarted(invocationId);
+      const processId = randomUUID();
+      store.setActiveProcess(run.id, {
+        id: processId,
+        pid: 1234,
+        processGroup: 1234,
+        identity: `sha256:${"e".repeat(64)}`,
+      });
+
+      store.recordWorkerProcessExit(run.id, invocationId, processId);
+
+      const exitedRun = store.getRun(run.id);
+      expect(exitedRun.activeProcessId).toBeUndefined();
+      expect(exitedRun.activePid).toBeUndefined();
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([
+        {
+          invocationId,
+          phase: "build",
+          status: "launch_started",
+          processExited: true,
+        },
+      ]);
+      store.reconcileWorkerInvocation(
+        run.id,
+        invocationId,
+        "process_exit_observed",
+      );
+      expect(store.workerInvocationStatus(invocationId)).toBe("reconciled");
+      expect(store.events(run.id).map((event) => event.type)).toContain(
+        "worker.process_exited",
+      );
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
+  it("publishes candidate identity and mutating-worker settlement atomically", async () => {
+    const temporary = await temporaryDirectory("mill-worker-candidate-atomic-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "atomic-candidate",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      store.transition(run.id, "ready", "run.ready");
+      store.transition(run.id, "running", "builder.started");
+      const invocationId = randomUUID();
+      store.admitWorkerInvocation({
+        runId: run.id,
+        invocationId,
+        phase: "build",
+        envelopeDigest: `sha256:${"d".repeat(64)}`,
+        envelopeJson: '{"redacted":true}',
+      });
+      store.markWorkerLaunchStarted(invocationId);
+      expect(() =>
+        store.commitCandidate(
+          run.id,
+          "e".repeat(40),
+          "f".repeat(40),
+          randomUUID(),
+        ),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+        }),
+      );
+      expect(store.getRun(run.id)).toMatchObject({ status: "running" });
+      expect(store.getRun(run.id)).not.toHaveProperty("candidateCommit");
+      expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
+      const committed = store.commitCandidate(
+        run.id,
+        "e".repeat(40),
+        "f".repeat(40),
+        invocationId,
+      );
+      expect(committed).toMatchObject({
+        status: "committed",
+        candidateCommit: "e".repeat(40),
+        candidateTree: "f".repeat(40),
+      });
+      expect(store.workerInvocationStatus(invocationId)).toBe("settled");
+      expect(store.unresolvedMutatingWorkerInvocations(run.id)).toEqual([]);
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
+
+  it("publishes exact review evidence and reviewer settlement atomically", async () => {
+    const temporary = await temporaryDirectory("mill-worker-review-atomic-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    try {
+      const run = store.createRun({
+        repositoryId,
+        taskId: "atomic-review",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      store.transition(run.id, "ready", "run.ready");
+      store.transition(run.id, "running", "builder.started");
+      store.commitCandidate(run.id, "e".repeat(40), "f".repeat(40));
+      store.completeValidation(run.id, '{"passed":true}', true);
+      store.beginReviewAttempt(run.id, 1);
+      const invocationId = startWorkerInvocation(store, run.id, "review");
+      expect(() =>
+        store.completeReview(run.id, '{"findings":[]}', 0, false, randomUUID()),
+      ).toThrow(
+        expect.objectContaining({
+          code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+        }),
+      );
+      expect(store.getRun(run.id)).toMatchObject({ status: "verified" });
+      expect(store.getRun(run.id)).not.toHaveProperty("reviewJson");
+      expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
+      expect(
+        store.completeReview(run.id, '{"findings":[]}', 0, false, invocationId),
+      ).toMatchObject({
+        status: "reviewed",
+        reviewJson: '{"findings":[]}',
+      });
+      expect(store.workerInvocationStatus(invocationId)).toBe("settled");
     } finally {
       store.close();
       await temporary.cleanup();
@@ -153,15 +421,23 @@ describe("operational state", () => {
       store.transition(reviewed.id, "running", "running");
       store.commitCandidate(reviewed.id, "1".repeat(40), "2".repeat(40));
       store.completeValidation(reviewed.id, '{"passed":true}', true);
-      store.beginReviewAttempt(reviewed.id, 1);
+      expect(store.beginReviewAttempt(reviewed.id, 1)).toBe(1);
       expect(() => store.beginReviewAttempt(reviewed.id, 1)).toThrow(
         expect.objectContaining({ code: "REVIEW_RETRY_BUDGET_EXHAUSTED" }),
       );
+      const reviewRetry = create();
+      store.transition(reviewRetry.id, "ready", "ready");
+      store.transition(reviewRetry.id, "running", "running");
+      store.commitCandidate(reviewRetry.id, "7".repeat(40), "8".repeat(40));
+      store.completeValidation(reviewRetry.id, '{"passed":true}', true);
+      expect(store.beginReviewAttempt(reviewRetry.id, 2)).toBe(1);
+      expect(store.beginReviewAttempt(reviewRetry.id, 2)).toBe(2);
       const findings = store.completeReview(
         reviewed.id,
         '{"findings":[1]}',
         1,
         false,
+        startWorkerInvocation(store, reviewed.id, "review"),
       );
       expect(findings).toMatchObject({
         status: "blocked",
@@ -170,7 +446,7 @@ describe("operational state", () => {
       store.beginRepair(findings.id);
       store.commitCandidate(findings.id, "5".repeat(40), "6".repeat(40));
       store.completeValidation(findings.id, '{"passed":true}', true);
-      expect(() => store.beginReviewAttempt(findings.id, 1)).not.toThrow();
+      expect(store.beginReviewAttempt(findings.id, 1)).toBe(1);
       expect(() => store.beginReviewAttempt(findings.id, 1)).toThrow(
         expect.objectContaining({ code: "REVIEW_RETRY_BUDGET_EXHAUSTED" }),
       );
@@ -181,7 +457,13 @@ describe("operational state", () => {
       store.commitCandidate(nonConverged.id, "3".repeat(40), "4".repeat(40));
       store.completeValidation(nonConverged.id, '{"passed":true}', true);
       expect(
-        store.completeReview(nonConverged.id, '{"findings":[1]}', 1, true),
+        store.completeReview(
+          nonConverged.id,
+          '{"findings":[1]}',
+          1,
+          true,
+          startWorkerInvocation(store, nonConverged.id, "review"),
+        ),
       ).toMatchObject({
         status: "blocked",
         blockCode: "REVIEW_NON_CONVERGENCE",
@@ -192,7 +474,7 @@ describe("operational state", () => {
       expect(requested.cancelRequested).toBe(true);
       store.transition(cancelled.id, "cancelled", "cancelled");
       expect(store.requestCancellation(cancelled.id).status).toBe("cancelled");
-      expect(store.runs()).toHaveLength(4);
+      expect(store.runs()).toHaveLength(5);
     } finally {
       store.close();
       store.close();
@@ -306,9 +588,20 @@ describe("operational state", () => {
       );
 
       const reviewEvidence = advanceToVerified("review-evidence-race");
+      const reviewInvocation = startWorkerInvocation(
+        store,
+        reviewEvidence.id,
+        "review",
+      );
       store.requestCancellation(reviewEvidence.id);
       expectCancellationToWin(() =>
-        store.completeReview(reviewEvidence.id, '{"findings":[]}', 0, false),
+        store.completeReview(
+          reviewEvidence.id,
+          '{"findings":[]}',
+          0,
+          false,
+          reviewInvocation,
+        ),
       );
     } finally {
       store.close();

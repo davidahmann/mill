@@ -27,11 +27,23 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   exact post-merge closure with an executable delivery-record contract.
 - Coordinator-enforced remote attendance, one readback-authorized effect retry,
   changing-blocker replacement, and database-swap state-restore recovery.
+- Source manifests, stable product invariants and decision cards, canonical
+  specification assessment/promotion/diff, approved impact manifests, and
+  item-level new-behavior versus preservation evidence.
+- One internal Codex worker adapter with immutable profile and invocation
+  contracts, durable admission/launch/settlement state, recursive instruction
+  freezing, and strict provider-event settlement.
+- A source-qualified Node.js 24, Next.js 16, and React 19.2 web-recipe decision
+  for the Wave 4B greenfield path.
 
 ### Changed
 
 - Dependabot preserves the qualified Node type and TypeScript major boundaries;
   incompatible major upgrades require an intentional toolchain qualification.
+- Executable JSON Schemas are generated from runtime contract inputs and checked
+  for exact drift in the native gate.
+- New baseline qualifications and runs require task-packet version 2 with exact
+  continuity authority; version 1 remains byte-stable for in-flight resume.
 
 ### Deprecated
 
@@ -66,6 +78,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Bound task, configuration, authority, context, instruction, and declared
   command-control inputs cannot overlap candidate output scope or be rewritten
   into a validated commit.
+- Legacy context manifests retain their exact bytes; new runs freeze Codex
+  instruction override precedence, reject instruction-path drift, and keep
+  effective instructions outside candidate write scope. Semantic authority
+  rejects duplicate IDs, unbound oracle commands, future-dated approvals, and
+  attestations that do not bind the complete canonical item. Conflicting worker
+  terminal events fail closed; review evidence and worker settlement commit
+  atomically, while blocked planning assessments return truthful failures.
 - Writer exclusion now uses a crash-released SQLite transaction instead of a
   stale-directory protocol; cancellation is polled by the exact foreground
   owner, persisted PIDs are never signalling authority, and delayed exits clear
@@ -75,6 +94,17 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - OCI verification safely aliases comma-bearing bind paths, and restoring an
   older state backup quarantines newer unreferenced worktrees with durable
   recovery evidence rather than deleting them.
+- Planning promotion now rebinds approval to the proposal's current canonical
+  bytes; task semantics and selected scenarios must match approved impact, and
+  inactive impact exceptions grant no authority.
+- Candidate publication and mutating-worker settlement are atomic, review
+  attempts use their exact per-candidate generation, and worker profile digests
+  bind the prompt-template bytes actually used by the adapter.
+- Product outcomes now carry stable IDs that impact manifests must resolve;
+  single-blueprint proposals are valid, duplicate source identities block, and
+  expired effect authority cannot strand readback or truthful closure.
+- Worker exit evidence and active-process clearing now commit atomically, so a
+  controller crash after process exit leaves a safely reconcilable invocation.
 
 ### Security
 

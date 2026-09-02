@@ -13,6 +13,7 @@ export interface ProcessSpec {
   deadlineMs: number;
   maxOutputBytes: number;
   signal?: AbortSignal;
+  onBeforeSpawn?: () => void;
   onSpawn?: (process: ActiveProcess) => void;
   onExit?: (process?: ActiveProcess) => void;
   cancellationRequested?: () => boolean;
@@ -164,6 +165,19 @@ export async function runProcess(spec: ProcessSpec): Promise<ProcessResult> {
   }
   const startedAt = Date.now();
   return await new Promise<ProcessResult>((resolve, reject) => {
+    try {
+      spec.onBeforeSpawn?.();
+    } catch (error) {
+      reject(
+        new MillError(
+          "PROCESS_LAUNCH_INTENT_FAILED",
+          "Durable process launch intent could not be recorded.",
+          ExitCode.io,
+          { cause: String(error) },
+        ),
+      );
+      return;
+    }
     const child = spawn(spec.executable, [...spec.args], {
       cwd: spec.cwd,
       env: spec.env,

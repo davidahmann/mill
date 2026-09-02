@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { canonicalDigest } from "../dist/contracts/canonical.js";
+
 const root = path.resolve(import.meta.dirname, "..");
 const temporary = await mkdtemp(path.join(tmpdir(), "mill-package-"));
 const npmCli = process.env.npm_execpath;
@@ -71,10 +73,15 @@ try {
     "LICENSE",
     "schemas/context-manifest.schema.json",
     "schemas/delivery-record.schema.json",
+    "schemas/impact-manifest.schema.json",
     "schemas/mill-config.schema.json",
     "schemas/review-result.schema.json",
+    "schemas/source-manifest.schema.json",
+    "schemas/specification-proposal.schema.json",
     "schemas/task-packet.schema.json",
     "schemas/validation-evidence.schema.json",
+    "schemas/worker-invocation.schema.json",
+    "schemas/worker-profile.schema.json",
   ]) {
     if (!files.includes(required)) {
       throw new Error(`packed artifact is missing ${required}`);
@@ -140,6 +147,7 @@ try {
   }
   for (const command of [
     "auth",
+    "plan",
     "qualify",
     "run",
     "status",
@@ -169,12 +177,108 @@ try {
     mkdir(path.join(consumer, "src"), { recursive: true }),
     mkdir(path.join(consumer, "test"), { recursive: true }),
   ]);
-  const product =
-    'schemaVersion: "1"\nid: package-canary\ntitle: Package canary\n';
-  const scenarios = 'schemaVersion: "1"\nscenarios: [positive-value]\n';
+  const acceptanceStatement =
+    "The packed CLI produces an exact reviewed candidate.";
+  const productContract = {
+    schemaVersion: "1",
+    id: "package-canary",
+    title: "Package canary",
+    primaryUser: "Package maintainer",
+    jobToBeDone: "Prove the delivered package can run the attended lifecycle.",
+    outcomes: [
+      {
+        id: "OUT-REVIEWED-CANDIDATE",
+        statement: "One exact reviewed candidate",
+      },
+    ],
+    nonGoals: [],
+    assumptions: [],
+    unknowns: [],
+    sourceRefs: ["SRC-PACKAGE-CANARY"],
+    acceptance: [
+      {
+        id: "PKG-A1",
+        kind: "functional",
+        statement: acceptanceStatement,
+        sourceRefs: ["SRC-PACKAGE-CANARY"],
+      },
+    ],
+    invariants: [
+      {
+        id: "INV-PACKAGE-POSITIVE",
+        statement: "The exported value remains positive.",
+        owner: "repository",
+        criticality: "high",
+        surfaceRefs: ["src/value.js"],
+        verification: { mode: "command", ref: "test" },
+        sourceRefs: ["SRC-PACKAGE-CANARY"],
+        unknowns: [],
+      },
+    ],
+    decisions: [],
+  };
+  const product = `${JSON.stringify(productContract, undefined, 2)}\n`;
+  const productContractDigest = canonicalDigest(productContract);
+  const scenarioSet = {
+    schemaVersion: "1",
+    productContractDigest,
+    scenarios: [
+      {
+        id: "SCN-PACKAGE-CANARY",
+        kind: "normal",
+        given: ["the package canary repository"],
+        when: ["the native test runs against the candidate"],
+        then: ["the exported value remains positive"],
+        oracleOwner: "repository",
+        acceptanceRefs: ["PKG-A1"],
+        invariantRefs: ["INV-PACKAGE-POSITIVE"],
+        coverage: "both",
+        visibility: "builder_visible",
+        executionRef: "test",
+        forbidden: [],
+      },
+    ],
+  };
+  const scenarios = `${JSON.stringify(scenarioSet, undefined, 2)}\n`;
+  const impactProposal = {
+    schemaVersion: "1",
+    id: "package-canary",
+    productContractDigest,
+    outcomeId: "OUT-REVIEWED-CANDIDATE",
+    riskClass: "low",
+    acceptanceIds: ["PKG-A1"],
+    affectedInvariantIds: ["INV-PACKAGE-POSITIVE"],
+    uncertainInvariantIds: [],
+    surfaces: [
+      {
+        id: "src/value.js",
+        kind: "system",
+        change: "Increase the exported positive value.",
+      },
+    ],
+    scenarioIds: ["SCN-PACKAGE-CANARY"],
+    commandIds: ["test"],
+    materialDecisions: [],
+    unresolved: [],
+    exceptions: [],
+    approval: null,
+  };
+  const impact = `${JSON.stringify(
+    {
+      ...impactProposal,
+      approval: {
+        approvedBy: "mill-package-test",
+        approvedAt: "2026-09-02T00:00:00.000Z",
+        proposalDigest: canonicalDigest(impactProposal),
+      },
+    },
+    undefined,
+    2,
+  )}\n`;
   const policy = "# Package canary policy\n\nOnly src/value.js may change.\n";
   await Promise.all([
     writeFile(path.join(consumer, "product", "contract.yaml"), product),
+    writeFile(path.join(consumer, "product", "impact.yaml"), impact),
     writeFile(path.join(consumer, "quality", "scenarios.yaml"), scenarios),
     writeFile(path.join(consumer, "WORKFLOW.md"), policy),
     writeFile(
@@ -225,7 +329,7 @@ commands:
     ),
     writeFile(
       path.join(consumer, "product", "tasks", "canary.yaml"),
-      `schemaVersion: "1"
+      `schemaVersion: "2"
 id: package-canary
 title: Exercise the packed local lifecycle
 objective: Change src/value.js to export the value two.
@@ -241,12 +345,21 @@ authority:
   policy:
     path: WORKFLOW.md
     digest: "${digest(policy)}"
+  impactManifest:
+    path: product/impact.yaml
+    digest: "${digest(impact)}"
 contextPaths: [WORKFLOW.md, test/value.test.js]
 allowedPaths: [src/value.js]
 commandIds: [test]
 acceptance:
   - id: PKG-A1
-    statement: The packed CLI produces an exact reviewed candidate.
+    statement: ${acceptanceStatement}
+    invariantIds: [INV-PACKAGE-POSITIVE]
+    scenarioIds: [SCN-PACKAGE-CANARY]
+    coverage: both
+    evidence:
+      mode: command
+      commandId: test
 commit:
   message: "feat: pass package canary"
   authorName: "Mill Package Test"
@@ -297,6 +410,7 @@ import {writeFile} from "node:fs/promises";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
+if(args[0]==="--version"){console.log("codex-cli package-fixture-1");process.exit(0)}
 if(args[0]==="login"){console.log("Logged in using ChatGPT");process.exit(0)}
 if(args.includes("--approve-for-me")){process.exit(2)}
 if(!args.some((value,index)=>value==="-c"&&args[index+1]==='approval_policy="never"')){process.exit(2)}
@@ -310,6 +424,7 @@ if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:"clean",findings:[]});
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
+  console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));
 }else{
   await writeFile(path.join(cwd,"src/value.js"),"export const value = 2;\\n");
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));

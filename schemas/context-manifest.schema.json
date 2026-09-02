@@ -1,9 +1,74 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/davidahmann/mill/schemas/context-manifest.schema.json",
-  "title": "ContextManifest",
   "type": "object",
-  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "taskDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "provider": { "type": "string", "const": "openai" },
+    "adapter": { "type": "string", "const": "codex-cli" },
+    "authOwner": { "type": "string", "const": "operator" },
+    "isolation": { "type": "string", "const": "attended-trusted-host" },
+    "modelIdentity": { "type": "string", "const": "provider-mutable" },
+    "included": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+        },
+        "required": ["path", "digest"],
+        "additionalProperties": false
+      }
+    },
+    "excludedPatterns": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "disclosure": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "contextEpoch": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "effectiveInstructions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+        },
+        "required": ["path", "digest"],
+        "additionalProperties": false
+      }
+    },
+    "providerVisibleScope": {
+      "type": "object",
+      "properties": {
+        "repositoryScope": { "type": "string", "const": "worktree" },
+        "suppliedPaths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "writablePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+          }
+        },
+        "observedReads": { "type": "string", "const": "unavailable" }
+      },
+      "required": [
+        "repositoryScope",
+        "suppliedPaths",
+        "writablePatterns",
+        "observedReads"
+      ],
+      "additionalProperties": false
+    }
+  },
   "required": [
     "schemaVersion",
     "taskDigest",
@@ -17,34 +82,7 @@
     "excludedPatterns",
     "disclosure"
   ],
-  "properties": {
-    "schemaVersion": { "const": "1" },
-    "taskDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-    "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
-    "provider": { "const": "openai" },
-    "adapter": { "const": "codex-cli" },
-    "authOwner": { "const": "operator" },
-    "isolation": { "const": "attended-trusted-host" },
-    "modelIdentity": { "const": "provider-mutable" },
-    "included": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["path", "digest"],
-        "properties": {
-          "path": { "type": "string", "minLength": 1 },
-          "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
-        }
-      }
-    },
-    "excludedPatterns": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "disclosure": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 }
-    }
-  }
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/context-manifest.schema.json",
+  "title": "ContextManifest"
 }

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "adapter": { "type": "string", "const": "codex-cli" },
+    "role": { "type": "string", "enum": ["planner", "builder", "reviewer"] },
+    "contractVersion": { "type": "string", "const": "1" },
+    "harnessVersion": { "type": "string", "minLength": 1 },
+    "promptTemplateDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "modelIdentity": { "type": "string", "const": "provider-mutable" },
+    "approvalPolicy": { "type": "string", "const": "never" },
+    "sandbox": { "type": "string", "enum": ["read-only", "workspace-write"] },
+    "session": { "type": "string", "const": "ephemeral" },
+    "hostRules": { "type": "string", "const": "ignored" },
+    "skillDiscovery": { "type": "string", "const": "disabled" },
+    "toolDiscovery": { "type": "string", "const": "disabled" },
+    "networkPosture": {
+      "type": "string",
+      "enum": ["unknown", "provider-managed"]
+    },
+    "capabilities": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "outputContract": { "type": "string", "minLength": 1 }
+  },
+  "required": [
+    "schemaVersion",
+    "adapter",
+    "role",
+    "contractVersion",
+    "harnessVersion",
+    "promptTemplateDigest",
+    "modelIdentity",
+    "approvalPolicy",
+    "sandbox",
+    "session",
+    "hostRules",
+    "skillDiscovery",
+    "toolDiscovery",
+    "networkPosture",
+    "capabilities",
+    "outputContract"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/worker-profile.schema.json",
+  "title": "WorkerProfile"
+}

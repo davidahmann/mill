@@ -9,6 +9,90 @@ const exactSemverSchema = z
     "expected an exact semantic version",
   );
 
+const stableInvariantIdSchema = z.string().regex(/^INV-[A-Z0-9][A-Z0-9-]*$/u);
+const stableSourceIdSchema = z.string().regex(/^SRC-[A-Z0-9][A-Z0-9-]*$/u);
+const stableDecisionIdSchema = z.string().regex(/^DEC-[A-Z0-9][A-Z0-9-]*$/u);
+const stableOutcomeIdSchema = z.string().regex(/^OUT-[A-Z0-9][A-Z0-9-]*$/u);
+
+export const sourceManifestSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  trigger: z.enum([
+    "bootstrap",
+    "adoption_uncertainty",
+    "approved_stack_change",
+  ]),
+  providers: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        queries: z.array(
+          z.strictObject({
+            id: z.string().min(1),
+            text: z.string().min(1),
+            purpose: z.string().min(1),
+          }),
+        ),
+        networkDisclosure: z.string().min(1),
+      }),
+    )
+    .min(1),
+  sources: z
+    .array(
+      z.strictObject({
+        id: stableSourceIdSchema,
+        class: z.enum([
+          "primary_documentation",
+          "official_registry",
+          "security_advisory",
+          "license",
+          "repository",
+          "user_evidence",
+          "operator_constraint",
+        ]),
+        uri: z.string().min(1),
+        revision: z.string().min(1),
+        observedAt: z.iso.datetime(),
+        freshness: z.enum(["current", "stale", "unknown"]),
+        authority: z.enum(["evidence", "constraint", "approved_decision"]),
+        digest: digestSchema.optional(),
+        claims: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(1),
+});
+
+export const invariantSchema = z.strictObject({
+  id: stableInvariantIdSchema,
+  statement: z.string().min(1),
+  owner: z.string().min(1),
+  criticality: z.enum(["low", "medium", "high", "critical"]),
+  surfaceRefs: z.array(z.string().min(1)).min(1),
+  verification: z.strictObject({
+    mode: z.enum(["command", "human", "unsupported"]),
+    ref: z.string().min(1),
+  }),
+  sourceRefs: z.array(stableSourceIdSchema).min(1),
+  unknowns: z.array(z.string().min(1)),
+});
+
+export const decisionCardSchema = z.strictObject({
+  id: stableDecisionIdSchema,
+  kind: z.enum([
+    "product",
+    "architecture",
+    "design",
+    "accessibility",
+    "research",
+  ]),
+  question: z.string().min(1),
+  decision: z.string().min(1),
+  rationale: z.string().min(1),
+  sourceRefs: z.array(stableSourceIdSchema).min(1),
+  status: z.enum(["proposed", "approved", "rejected"]),
+  costlyToReverse: z.boolean(),
+});
+
 export const managedRepositorySchema = z.strictObject({
   schemaVersion: z.literal("1"),
   id: z.uuid(),
@@ -27,11 +111,30 @@ export const productContractSchema = z.strictObject({
   title: z.string().min(1),
   primaryUser: z.string().min(1),
   jobToBeDone: z.string().min(1),
-  outcomes: z.array(z.string().min(1)).min(1),
+  outcomes: z
+    .array(
+      z.strictObject({
+        id: stableOutcomeIdSchema,
+        statement: z.string().min(1),
+      }),
+    )
+    .min(1),
   nonGoals: z.array(z.string().min(1)),
   assumptions: z.array(z.string().min(1)),
   unknowns: z.array(z.string().min(1)),
   sourceRefs: z.array(z.string().min(1)).min(1),
+  acceptance: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        kind: z.enum(["functional", "quality", "operational"]),
+        statement: z.string().min(1),
+        sourceRefs: z.array(stableSourceIdSchema).min(1),
+      }),
+    )
+    .default([]),
+  invariants: z.array(invariantSchema).default([]),
+  decisions: z.array(decisionCardSchema).default([]),
 });
 
 export const blueprintSchema = z.strictObject({
@@ -59,6 +162,14 @@ export const scenarioSchema = z.strictObject({
   when: z.array(z.string().min(1)).min(1),
   then: z.array(z.string().min(1)).min(1),
   oracleOwner: z.enum(["repository", "human", "external"]),
+  acceptanceRefs: z.array(z.string().min(1)).default([]),
+  invariantRefs: z.array(stableInvariantIdSchema).default([]),
+  coverage: z.enum(["new_behavior", "preservation", "both"]).default("both"),
+  visibility: z
+    .enum(["builder_visible", "reviewer_owned", "human_acceptance"])
+    .default("builder_visible"),
+  executionRef: z.string().min(1).optional(),
+  forbidden: z.array(z.string().min(1)).default([]),
 });
 
 export const scenarioSetSchema = z.strictObject({
@@ -79,6 +190,93 @@ export const outcomePlanSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   productContractDigest: digestSchema,
   outcomes: z.array(outcomeSchema).min(1),
+});
+
+const impactExceptionSchema = z.strictObject({
+  id: z.string().min(1),
+  scopeRefs: z.array(z.string().min(1)).min(1),
+  reason: z.string().min(1),
+  approvedBy: z.string().min(1),
+  approvedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+});
+
+export const impactManifestSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+  productContractDigest: digestSchema,
+  outcomeId: stableOutcomeIdSchema,
+  riskClass: z.enum(["low", "medium", "high"]),
+  acceptanceIds: z.array(z.string().min(1)).min(1),
+  affectedInvariantIds: z.array(stableInvariantIdSchema),
+  uncertainInvariantIds: z.array(stableInvariantIdSchema),
+  surfaces: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        kind: z.enum([
+          "user",
+          "system",
+          "interface",
+          "data",
+          "operations",
+          "design",
+        ]),
+        change: z.string().min(1),
+      }),
+    )
+    .min(1),
+  scenarioIds: z.array(z.string().min(1)).min(1),
+  commandIds: z.array(z.string().min(1)).min(1),
+  materialDecisions: z.array(stableDecisionIdSchema),
+  unresolved: z.array(z.string().min(1)),
+  exceptions: z.array(impactExceptionSchema),
+  approval: z
+    .strictObject({
+      approvedBy: z.string().min(1),
+      approvedAt: z.iso.datetime(),
+      proposalDigest: digestSchema,
+    })
+    .nullable(),
+});
+
+export const specificationProposalSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  prd: z.strictObject({
+    path: z.string().min(1),
+    digest: digestSchema,
+  }),
+  sourceManifestDigest: digestSchema,
+  productContract: productContractSchema,
+  blueprints: z.array(blueprintSchema).length(1),
+  scenarioSet: scenarioSetSchema,
+  assumptions: z.array(
+    z.strictObject({
+      id: z.string().min(1),
+      statement: z.string().min(1),
+      sourceRefs: z.array(stableSourceIdSchema),
+    }),
+  ),
+  contradictions: z.array(
+    z.strictObject({
+      id: z.string().min(1),
+      statement: z.string().min(1),
+      sourceRefs: z.array(stableSourceIdSchema).min(2),
+      blocking: z.boolean(),
+    }),
+  ),
+  questions: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        prompt: z.string().min(1),
+        recommendedDefault: z.string().min(1),
+        reversible: z.boolean(),
+        blocking: z.boolean(),
+      }),
+    )
+    .max(2),
+  status: z.literal("proposed"),
 });
 
 const repositoryPathPatternSchema = z
@@ -102,6 +300,21 @@ const githubReviewPolicySchema = z
           "github_required review policy needs at least one reviewer login",
       });
     }
+  })
+  .meta({
+    allOf: [
+      {
+        if: {
+          properties: { mode: { const: "github_required" } },
+          required: ["mode"],
+        },
+        then: {
+          properties: {
+            requiredReviewerLogins: { type: "array", minItems: 1 },
+          },
+        },
+      },
+    ],
   });
 
 export const millConfigSchema = z
@@ -159,6 +372,17 @@ export const millConfigSchema = z
           "propose configuration is required at the propose trust ceiling",
       });
     }
+  })
+  .meta({
+    allOf: [
+      {
+        if: {
+          properties: { trustCeiling: { const: "propose" } },
+          required: ["trustCeiling"],
+        },
+        then: { properties: { propose: true }, required: ["propose"] },
+      },
+    ],
   });
 
 const authorityReferenceSchema = z.strictObject({
@@ -166,29 +390,46 @@ const authorityReferenceSchema = z.strictObject({
   digest: digestSchema,
 });
 
-export const taskPacketSchema = z.strictObject({
-  schemaVersion: z.literal("1"),
+const humanAttestationSchema = z.strictObject({
+  id: z.string().regex(/^ATT-[A-Z0-9][A-Z0-9-]*$/u),
+  approvedBy: z.string().min(1),
+  approvedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+  claims: z
+    .array(
+      z.strictObject({
+        kind: z.enum(["acceptance", "invariant", "scenario"]),
+        id: z.string().min(1),
+        digest: digestSchema,
+      }),
+    )
+    .min(1),
+});
+
+const evidenceDispositionSchema = z.discriminatedUnion("mode", [
+  z.strictObject({
+    mode: z.literal("command"),
+    commandId: z.string().min(1),
+  }),
+  z.strictObject({
+    mode: z.literal("human"),
+    attestationId: z.string().regex(/^ATT-[A-Z0-9][A-Z0-9-]*$/u),
+  }),
+  z.strictObject({
+    mode: z.literal("unsupported"),
+    reason: z.string().min(1),
+  }),
+]);
+
+const taskPacketCommonShape = {
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
   title: z.string().min(1),
   objective: z.string().min(1),
   riskClass: z.enum(["low", "medium", "high"]),
   baseRef: z.string().regex(/^(?!-)[^\s]+$/u),
-  authority: z.strictObject({
-    productContract: authorityReferenceSchema,
-    scenarioSet: authorityReferenceSchema,
-    policy: authorityReferenceSchema,
-  }),
   contextPaths: z.array(z.string().min(1)).min(1),
   allowedPaths: z.array(repositoryPathPatternSchema).min(1),
   commandIds: z.array(z.string().min(1)).min(1),
-  acceptance: z
-    .array(
-      z.strictObject({
-        id: z.string().min(1),
-        statement: z.string().min(1),
-      }),
-    )
-    .min(1),
   commit: z.strictObject({
     message: z.string().min(1),
     authorName: z.string().min(1),
@@ -199,6 +440,93 @@ export const taskPacketSchema = z.strictObject({
     maxOutputBytes: z.number().int().min(1024).max(10_000_000),
     retryCount: z.number().int().min(0).max(1),
   }),
+} as const;
+
+export const taskPacketV1Schema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  ...taskPacketCommonShape,
+  authority: z.strictObject({
+    productContract: authorityReferenceSchema,
+    scenarioSet: authorityReferenceSchema,
+    policy: authorityReferenceSchema,
+  }),
+  acceptance: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        statement: z.string().min(1),
+      }),
+    )
+    .min(1),
+});
+
+export const taskPacketV2Schema = z.strictObject({
+  schemaVersion: z.literal("2"),
+  ...taskPacketCommonShape,
+  authority: z.strictObject({
+    productContract: authorityReferenceSchema,
+    scenarioSet: authorityReferenceSchema,
+    policy: authorityReferenceSchema,
+    impactManifest: authorityReferenceSchema,
+  }),
+  attestations: z.array(humanAttestationSchema).default([]),
+  acceptance: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        statement: z.string().min(1),
+        invariantIds: z.array(stableInvariantIdSchema),
+        scenarioIds: z.array(z.string().min(1)),
+        coverage: z.enum(["new_behavior", "preservation", "both"]),
+        evidence: evidenceDispositionSchema,
+      }),
+    )
+    .min(1),
+});
+
+export const taskPacketSchema = z.discriminatedUnion("schemaVersion", [
+  taskPacketV1Schema,
+  taskPacketV2Schema,
+]);
+
+export const workerProfileSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  adapter: z.literal("codex-cli"),
+  role: z.enum(["planner", "builder", "reviewer"]),
+  contractVersion: z.literal("1"),
+  harnessVersion: z.string().min(1),
+  promptTemplateDigest: digestSchema,
+  modelIdentity: z.literal("provider-mutable"),
+  approvalPolicy: z.literal("never"),
+  sandbox: z.enum(["read-only", "workspace-write"]),
+  session: z.literal("ephemeral"),
+  hostRules: z.literal("ignored"),
+  skillDiscovery: z.literal("disabled"),
+  toolDiscovery: z.literal("disabled"),
+  networkPosture: z.enum(["unknown", "provider-managed"]),
+  capabilities: z.array(z.string().min(1)).min(1),
+  outputContract: z.string().min(1),
+});
+
+export const workerInvocationSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  invocationId: z.uuid(),
+  runId: z.uuid(),
+  phase: z.enum(["build", "repair", "review"]),
+  attempt: z.number().int().positive().max(2),
+  taskDigest: digestSchema,
+  contextEpoch: digestSchema,
+  baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  candidateCommit: z
+    .string()
+    .regex(/^[a-f0-9]{40}$/u)
+    .optional(),
+  impactManifestDigest: digestSchema.optional(),
+  profile: workerProfileSchema,
+  profileDigest: digestSchema,
+  allowedPaths: z.array(repositoryPathPatternSchema),
+  deadlineAt: z.iso.datetime(),
+  maxOutputBytes: z.number().int().min(1024).max(10_000_000),
 });
 
 export const contextManifestSchema = z.strictObject({
@@ -215,6 +543,18 @@ export const contextManifestSchema = z.strictObject({
   ),
   excludedPatterns: z.array(z.string().min(1)),
   disclosure: z.array(z.string().min(1)),
+  contextEpoch: digestSchema.optional(),
+  effectiveInstructions: z
+    .array(z.strictObject({ path: z.string().min(1), digest: digestSchema }))
+    .optional(),
+  providerVisibleScope: z
+    .strictObject({
+      repositoryScope: z.literal("worktree"),
+      suppliedPaths: z.array(z.string().min(1)),
+      writablePatterns: z.array(repositoryPathPatternSchema),
+      observedReads: z.literal("unavailable"),
+    })
+    .optional(),
 });
 
 export const reviewResultSchema = z.strictObject({
@@ -267,6 +607,24 @@ export const validationEvidenceSchema = z.strictObject({
         .optional(),
     }),
   ),
+  semantic: z
+    .strictObject({
+      impactManifestDigest: digestSchema,
+      items: z.array(
+        z.strictObject({
+          kind: z.enum(["acceptance", "invariant", "scenario"]),
+          id: z.string().min(1),
+          coverage: z.enum(["new_behavior", "preservation", "both"]),
+          status: z.enum(["passed", "attested", "blocked"]),
+          evidenceRefs: z.array(z.string().min(1)),
+          reason: z.string().min(1).optional(),
+        }),
+      ),
+      newBehaviorPassed: z.boolean(),
+      preservationPassed: z.boolean(),
+      passed: z.boolean(),
+    })
+    .optional(),
   passed: z.boolean(),
 });
 
@@ -378,6 +736,7 @@ export const millLockSchema = z.strictObject({
 export const contractSchemas = {
   blueprint: blueprintSchema,
   contextManifest: contextManifestSchema,
+  impactManifest: impactManifestSchema,
   managedRepository: managedRepositorySchema,
   millConfig: millConfigSchema,
   millLock: millLockSchema,
@@ -385,8 +744,12 @@ export const contractSchemas = {
   productContract: productContractSchema,
   reviewResult: reviewResultSchema,
   scenarioSet: scenarioSetSchema,
+  sourceManifest: sourceManifestSchema,
+  specificationProposal: specificationProposalSchema,
   taskPacket: taskPacketSchema,
   validationEvidence: validationEvidenceSchema,
+  workerInvocation: workerInvocationSchema,
+  workerProfile: workerProfileSchema,
   deliveryRecord: deliveryRecordSchema,
 } as const;
 

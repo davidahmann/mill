@@ -315,7 +315,7 @@ export class StateStore {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       ) STRICT;
-      INSERT OR IGNORE INTO metadata(key, value) VALUES ('schema_version', '1');
+      INSERT OR IGNORE INTO metadata(key, value) VALUES ('schema_version', '2');
       CREATE TABLE IF NOT EXISTS runs (
         id TEXT PRIMARY KEY,
         repository_id TEXT NOT NULL,
@@ -362,10 +362,33 @@ export class StateStore {
         evidence_digest TEXT NOT NULL,
         created_at TEXT NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS worker_invocations (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        phase TEXT NOT NULL,
+        envelope_digest TEXT NOT NULL,
+        envelope_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS worker_invocation_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        invocation_id TEXT NOT NULL REFERENCES worker_invocations(id),
+        occurred_at TEXT NOT NULL,
+        type TEXT NOT NULL,
+        data_json TEXT NOT NULL
+      ) STRICT;
       CREATE TRIGGER IF NOT EXISTS run_events_no_update
         BEFORE UPDATE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
       CREATE TRIGGER IF NOT EXISTS run_events_no_delete
         BEFORE DELETE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS worker_invocations_no_update
+        BEFORE UPDATE ON worker_invocations BEGIN SELECT RAISE(ABORT, 'worker invocations are immutable'); END;
+      CREATE TRIGGER IF NOT EXISTS worker_invocations_no_delete
+        BEFORE DELETE ON worker_invocations BEGIN SELECT RAISE(ABORT, 'worker invocations are immutable'); END;
+      CREATE TRIGGER IF NOT EXISTS worker_invocation_events_no_update
+        BEFORE UPDATE ON worker_invocation_events BEGIN SELECT RAISE(ABORT, 'worker invocation events are append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS worker_invocation_events_no_delete
+        BEFORE DELETE ON worker_invocation_events BEGIN SELECT RAISE(ABORT, 'worker invocation events are append-only'); END;
     `);
     const runColumns = database
       .prepare("PRAGMA table_info(runs)")
@@ -385,13 +408,18 @@ export class StateStore {
     const version = database
       .prepare("SELECT value FROM metadata WHERE key = 'schema_version'")
       .get() as { value?: string } | undefined;
-    if (version?.value !== "1") {
+    if (version?.value !== "1" && version?.value !== "2") {
       database.close();
       throw new MillError(
         "UNSUPPORTED_STATE_SCHEMA",
         "Operational state uses an unsupported schema version.",
         ExitCode.configuration,
       );
+    }
+    if (version.value === "1") {
+      database
+        .prepare("UPDATE metadata SET value = '2' WHERE key = 'schema_version'")
+        .run();
     }
     await chmod(databasePath, 0o600);
     return new StateStore(directory, database);
@@ -550,7 +578,12 @@ export class StateStore {
     });
   }
 
-  commitCandidate(id: string, commit: string, tree: string): RunRecord {
+  commitCandidate(
+    id: string,
+    commit: string,
+    tree: string,
+    invocationId?: string,
+  ): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
       if (current.cancelRequested) {
@@ -567,6 +600,22 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
+      if (invocationId !== undefined) {
+        const invocation = this.#database
+          .prepare("SELECT run_id, phase FROM worker_invocations WHERE id = ?")
+          .get(invocationId) as { run_id: string; phase: string } | undefined;
+        if (
+          invocation?.run_id !== id ||
+          (invocation.phase !== "build" && invocation.phase !== "repair") ||
+          this.workerInvocationStatus(invocationId) !== "launch_started"
+        ) {
+          throw new MillError(
+            "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+            "Candidate publication requires its one started mutating worker invocation.",
+            ExitCode.configuration,
+          );
+        }
+      }
       this.#database
         .prepare(
           `UPDATE runs SET candidate_commit = ?, candidate_tree = ?,
@@ -581,6 +630,13 @@ export class StateStore {
         commit,
         tree,
       });
+      if (invocationId !== undefined) {
+        this.#invocationEvent(invocationId, "settled", {
+          outcome: "completed",
+          candidateCommit: commit,
+          candidateTree: tree,
+        });
+      }
     });
     return this.getRun(id);
   }
@@ -623,6 +679,8 @@ export class StateStore {
     value: string,
     findings: number,
     nonConverged: boolean,
+    invocationId: string,
+    completionDetails: Record<string, string | number | boolean | null> = {},
   ): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
@@ -640,6 +698,20 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
+      const invocation = this.#database
+        .prepare("SELECT run_id, phase FROM worker_invocations WHERE id = ?")
+        .get(invocationId) as { run_id: string; phase: string } | undefined;
+      if (
+        invocation?.run_id !== id ||
+        invocation.phase !== "review" ||
+        this.workerInvocationStatus(invocationId) !== "launch_started"
+      ) {
+        throw new MillError(
+          "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+          "Review publication requires its one started reviewer invocation.",
+          ExitCode.configuration,
+        );
+      }
       const status: RunStatus = findings === 0 ? "reviewed" : "blocked";
       const code =
         findings === 0
@@ -652,11 +724,21 @@ export class StateStore {
           "UPDATE runs SET review_json = ?, status = ?, block_code = ?, updated_at = ? WHERE id = ?",
         )
         .run(value, status, code, new Date().toISOString(), id);
+      this.#event(id, "review.completed", {
+        ...completionDetails,
+        candidateCommit: current.candidateCommit ?? null,
+        findings,
+      });
       this.#event(id, findings === 0 ? "review.passed" : "review.blocked", {
         from: current.status,
         to: status,
         findings,
         ...(code === null ? {} : { code }),
+      });
+      this.#invocationEvent(invocationId, "settled", {
+        outcome: "completed",
+        candidateCommit: current.candidateCommit ?? null,
+        findings,
       });
     });
     return this.getRun(id);
@@ -751,7 +833,8 @@ export class StateStore {
     return this.getRun(id);
   }
 
-  beginReviewAttempt(id: string, maximum: number): void {
+  beginReviewAttempt(id: string, maximum: number): number {
+    let attempt = 0;
     this.#transaction(() => {
       const current = this.getRun(id);
       if (current.cancelRequested) {
@@ -789,11 +872,13 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
+      attempt = row.count + 1;
       this.#event(id, "review.started", {
         candidateCommit: current.candidateCommit,
-        attempt: row.count + 1,
+        attempt,
       });
     });
+    return attempt;
   }
 
   recordBaselineQualification(input: {
@@ -1025,6 +1110,275 @@ export class StateStore {
     this.#transaction(() => this.#event(id, type, data));
   }
 
+  admitWorkerInvocation(input: {
+    runId: string;
+    invocationId: string;
+    phase: string;
+    envelopeDigest: string;
+    envelopeJson: string;
+  }): "created" | "existing" {
+    let disposition: "created" | "existing" = "existing";
+    this.#transaction(() => {
+      this.getRun(input.runId);
+      const result = this.#database
+        .prepare(
+          `INSERT OR IGNORE INTO worker_invocations(
+            id, run_id, phase, envelope_digest, envelope_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          input.invocationId,
+          input.runId,
+          input.phase,
+          input.envelopeDigest,
+          input.envelopeJson,
+          new Date().toISOString(),
+        );
+      const stored = this.#database
+        .prepare(
+          `SELECT run_id, phase, envelope_digest, envelope_json
+           FROM worker_invocations WHERE id = ?`,
+        )
+        .get(input.invocationId) as
+        | {
+            run_id: string;
+            phase: string;
+            envelope_digest: string;
+            envelope_json: string;
+          }
+        | undefined;
+      if (
+        stored?.run_id !== input.runId ||
+        stored.phase !== input.phase ||
+        stored.envelope_digest !== input.envelopeDigest ||
+        stored.envelope_json !== input.envelopeJson
+      ) {
+        throw new MillError(
+          "WORKER_INVOCATION_IDENTITY_CONFLICT",
+          "Worker invocation identity was reused with a different immutable envelope.",
+          ExitCode.configuration,
+        );
+      }
+      if (result.changes === 1) {
+        disposition = "created";
+        this.#invocationEvent(input.invocationId, "admitted", {
+          envelopeDigest: input.envelopeDigest,
+        });
+        this.#event(input.runId, "worker.admitted", {
+          invocationId: input.invocationId,
+          phase: input.phase,
+          envelopeDigest: input.envelopeDigest,
+        });
+      }
+    });
+    return disposition;
+  }
+
+  workerInvocationStatus(
+    invocationId: string,
+  ): "admitted" | "launch_started" | "settled" | "uncertain" | "reconciled" {
+    const exists = this.#database
+      .prepare("SELECT 1 AS present FROM worker_invocations WHERE id = ?")
+      .get(invocationId) as { present: number } | undefined;
+    if (exists?.present !== 1) {
+      throw new MillError(
+        "WORKER_INVOCATION_NOT_FOUND",
+        "Worker invocation admission was not found.",
+        ExitCode.data,
+      );
+    }
+    const events = this.#database
+      .prepare(
+        `SELECT type FROM worker_invocation_events
+         WHERE invocation_id = ? ORDER BY sequence`,
+      )
+      .all(invocationId) as unknown as { type: string }[];
+    if (events.some((event) => event.type === "reconciled")) {
+      return "reconciled";
+    }
+    if (events.some((event) => event.type === "uncertain")) return "uncertain";
+    if (events.some((event) => event.type === "settled")) return "settled";
+    if (events.some((event) => event.type === "launch_started")) {
+      return "launch_started";
+    }
+    return "admitted";
+  }
+
+  markWorkerLaunchStarted(invocationId: string): void {
+    this.#transaction(() => {
+      const status = this.workerInvocationStatus(invocationId);
+      if (status !== "admitted") {
+        throw new MillError(
+          "WORKER_INVOCATION_POSSIBLY_STARTED",
+          "A worker invocation with this identity may already have started and cannot be replayed.",
+          ExitCode.temporary,
+          { status },
+        );
+      }
+      this.#invocationEvent(invocationId, "launch_started", {});
+    });
+  }
+
+  settleWorkerInvocation(
+    invocationId: string,
+    outcome: "completed" | "failed" | "uncertain",
+    details: Record<string, string | number | boolean | null> = {},
+  ): void {
+    this.#transaction(() => {
+      const status = this.workerInvocationStatus(invocationId);
+      if (status !== "launch_started") {
+        throw new MillError(
+          "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
+          "Worker settlement requires exactly one started, unsettled invocation.",
+          ExitCode.configuration,
+          { status },
+        );
+      }
+      this.#invocationEvent(
+        invocationId,
+        outcome === "uncertain" ? "uncertain" : "settled",
+        { outcome, ...details },
+      );
+    });
+  }
+
+  recordWorkerProcessExit(
+    runId: string,
+    invocationId: string,
+    processId?: string,
+  ): void {
+    this.#transaction(() => {
+      this.getRun(runId);
+      const invocation = this.#database
+        .prepare("SELECT run_id FROM worker_invocations WHERE id = ?")
+        .get(invocationId) as { run_id: string } | undefined;
+      if (
+        invocation?.run_id !== runId ||
+        this.workerInvocationStatus(invocationId) !== "launch_started"
+      ) {
+        throw new MillError(
+          "WORKER_PROCESS_EXIT_CONFLICT",
+          "Process exit evidence requires its one started, unsettled worker invocation.",
+          ExitCode.configuration,
+        );
+      }
+      const active = this.#database
+        .prepare("SELECT active_process_id FROM runs WHERE id = ?")
+        .get(runId) as { active_process_id: string | null };
+      if (
+        (processId !== undefined && active.active_process_id !== processId) ||
+        (processId === undefined && active.active_process_id !== null)
+      ) {
+        throw new MillError(
+          "WORKER_PROCESS_EXIT_CONFLICT",
+          "Process exit evidence does not match the active worker identity.",
+          ExitCode.configuration,
+        );
+      }
+      this.#invocationEvent(invocationId, "process_exited", {
+        processId: processId ?? null,
+      });
+      this.#database
+        .prepare(
+          `UPDATE runs SET active_process_id = NULL, active_pid = NULL,
+           active_process_group = NULL, active_process_identity = NULL,
+           updated_at = ? WHERE id = ?`,
+        )
+        .run(new Date().toISOString(), runId);
+      this.#event(runId, "worker.process_exited", { invocationId });
+    });
+  }
+
+  unresolvedMutatingWorkerInvocations(runId: string): readonly {
+    invocationId: string;
+    phase: "build" | "repair";
+    status: "launch_started" | "uncertain";
+    processExited: boolean;
+  }[] {
+    this.getRun(runId);
+    const rows = this.#database
+      .prepare(
+        `SELECT id, phase FROM worker_invocations
+         WHERE run_id = ? AND phase IN ('build', 'repair')
+         ORDER BY created_at, id`,
+      )
+      .all(runId) as unknown as { id: string; phase: "build" | "repair" }[];
+    return rows.flatMap((row) => {
+      const status = this.workerInvocationStatus(row.id);
+      if (status !== "launch_started" && status !== "uncertain") return [];
+      const uncertain = this.#database
+        .prepare(
+          `SELECT data_json FROM worker_invocation_events
+           WHERE invocation_id = ? AND type = 'uncertain'
+           ORDER BY sequence DESC LIMIT 1`,
+        )
+        .get(row.id) as { data_json: string } | undefined;
+      const observedExit = this.#database
+        .prepare(
+          `SELECT 1 AS present FROM worker_invocation_events
+           WHERE invocation_id = ? AND type = 'process_exited' LIMIT 1`,
+        )
+        .get(row.id) as { present: number } | undefined;
+      let processExited = observedExit?.present === 1;
+      if (uncertain !== undefined) {
+        try {
+          const details = JSON.parse(uncertain.data_json) as {
+            processExited?: unknown;
+          };
+          processExited = processExited || details.processExited === true;
+        } catch {
+          // Preserve separately journaled process-exit evidence.
+        }
+      }
+      return [
+        {
+          invocationId: row.id,
+          phase: row.phase,
+          status,
+          processExited,
+        },
+      ];
+    });
+  }
+
+  reconcileWorkerInvocation(
+    runId: string,
+    invocationId: string,
+    reason: "process_exit_observed" | "recorded_process_absent",
+  ): void {
+    this.#transaction(() => {
+      this.getRun(runId);
+      const invocation = this.#database
+        .prepare(`SELECT run_id, phase FROM worker_invocations WHERE id = ?`)
+        .get(invocationId) as { run_id: string; phase: string } | undefined;
+      if (
+        invocation?.run_id !== runId ||
+        (invocation.phase !== "build" && invocation.phase !== "repair")
+      ) {
+        throw new MillError(
+          "WORKER_INVOCATION_RECONCILIATION_CONFLICT",
+          "Worker invocation is not a mutating admission for this run.",
+          ExitCode.configuration,
+        );
+      }
+      const status = this.workerInvocationStatus(invocationId);
+      if (status !== "launch_started" && status !== "uncertain") {
+        throw new MillError(
+          "WORKER_INVOCATION_RECONCILIATION_CONFLICT",
+          "Only an unresolved mutating worker invocation can be reconciled.",
+          ExitCode.configuration,
+          { status },
+        );
+      }
+      this.#invocationEvent(invocationId, "reconciled", { reason });
+      this.#event(runId, "worker.reconciled", {
+        invocationId,
+        phase: invocation.phase,
+        reason,
+      });
+    });
+  }
+
   #transaction(action: () => void): void {
     try {
       this.#database.exec("BEGIN IMMEDIATE");
@@ -1052,6 +1406,20 @@ export class StateStore {
         "INSERT INTO run_events(run_id, occurred_at, type, data_json) VALUES (?, ?, ?, ?)",
       )
       .run(id, new Date().toISOString(), type, JSON.stringify(data));
+  }
+
+  #invocationEvent(
+    invocationId: string,
+    type: string,
+    data: Record<string, unknown>,
+  ): void {
+    this.#database
+      .prepare(
+        `INSERT INTO worker_invocation_events(
+          invocation_id, occurred_at, type, data_json
+        ) VALUES (?, ?, ?, ?)`,
+      )
+      .run(invocationId, new Date().toISOString(), type, JSON.stringify(data));
   }
 }
 
@@ -1166,7 +1534,12 @@ export async function restoreStateBackup(
           `SELECT name FROM sqlite_schema
            WHERE (type = 'table' AND name IN ('metadata', 'runs', 'run_events'))
               OR (type = 'table' AND name = 'baseline_qualifications')
-              OR (type = 'trigger' AND name IN ('run_events_no_update', 'run_events_no_delete'))`,
+              OR (type = 'table' AND name IN ('worker_invocations', 'worker_invocation_events'))
+              OR (type = 'trigger' AND name IN (
+                'run_events_no_update', 'run_events_no_delete',
+                'worker_invocations_no_update', 'worker_invocations_no_delete',
+                'worker_invocation_events_no_update', 'worker_invocation_events_no_delete'
+              ))`,
         )
         .all() as unknown as { name: string }[];
       const worktrees = candidate
@@ -1176,8 +1549,9 @@ export async function restoreStateBackup(
         .all() as unknown as { worktree_path: string }[];
       if (
         integrity?.integrity_check !== "ok" ||
-        version?.value !== "1" ||
-        new Set(requiredObjects.map((object) => object.name)).size !== 6
+        (version?.value !== "1" && version?.value !== "2") ||
+        new Set(requiredObjects.map((object) => object.name)).size !==
+          (version.value === "1" ? 6 : 12)
       ) {
         throw new Error("backup integrity, schema version, or objects invalid");
       }

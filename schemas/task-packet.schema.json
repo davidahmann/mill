@@ -1,106 +1,395 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/davidahmann/mill/schemas/task-packet.schema.json",
-  "title": "TaskPacket",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "id",
-    "title",
-    "objective",
-    "riskClass",
-    "baseRef",
-    "authority",
-    "contextPaths",
-    "allowedPaths",
-    "commandIds",
-    "acceptance",
-    "commit",
-    "budget"
-  ],
-  "properties": {
-    "schemaVersion": { "const": "1" },
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-    "title": { "type": "string", "minLength": 1 },
-    "objective": { "type": "string", "minLength": 1 },
-    "riskClass": { "enum": ["low", "medium", "high"] },
-    "baseRef": { "type": "string", "pattern": "^(?!-)[^\\s]+$" },
-    "authority": {
+  "oneOf": [
+    {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["productContract", "scenarioSet", "policy"],
       "properties": {
-        "productContract": { "$ref": "#/$defs/authorityReference" },
-        "scenarioSet": { "$ref": "#/$defs/authorityReference" },
-        "policy": { "$ref": "#/$defs/authorityReference" }
-      }
-    },
-    "contextPaths": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "allowedPaths": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "string",
-        "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^*?[\\]\\\\]+(?:/\\*\\*)?$"
-      }
-    },
-    "commandIds": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "acceptance": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "statement"],
-        "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "statement": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "commit": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["message", "authorName", "authorEmail"],
-      "properties": {
-        "message": { "type": "string", "minLength": 1 },
-        "authorName": { "type": "string", "minLength": 1 },
-        "authorEmail": { "type": "string", "format": "email" }
-      }
-    },
-    "budget": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["deadlineSeconds", "maxOutputBytes", "retryCount"],
-      "properties": {
-        "deadlineSeconds": { "type": "integer", "minimum": 1, "maximum": 7200 },
-        "maxOutputBytes": {
-          "type": "integer",
-          "minimum": 1024,
-          "maximum": 10000000
+        "schemaVersion": { "type": "string", "const": "1" },
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "objective": { "type": "string", "minLength": 1 },
+        "riskClass": { "type": "string", "enum": ["low", "medium", "high"] },
+        "baseRef": { "type": "string", "pattern": "^(?!-)[^\\s]+$" },
+        "contextPaths": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
         },
-        "retryCount": { "type": "integer", "minimum": 0, "maximum": 1 }
-      }
-    }
-  },
-  "$defs": {
-    "authorityReference": {
+        "allowedPaths": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+          }
+        },
+        "commandIds": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "commit": {
+          "type": "object",
+          "properties": {
+            "message": { "type": "string", "minLength": 1 },
+            "authorName": { "type": "string", "minLength": 1 },
+            "authorEmail": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            }
+          },
+          "required": ["message", "authorName", "authorEmail"],
+          "additionalProperties": false
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "deadlineSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7200
+            },
+            "maxOutputBytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 10000000
+            },
+            "retryCount": { "type": "integer", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["deadlineSeconds", "maxOutputBytes", "retryCount"],
+          "additionalProperties": false
+        },
+        "authority": {
+          "type": "object",
+          "properties": {
+            "productContract": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "scenarioSet": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "policy": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["productContract", "scenarioSet", "policy"],
+          "additionalProperties": false
+        },
+        "acceptance": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "statement": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id", "statement"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "title",
+        "objective",
+        "riskClass",
+        "baseRef",
+        "contextPaths",
+        "allowedPaths",
+        "commandIds",
+        "commit",
+        "budget",
+        "authority",
+        "acceptance"
+      ],
+      "additionalProperties": false
+    },
+    {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["path", "digest"],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
-      }
+        "schemaVersion": { "type": "string", "const": "2" },
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "objective": { "type": "string", "minLength": 1 },
+        "riskClass": { "type": "string", "enum": ["low", "medium", "high"] },
+        "baseRef": { "type": "string", "pattern": "^(?!-)[^\\s]+$" },
+        "contextPaths": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowedPaths": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+          }
+        },
+        "commandIds": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "commit": {
+          "type": "object",
+          "properties": {
+            "message": { "type": "string", "minLength": 1 },
+            "authorName": { "type": "string", "minLength": 1 },
+            "authorEmail": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            }
+          },
+          "required": ["message", "authorName", "authorEmail"],
+          "additionalProperties": false
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "deadlineSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7200
+            },
+            "maxOutputBytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 10000000
+            },
+            "retryCount": { "type": "integer", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["deadlineSeconds", "maxOutputBytes", "retryCount"],
+          "additionalProperties": false
+        },
+        "authority": {
+          "type": "object",
+          "properties": {
+            "productContract": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "scenarioSet": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "policy": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "impactManifest": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "productContract",
+            "scenarioSet",
+            "policy",
+            "impactManifest"
+          ],
+          "additionalProperties": false
+        },
+        "attestations": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^ATT-[A-Z0-9][A-Z0-9-]*$" },
+              "approvedBy": { "type": "string", "minLength": 1 },
+              "approvedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "claims": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["acceptance", "invariant", "scenario"]
+                    },
+                    "id": { "type": "string", "minLength": 1 },
+                    "digest": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": ["kind", "id", "digest"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "approvedBy",
+              "approvedAt",
+              "expiresAt",
+              "claims"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "acceptance": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "statement": { "type": "string", "minLength": 1 },
+              "invariantIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^INV-[A-Z0-9][A-Z0-9-]*$"
+                }
+              },
+              "scenarioIds": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "coverage": {
+                "type": "string",
+                "enum": ["new_behavior", "preservation", "both"]
+              },
+              "evidence": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": { "type": "string", "const": "command" },
+                      "commandId": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["mode", "commandId"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": { "type": "string", "const": "human" },
+                      "attestationId": {
+                        "type": "string",
+                        "pattern": "^ATT-[A-Z0-9][A-Z0-9-]*$"
+                      }
+                    },
+                    "required": ["mode", "attestationId"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": { "type": "string", "const": "unsupported" },
+                      "reason": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["mode", "reason"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "statement",
+              "invariantIds",
+              "scenarioIds",
+              "coverage",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "title",
+        "objective",
+        "riskClass",
+        "baseRef",
+        "contextPaths",
+        "allowedPaths",
+        "commandIds",
+        "commit",
+        "budget",
+        "authority",
+        "acceptance"
+      ],
+      "additionalProperties": false
     }
-  }
+  ],
+  "$id": "https://github.com/davidahmann/mill/schemas/task-packet.schema.json",
+  "title": "TaskPacket"
 }

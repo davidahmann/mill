@@ -1,0 +1,20 @@
+schemaVersion: "1"
+id: node-typescript-web
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+recipe: node-typescript-next-web
+recipeVersion: 1.0.0
+runtime: node-24-active-lts
+architecture:
+  - TypeScript modular monolith
+  - Next.js 16 App Router with React 19.2 family
+  - server components by default and explicit client boundaries
+  - native lint, typecheck, unit, integration, browser, build, and package gates
+  - repository-local exact runtime and dependency lock
+  - portable Node server or OCI deployment with no hosting-vendor requirement
+risks:
+  - framework and dependency patches require source refresh and explicit recipe
+    revision
+  - browser acceptance needs a qualified Playwright image and deterministic
+    fixtures
+  - persistence, identity, billing, and deployment are product decisions, not
+    recipe defaults

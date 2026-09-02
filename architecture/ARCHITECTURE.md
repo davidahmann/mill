@@ -1,6 +1,6 @@
 # Mill architecture
 
-Status: approved v1 decision Last updated: 2026-09-01
+Status: approved v1 decision Last updated: 2026-09-02
 
 ## Form
 
@@ -50,6 +50,37 @@ The builder never receives forge/deployment authority. The shipper cannot create
 or amend the candidate commit. Product/oracle changes invalidate the candidate.
 Provider state is authoritative for external effects.
 
+Wave 4A adds two fail-closed seams without adding another harness. Read-only
+planning commands assess an operator-supplied PRD, disclosed source manifest,
+and structured proposal; they return blockers, semantic differences, canonical
+bytes, and exact approval digests without writing files, running repository
+commands, or invoking a model. Live research and proposal generation remain an
+explicit later coordinator step, not an implied crawler. Approved product
+contracts carry stable outcome, acceptance, invariant, decision, and scenario
+IDs. Each material task binds one approved outcome and an exact human-approved
+impact manifest, and validation reports new-behavior and preservation evidence
+separately. Scenario and invariant evidence must execute their own approved
+command or carry an unexpired human attestation with an exact kind, stable ID,
+and content-digest claim for that item; an acceptance claim or generic passing
+command cannot certify another semantic item. Task-packet version 1 remains a
+byte-stable, resume-only legacy shape for in-flight runs. Every new run uses
+version 2, which requires the impact manifest and exact product-to-task semantic
+graph.
+
+Codex remains the only worker implementation behind an internal `WorkerAdapter`.
+Before every builder, repair, or reviewer process starts, Mill records an
+immutable redacted invocation envelope containing the task, context epoch,
+candidate when applicable, role profile, prompt-template digest, allowed scope,
+deadline, and output budget. Launch intent is durable before spawn. Exactly one
+terminal provider event settles an invocation, and reviewers must emit exactly
+one structured result. Candidate publication is atomic with its mutating-worker
+settlement, and review-result publication is atomic with its reviewer
+settlement, so a crash cannot consume an attempt without preserving the
+corresponding result. Process exit is journaled against the invocation in the
+same transaction that clears its active-process binding. A possibly started
+mutating invocation becomes uncertain and is reconciled from candidate, process,
+and worktree state instead of being blindly replayed.
+
 The GitHub adapter is isolated behind the delivery coordinator. Planning reads
 the live delegated actor, repository node identity, clone URL, fork status and
 default branch, then binds them with the candidate commit/tree, task/config,
@@ -57,15 +88,16 @@ branch, required checks, review policy, allowed merge methods, approval expiry,
 and intended effects. Only `pr open` mutates. Its effect journal records intent
 and call start before each push or PR request, caps each effect at two attempts,
 and makes ambiguous results enter `effect_unknown`. Reconciliation performs
-authoritative branch/marker/PR readback without mutation. Exact absence permits
-one retry; a second absent outcome blocks for human disposition. The same
-recorded PR number, node identity, marker, branch, base, open-draft state, and
-observed head are invariant whether an ambiguous repair push is absent or
-landed. A retry performs that check again from a fresh readback immediately
-before recording call start and invoking Git. GitHub API collections are
-paginated under one deadline and output budget. Tokens remain behind the
-operator-owned `gh` and Git credential-helper boundary and are not passed to
-Codex or stored in state.
+authoritative branch/marker/PR readback without mutation. Expiration blocks new
+mutation authority but never prevents readback or truthful lifecycle closure for
+an already attempted effect. Exact absence permits one retry; a second absent
+outcome blocks for human disposition. The same recorded PR number, node
+identity, marker, branch, base, open-draft state, and observed head are
+invariant whether an ambiguous repair push is absent or landed. A retry performs
+that check again from a fresh readback immediately before recording call start
+and invoking Git. GitHub API collections are paginated under one deadline and
+output budget. Tokens remain behind the operator-owned `gh` and Git
+credential-helper boundary and are not passed to Codex or stored in state.
 
 One stable delivery key and branch identify the PR across the single allowed
 repair. A new candidate gets new validation, review, approval, and push-effect
@@ -90,14 +122,17 @@ and credentials. Codex invocations ignore operator configuration and execution
 rules and disable host skill search to prevent globally installed workflows from
 silently changing task behavior or token use. They still use the operator-owned
 authentication home and honor repository-local instructions, so this is input
-control rather than host containment. `contextPaths` select frozen priority
-read-only context rather than limiting filesystem reads. The active task,
-`mill.yaml`, authority files, repository instructions, and selected-command
-`controlPaths` form the immutable oracle closure and cannot overlap candidate
-output scope. Build qualification rejects tracked symlinks and configured
-sensitive paths, Git replacement refs, and graft metadata before creating the
-worktree; lifecycle Git commands also disable replacement objects. Secrets must
-remain untracked and outside the repository.
+control rather than host containment. Mill freezes the effective per-directory
+`AGENTS.override.md` or `AGENTS.md` choice and re-enumerates the complete path
+set before every later worker wake; changed bytes, additions, removals, or
+precedence changes invalidate the context epoch. `contextPaths` select frozen
+priority read-only context rather than limiting filesystem reads. The active
+task, `mill.yaml`, authority files, repository instructions, and
+selected-command `controlPaths` form the immutable oracle closure and cannot
+overlap candidate output scope. Build qualification rejects tracked symlinks and
+configured sensitive paths, Git replacement refs, and graft metadata before
+creating the worktree; lifecycle Git commands also disable replacement objects.
+Secrets must remain untracked and outside the repository.
 
 Baseline qualification is part of build authority, not static inspection. The
 runtime enforces the repository trust ceiling before OCI discovery or command
@@ -136,12 +171,20 @@ allowing writes. There is no background daemon or implicit retry.
 - product, scenario, blueprint, and JIT compilers;
 - static repository scanner and transactional bootstrap/retrofit engine;
 - frozen context compiler and Codex adapter;
+- immutable worker profile, admission, launch, and settlement journal;
 - SQLite control plane and append-only run events;
 - worktree/process runner and command policy;
 - native verifier and scenario runner;
 - exact-candidate local reviewer and bounded repair coordinator;
 - GitHub shipper, effect journal, readback, and closure;
 - audits and qualification/release commands.
+
+The first qualified greenfield recipe is a Node.js 24 TypeScript web modular
+monolith using Next.js 16 App Router and the React 19.2 family. It is
+deliberately one recipe, not a generalized stack claim. Wave 4B must freeze
+exact dependency and OCI identities, generate native
+lint/type/unit/integration/browser/build gates, and prove the repository works
+without Mill before applying it.
 
 ## Identity and authority
 

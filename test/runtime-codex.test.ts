@@ -5,11 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   codexAuthStatus,
+  codexPromptTemplate,
+  codexWorkerProfile,
+  decodeCodexEvents,
   runCodexBuilder,
   runCodexReview,
 } from "../src/runtime/codex.js";
 import { buildContextManifest } from "../src/runtime/context.js";
-import { loadRuntimeInputs } from "../src/runtime/inputs.js";
+import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 import { temporaryDirectory } from "./helpers.js";
 
@@ -33,6 +36,59 @@ async function executableScript(
 }
 
 describe("Codex adapter boundaries", () => {
+  it("binds worker profiles to the actual role prompt template bytes", async () => {
+    const fixture = await runtimeFixture();
+    process.env.MILL_CODEX_PATH = fixture.codexPath;
+    try {
+      const builder = await codexWorkerProfile(fixture.root, "builder");
+      const reviewer = await codexWorkerProfile(fixture.root, "reviewer");
+      expect(builder.promptTemplateDigest).toBe(
+        textDigest(codexPromptTemplate("builder")),
+      );
+      expect(reviewer.promptTemplateDigest).toBe(
+        textDigest(codexPromptTemplate("reviewer")),
+      );
+      expect(builder.promptTemplateDigest).not.toBe(
+        reviewer.promptTemplateDigest,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("requires exactly one terminal settlement and one reviewer result", () => {
+    expect(() => decodeCodexEvents("", "builder")).toThrow(
+      expect.objectContaining({ code: "WORKER_SETTLEMENT_MISSING" }),
+    );
+    const terminal = JSON.stringify({ type: "turn.completed" });
+    expect(() =>
+      decodeCodexEvents(`${terminal}\n${terminal}\n`, "builder"),
+    ).toThrow(expect.objectContaining({ code: "WORKER_SETTLEMENT_CONFLICT" }));
+    const failed = JSON.stringify({
+      type: "turn.failed",
+      error: { message: "provider failure" },
+    });
+    expect(() =>
+      decodeCodexEvents(`${failed}\n${terminal}\n`, "builder"),
+    ).toThrow(expect.objectContaining({ code: "WORKER_SETTLEMENT_CONFLICT" }));
+    const providerError = JSON.stringify({
+      type: "error",
+      message: JSON.stringify({ error: { code: "provider_failure" } }),
+    });
+    expect(() =>
+      decodeCodexEvents(`${providerError}\n${terminal}\n`, "builder"),
+    ).toThrow(expect.objectContaining({ code: "WORKER_SETTLEMENT_CONFLICT" }));
+    expect(() => decodeCodexEvents(`${terminal}\n`, "reviewer")).toThrow(
+      expect.objectContaining({ code: "WORKER_RESULT_MISSING" }),
+    );
+    const message = JSON.stringify({
+      type: "item.completed",
+      item: { type: "agent_message", text: "{}" },
+    });
+    expect(() =>
+      decodeCodexEvents(`${message}\n${message}\n${terminal}\n`, "reviewer"),
+    ).toThrow(expect.objectContaining({ code: "WORKER_RESULT_CONFLICT" }));
+  });
   it("reports unavailable auth without falling back from an explicit override", async () => {
     const fixture = await runtimeFixture();
     process.env.MILL_CODEX_PATH = path.join(fixture.stateHome, "missing-codex");
@@ -232,7 +288,7 @@ describe("Codex adapter boundaries", () => {
     try {
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        `console.log("not-json");console.log("null");console.log(JSON.stringify({thread_id:"generic-thread",usage:{input_tokens:7}}));`,
+        `console.log("null");console.log(JSON.stringify({type:"diagnostic.unknown"}));console.log(JSON.stringify({thread_id:"generic-thread",usage:{input_tokens:7}}));console.log(JSON.stringify({type:"turn.completed"}));`,
       );
       const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
       const frozen = await buildContextManifest(
@@ -290,12 +346,12 @@ describe("Codex adapter boundaries", () => {
         'console.log("not-jsonl");console.log(JSON.stringify({type:"other"}));',
       );
       await expect(invokeReview()).rejects.toMatchObject({
-        code: "INVALID_REVIEW_RESULT",
+        code: "MALFORMED_WORKER_EVENT",
       });
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        'console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:"not-json"}}));',
+        'console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:"not-json"}}));console.log(JSON.stringify({type:"turn.completed"}));',
       );
       await expect(invokeReview()).rejects.toMatchObject({
         code: "INVALID_REVIEW_RESULT",
@@ -303,7 +359,7 @@ describe("Codex adapter boundaries", () => {
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        `const text=JSON.stringify({schemaVersion:"1",candidateCommit:"${"b".repeat(40)}",summary:"wrong",findings:[]});console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));`,
+        `const text=JSON.stringify({schemaVersion:"1",candidateCommit:"${"b".repeat(40)}",summary:"wrong",findings:[]});console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"turn.completed"}));`,
       );
       await expect(invokeReview()).rejects.toMatchObject({
         code: "INVALID_REVIEW_RESULT",
@@ -311,7 +367,7 @@ describe("Codex adapter boundaries", () => {
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        'const text=JSON.stringify({schemaVersion:"1",candidateCommit:"short",summary:"invalid",findings:[]});console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));',
+        'const text=JSON.stringify({schemaVersion:"1",candidateCommit:"short",summary:"invalid",findings:[]});console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"turn.completed"}));',
       );
       await expect(invokeReview()).rejects.toMatchObject({
         code: "INVALID_REVIEW_RESULT",

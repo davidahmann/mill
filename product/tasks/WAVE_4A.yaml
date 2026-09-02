@@ -1,0 +1,147 @@
+task_id: mill-wave-4a-continuity
+status: active
+objective: >-
+  Add source-backed product planning, stable behavioral invariants, approved
+  per-slice impact manifests, item-level semantic validation, and durable
+  worker-admission evidence while preserving Mill's existing attended local and
+  draft-PR authority boundaries.
+risk_class: high
+base_commit: f9da46b2707638e8ce854220b24d509077446d12
+qualification_dependency:
+  wave_3_canary:
+    repository: davidahmann/mill-wave3-canary-20260902
+    pull_request: 1
+    base_commit: f12d170939175110119c7b4c797adf7d27c2552b
+    candidate_commit: bbeabb2bde1c5f07ed8c409bbe4daada524840e5
+    merge_commit: 9b1f179e3870aaa8b510b4f22a48c9c461e7489a
+    candidate_tree: 5d4c7420a0d7f68338d9534b4d175af3f4ace23e
+    required_check: validate
+    result: closed
+design_decisions:
+  - approved product invariants are compact behavioral statements with stable
+    IDs and source references; repository graphs are derived projections only
+  - a planning model may propose but never approve product truth, scenarios,
+    impact, or its own execution authority
+  - research runs only for bootstrap, material adoption uncertainty, or an
+    explicitly approved stack change and must disclose provider, query, source
+    class, freshness, and authority
+  - planning output remains variable; approval binds validated canonical bytes
+    and a digest, and regeneration produces a semantic diff
+  - every Wave 4 task binds an approved impact manifest and maps each required
+    acceptance, invariant, and scenario ID to command evidence, human
+    attestation, or a blocking unsupported disposition
+  - new-behavior evidence and preservation evidence are reported separately
+  - current-run builder changes to configuration, policy, scenarios, or oracles
+    cannot certify that same candidate
+  - Codex CLI remains the sole real worker implementation behind one internal
+    WorkerAdapter; no server, RPC protocol, second harness, or plugin runtime is
+    introduced
+  - every worker wake is preceded by an immutable redacted invocation admission
+    and profile digest, supplied-context epoch, effective-instruction snapshot,
+    provider-visible scope, launch intent, and launch-start marker
+  - malformed, truncated, missing, duplicate, or conflicting terminal worker
+    events fail closed; progress and final prose do not grant lifecycle
+    authority
+  - possibly started mutating invocations are reconciled from durable process,
+    worktree, and candidate state and are never blindly replayed
+  - the first Wave 4B recipe will be selected from current primary-source
+    evidence and frozen in the committed blueprint decision before this wave
+    closes
+allowed_paths:
+  - architecture/**
+  - docs/**
+  - product/**
+  - schemas/**
+  - scripts/**
+  - src/**
+  - test/**
+  - AGENTS.md
+  - CHANGELOG.md
+  - README.md
+  - WORKFLOW.md
+  - package.json
+  - package-lock.json
+forbidden_paths:
+  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - .env*
+  - .github/workflows/release.yml
+acceptance_items:
+  - W4A-A1 source manifests classify authority and freshness and disclose every
+    research provider/query without treating web or repository prose as trusted
+  - W4A-A2 the read-only planner returns a schema-valid proposal and exact
+    canonical digest without writing files or executing repository commands
+  - W4A-A3 promotion rejects blocking contradictions, excess questions, dangling
+    references, duplicate invariant semantics, or a mismatched digest and never
+    overwrites an approved snapshot
+  - W4A-A4 product outcomes, decisions, scenarios, and impact manifests use
+    stable cross-checked invariant and acceptance references
+  - W4A-A4a task-packet version 1 retains its original canonical shape for
+    in-flight resume only; every new run requires the version 2 continuity
+    contract and cannot omit impact authority
+  - W4A-A5 unresolved affected or uncertain impact blocks unless an exact
+    scoped, expiring human exception is present
+  - W4A-A6 validation maps each required ID to executed command evidence, exact
+    item-scoped human attestation, or blocking unsupported state and reports new
+    behavior separately from preservation
+  - W4A-A7 a digest, prompt mention, reviewer statement, skipped command, or
+    builder-authored current-run oracle cannot count as semantic execution
+  - W4A-A8 medium/high-risk tasks require a delivered-surface scenario and one
+    relevant exception, degradation, adversarial, recovery, or novel-input case
+  - W4A-A9 context freezes supplied files, effective AGENTS override precedence
+    and path set, provider-visible scope, role profile, and content-addressed
+    contextEpoch before each worker wake
+  - W4A-A10 each worker invocation has one immutable durable admission and
+    launch boundary; exact re-observation is idempotent and conflicting identity
+    reuse fails closed; candidate and review-result publication are atomic with
+    their matching worker settlement
+  - W4A-A11 strict fake-worker and Codex decoder tests cover malformed/truncated
+    framing, missing/conflicting settlement, cancellation, deadline/output
+    exhaustion, context/profile drift, and safe uncertain-attempt disposition
+  - W4A-A12 existing Wave 1-3 package, lifecycle, state recovery, remote
+    delivery, and exact-candidate contracts remain green
+  - W4A-A13 the Wave 3 real-provider canary and committed status surfaces agree
+    in this same change; no closure-only PR is produced
+  - W4A-A14 one continuity-aware dogfood slice exercises the new contracts
+    without allowing the candidate to certify itself
+validation_commands:
+  - npm run format:check
+  - npm run lint
+  - npm run typecheck
+  - npm run check:workflows
+  - npm run test:coverage
+  - npm run test:package
+final_validation_commands:
+  - npm run check
+  - exact-main negative-control and continuity fixture
+required_reviews:
+  - code
+  - security
+  - architecture
+scope_exclusions:
+  - repository bootstrap, adoption apply, founder start coordinator, or recipe
+    application; those belong to Wave 4B
+  - hidden holdouts, generic graph infrastructure, generic research crawler,
+    daemon, hosted state, parallel workers, second model harness, or plugins
+  - automatic merge, deployment, repository provisioning, branch-protection
+    mutation, or unattended credentials
+  - public npm publication, genesis release, or public-alpha support claims
+stop_conditions:
+  - planning output can promote itself or untrusted prose grants authority
+  - semantic evidence can pass without exact executed or attested item closure
+  - worker invocation identity or settlement remains ambiguous
+  - a new execution side channel bypasses the existing run/verify/review/ship
+    state machines
+  - the same subsystem produces recurring P0/P1 review findings
+retry_budget: 1
+changelog_intent: add product continuity and worker admission contracts
+versioning_impact: pre-alpha additive and selectively strict contract evolution
+migration_impact:
+  additive operational worker-invocation state with validated migration and
+  backup/restore compatibility
+docs_sync_refs:
+  - README.md
+  - product/PLAN.md
+  - product/PRD.md
+  - architecture/ARCHITECTURE.md
+  - docs/development.md
+  - WORKFLOW.md
