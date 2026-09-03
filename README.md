@@ -1,75 +1,154 @@
 # Mill
 
-Mill is an experimental local-first software-delivery system for turning an
-approved product outcome into a tested, reviewed draft pull request.
+Mill is a local-first software factory that turns approved product intent into
+bounded, tested, locally reviewed draft pull requests.
 
-The project is pre-alpha. Wave 1 provides the installable source package,
-compact schemas, static PRD/repository inspection, and readiness diagnostics.
-Wave 2 adds an attended local path from one explicit task approval to an exact
-committed, OCI-validated, independently reviewed candidate. Wave 3 adds an
-attended, exact-candidate path to one draft GitHub pull request, bounded
-CI/review observation, human merge, and truthful closure. The CLI is `millctl`,
-published eventually as `@davidahmann/mill` to avoid collision with the existing
-`mill` command and npm package.
+It is designed for a founder or small team that wants coding-agent leverage
+without handing one agent an open-ended ticket, production credentials, and the
+power to judge its own work. Product truth stays in the repository. Codex writes
+inside a disposable worktree. Native tests and scenarios verify the committed
+candidate. A separate read-only pass reviews that exact commit. Only the
+attended shipper can use your GitHub identity, and it stops at a draft PR.
 
-Wave 4A adds source-backed planning contracts, stable product invariants,
-approved per-slice impact, scenario-specific semantic evidence, and durable
-worker admission. Wave 4B adds one exact Node.js 24/Next.js 16 web recipe,
-transactional greenfield and compatible-adoption integration, lock-bound
-dependency preparation, offline read-only recipe verification, manual detach
-planning, and resumable founder commands. Planning remains deliberately honest:
-in this pre-alpha, an operator supplies the structured proposal that Mill
-assesses and freezes; live autonomous research and proposal generation are not
-implemented.
+Mill `0.1.0` is a public-alpha release candidate. The source tree implements the
+candidate and genesis release gates, but no npm availability or supported tuple
+is claimed until the separately authorized release completes and its registry
+and GitHub readback pass.
 
-Mill's v1 boundary is deliberately narrow:
+## Why Mill
 
-- local and attended;
-- one repository and one writer at a time;
-- the operator's own Codex and GitHub identities;
-- deterministic native gates plus realistic scenarios;
-- isolated-context local review before push;
-- draft PR creation, with human readiness and merge;
-- no daemon, auto-merge, deployment, or hosted control plane.
+Coding is only one part of software delivery. The difficult failure modes live
+between a PRD and a merged change: ambiguous intent, changing architecture, weak
+acceptance tests, context drift, cumulative regressions, credential leakage,
+interrupted side effects, noisy review, and artifacts that cannot be
+reconstructed later.
 
-See [the PRD](product/PRD.md), [architecture](architecture/ARCHITECTURE.md), and
-[development guide](docs/development.md).
+Mill makes those boundaries explicit:
 
-## Develop from source
+- approved outcomes, invariants, scenarios, impacts, and tasks are versioned in
+  Git;
+- each run is bound to an exact base, authority closure, worker profile, budget,
+  candidate commit, validation result, and review result;
+- product code remains independently buildable and testable without Mill;
+- the builder cannot push, merge, deploy, or rewrite the oracle that certifies
+  its own candidate;
+- GitHub mutations are separately planned, approved, journaled, and reconciled;
+- one complete review is repaired systemically instead of creating micro-PR
+  churn;
+- longitudinal qualification proves that accepted behavior survives a sequence
+  of dependent changes, not just one isolated demo;
+- releases preserve and publish one independently reproduced tarball rather than
+  rebuilding at publication time.
+
+This is the differentiator: Mill is not another chat UI or general coding
+harness. It is the small, inspectable delivery control plane around the coding
+agent you already use.
+
+## What it can do
+
+For its one qualified shape, Mill can:
+
+1. inspect a PRD, source manifest, structured product proposal, and repository
+   without executing repository code;
+2. freeze an approved product contract, stable invariants, scenarios, and
+   per-change impact;
+3. create a repository from the bundled web recipe or plan a compatible adoption
+   without overwriting existing truth;
+4. prepare exact npm dependencies as a separate attended network effect;
+5. run one approved task through Codex build, OCI validation, exact-candidate
+   review, and one bounded repair generation;
+6. plan and open one draft GitHub PR through the operator's own `gh` session;
+7. observe exact-head CI and review, then record human merge and resulting-main
+   closure;
+8. back up, restore, purge, reconcile, cancel, detach, and export a redacted
+   support bundle through explicit commands;
+9. audit the exact repository candidate and validate a public-alpha
+   qualification record.
+
+Mill does not autonomously research the web or invent a product specification in
+this alpha. The operator supplies the structured proposal that Mill assesses and
+freezes.
+
+## Supported shape
+
+The first recipe is intentionally exact:
+
+- Node.js 24.18.1 and npm 11.16.0 inside the verifier image;
+- TypeScript 6.0.3;
+- Next.js 16.3.4 and React 19.2.8;
+- Playwright 1.62.1;
+- GitHub as the only forge;
+- Codex CLI with the operator's existing login;
+- Docker-compatible OCI verification;
+- macOS arm64 as the first candidate host tuple.
+
+Mill itself is developed with Node.js 24.20.0 and npm 11.19.0. Exact support is
+published in release qualification evidence, not inferred from nearby versions.
+All other stacks, operating systems, architectures, forges, models, and worker
+harnesses are experimental or unsupported until independently qualified.
+
+## Install
+
+Before the first public artifact, develop and evaluate from a clean source
+checkout:
 
 ```sh
+git clone https://github.com/davidahmann/mill.git
+cd mill
 asdf install
-npm ci --ignore-scripts
-npm run check
-npm run build
+node_bin_dir=$(dirname "$(asdf which node)")
+PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" ci --ignore-scripts
+PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run check
+PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
+node dist/cli.js --version
+```
+
+After the separately verified npm release, downstream repositories will pin the
+exact package version rather than `latest`:
+
+```sh
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.1.0
+npx --no-install millctl --version
+```
+
+Do not treat the npm command as available until the release exists and the
+downloaded artifact passes the documented readback canary.
+
+## Quick start
+
+Start with read-only readiness. These commands do not execute repository code:
+
+```sh
 node dist/cli.js doctor --mode inspect
 node dist/cli.js inspect --prd product/PRD.md
 node dist/cli.js adopt --scan-only
 ```
 
-## Onboard one supported repository
-
-The first supported recipe is exact: Node.js 24.18.1, npm 11.16.0, Next.js
-16.3.4, React 19.2.8, TypeScript 6.0.3, and Playwright 1.62.1 in a digest-pinned
-OCI image. Mill itself uses Node.js 24.20.0; the recipe patches follow the
-contents of its verifier image.
-
-First run the read-only specification assessment and copy its exact approval
-digest. Then preview a greenfield or adoption plan. Apply is a second explicit,
-attended operation bound to that exact plan:
+For a source-backed specification, supply the PRD, source manifest, and
+structured proposal:
 
 ```sh
-node dist/cli.js --json plan specification \
-  --prd product/PRD.md --sources product/sources.yaml \
+millctl --json plan specification \
+  --prd product/PRD.md \
+  --sources product/sources.yaml \
   --proposal product/proposal.yaml
+```
 
-node dist/cli.js --json new my-product --dry-run \
+Review the returned contradictions, assumptions, questions, and exact proposal
+digest. Approval freezes that proposal; it does not grant repository writes.
+
+### Create a repository
+
+Preview the exact file plan first, then apply the same plan attended:
+
+```sh
+millctl --json new my-product --dry-run \
   --prd product/PRD.md --sources product/sources.yaml \
   --proposal product/proposal.yaml --approve-product sha256:<product> \
-  --repository-id <uuid> --approved-by <identity> --approved-at <iso-time> \
-  --author-name <name> --author-email <email>
+  --repository-id <uuid> --approved-by <identity> \
+  --approved-at <iso-time> --author-name <name> --author-email <email>
 
-node dist/cli.js --json new my-product --apply --attended \
+millctl --json new my-product --apply --attended \
   --prd product/PRD.md --sources product/sources.yaml \
   --proposal product/proposal.yaml --approve-product sha256:<product> \
   --approve-plan sha256:<integration-plan> --repository-id <uuid> \
@@ -77,238 +156,180 @@ node dist/cli.js --json new my-product --apply --attended \
   --author-name <name> --author-email <email>
 ```
 
-For an existing compatible repository, use `adopt --plan` and then
-`adopt --apply --attended` with the same authority fields. Adoption supports
-only the exact recipe-compatible Next.js tuple, blocks conflicting repository
-truth, a missing or drifted recipe-native oracle closure, or unsafe Git state.
-The adoption boundary compares the exact qualified dependency lock, runtime,
-native scripts, and oracle bytes; existence alone is never compatibility. It
-creates an isolated branch and leaves the operator checkout unchanged; arbitrary
-existing test graphs are not inferred. Adoption also blocks symbolic links and
-credential-like files, including `.npmrc`, rather than allowing generated writes
-or builder context to follow them. The approved PRD must remain outside the
-generated `app`, `public`, and `src` builder scopes. Greenfield apply stages the
-complete target and, only after qualification succeeds, reserves the absent path
-without replacement. It copies non-authoritative files first and atomically
-installs the complete `.git` directory last; the target is not a repository
-before that final boundary. The integration approval digest is a
-non-self-referential identity over the approved target, including its
-canonical-path digest, product, recipe, policy, and every non-lock file action.
-`mill.lock` is deterministically derived from and records that same digest. An
-approved blueprint selecting any other recipe, version, or runtime blocks. The
-plan also exposes and binds the exact Mill generator package/version. Greenfield
-paths are canonicalized beneath the selected root, and any symbolic link or
-non-directory ancestor blocks before staging or registry access. Approval
-timestamps must be exact ISO datetimes that are already active, never
-future-dated declarations.
+Greenfield apply stages and runs the complete native recipe gate before the
+target becomes a Git repository. It never replaces an existing path.
 
-Dependency installation is a distinct attended step with disclosed npm-registry
-network and disabled lifecycle scripts. The config declares npm and the exact
-`https://registry.npmjs.org` origin; preparation rejects resolved lock entries
-outside that HTTPS origin, credential-bearing or query-bearing URLs, entries
-without a complete SHA-512 source identity, and unsupported links/workspaces.
-The root `package-lock.json` consumed by `npm ci` must be included and is always
-the lock graph validated, regardless of other bound locks. Mill copies lock
-inputs first, keys and validates the frozen copies, and rechecks them after
-installation before atomic publication. Its marker binds and revalidates the
-installed dependency-tree bytes and filesystem shape before reuse and
-verification. Cancellation stops the installer process group and completes
-container cleanup. Preparation requires both attendance and build trust at the
-exported runtime boundary. Later verification has no network and never writes
-source:
+### Adopt a compatible repository
+
+Use the same two-step boundary with `adopt --plan` and then
+`adopt --apply --attended`. Adoption supports only the exact recipe-compatible
+Node/Next.js shape. It keeps the operator checkout unchanged, writes an isolated
+branch, and blocks on conflicting product truth, drifted native oracle files,
+unsafe Git state, symlinks, credential-like files, or incompatible versions.
+
+Prepare dependencies separately because it is the only recipe step that needs
+registry network access:
 
 ```sh
-node dist/cli.js --json dependencies prepare --attended
-node dist/cli.js --json detach plan
+millctl --json dependencies prepare --attended
 ```
 
-`detach plan` reports Mill-only files to remove and downstream-owned files to
-retain or review. It does not mutate the repository.
+Later verification has no network and receives read-only source.
 
-## Run one attended local task
+### Deliver one approved task
 
-A build-enabled downstream repository supplies `mill.yaml`, a task packet, and
-the product/scenario/policy files whose digests the task binds. First qualify
-the unchanged base and copy the returned `data.approvalDigest`; that digest is
-issued only for a passing baseline and binds the exact base, task, repository
-configuration, selected commands, and baseline evidence. Then approve and run
-that exact qualified input set. Qualification is executable build authority: an
-`inspect` trust ceiling rejects it before OCI discovery or command execution,
-and interruption terminates the foreground verifier and completes cleanup:
-
-```yaml
-commands:
-  test:
-    argv: ["npm", "test"]
-    cwd: "."
-    controlPaths: ["package.json", "package-lock.json", "test/**"]
-    capability: test
-    required: true
-    timeoutSeconds: 600
-    execution: oci
-```
+The downstream repository owns `mill.yaml`, `product/contract.yaml`,
+`quality/scenarios.yaml`, an approved impact manifest, and a version 2 task.
+Qualify the unchanged base, then use the returned digest once:
 
 ```sh
-node dist/cli.js --json qualify --baseline --task product/tasks/TASK.yaml
-node dist/cli.js --json run --task product/tasks/TASK.yaml \
-  --approve sha256:<digest-from-qualification> --attended
-node dist/cli.js --json verify --task product/tasks/TASK.yaml --run <run-id>
-node dist/cli.js --json review --task product/tasks/TASK.yaml --run <run-id>
-node dist/cli.js --json status --run <run-id>
+millctl --json qualify --baseline --task product/tasks/TASK.yaml
+millctl --json run --task product/tasks/TASK.yaml \
+  --approve sha256:<baseline-approval> --attended
+millctl --json verify --task product/tasks/TASK.yaml --run <run-id>
+millctl --json review --task product/tasks/TASK.yaml --run <run-id>
 ```
 
-A managed repository may instead select exactly one ready outcome and use the
-founder wrappers:
+The shorter resumable path is:
 
 ```sh
-node dist/cli.js --json qualify --baseline \
-  --task product/tasks/<outcome>.yaml
-node dist/cli.js --json run next --approve sha256:<baseline> --attended
-node dist/cli.js --json start --prd product/PRD.md --attended
-node dist/cli.js --json ship --draft \
-  --task product/tasks/<outcome>.yaml --run <run-id>
-# Inspect the returned proposal, then:
-node dist/cli.js --json ship --draft \
-  --task product/tasks/<outcome>.yaml --run <run-id> \
+millctl --json start --prd product/PRD.md --attended
+```
+
+`millctl start` selects exactly one approved ready outcome or resumes its sole
+existing lifecycle. It checks authority before dependency or model spend.
+
+### Open a reviewed draft PR
+
+Raise `trustCeiling` to `propose` only after configuring the exact GitHub
+repository node ID, branch, allowed operator and merger, checks, review policy,
+and approval TTL in `mill.yaml`.
+
+```sh
+millctl --json pr plan --task product/tasks/TASK.yaml --run <run-id>
+millctl --json pr open --task product/tasks/TASK.yaml --run <run-id> \
   --approve sha256:<delivery-plan> --attended
+millctl --json pr observe --task product/tasks/TASK.yaml --run <run-id>
+# A human marks ready and merges in GitHub.
+millctl --json pr finalize --task product/tasks/TASK.yaml --run <run-id>
 ```
 
-`start` proves the selected PRD and task authority before registry or model
-spend, including identical product-plan, product-contract, impact, and
-acceptance sets. It inventories every nonterminal run, even when a newer run is
-already terminal, then resumes the sole matching durable lifecycle. New-run
-admission repeats that check under the writer lease that creates the run.
-`run next` applies the same authority comparison before it can create a run.
-With `--draft-pr`, `start` prepares and returns the exact draft-PR plan digest;
-`ship --draft --approve` remains the separate attended mutation. A later `start`
-can resume remote readback and closure without requiring Codex or repeating
-dependency preparation. It still cannot mark ready, merge, or deploy. The expert
-lifecycle commands remain available for inspection and recovery.
+Or use `millctl ship --draft` twice: first to return the proposal, then with its
+exact digest and `--attended` to perform it. `millctl` never marks ready or
+merges.
 
-`run` creates the candidate on a Mill-owned branch in a disposable worktree; it
-does not modify the operator checkout. `resume` reconciles an interrupted
-controller only when no recorded execution can still be active, or performs the
-one allowed review-repair pass. `cancel` records durable intent; the exact
-foreground lease owner polls that intent and terminates its own in-memory child
-group. Mill never signals a process from a persisted PID. Ambiguous orphaned
-execution state fails closed for attended reconciliation. `state backup`,
-`state restore`, `state purge`, and `support-bundle` provide explicit local
-recovery and redacted diagnostics. The unchanged exact candidate may retry one
-transient or invalid provider review; the durable per-candidate attempt budget
-prevents an unbounded token loop while still allowing the one reviewed repair
-generation.
+## Trust model
 
-## Open one attended draft pull request
+Mill separates four principals:
 
-The downstream repository must explicitly raise `trustCeiling` to `propose` and
-bind its immutable GitHub repository node ID, target branch, accepted operators,
-required checks, review policy, and allowed human merge methods. Mill reads the
-live actor, repository, remote, and default branch before it returns an approval
-digest. That plan performs no remote mutation. The separate `pr open` command
-requires the exact unexpired digest and an attended operator:
+| Principal        | May do                                             | Cannot do                                          |
+| ---------------- | -------------------------------------------------- | -------------------------------------------------- |
+| Builder          | Edit approved paths in a disposable worktree       | Push, merge, deploy, change authority or oracles   |
+| Verifier         | Run declared commands in bounded no-network OCI    | Write candidate source or use forge credentials    |
+| Reviewer         | Read the exact committed candidate                 | Execute or edit code                               |
+| Attended shipper | Push the unchanged candidate and open its draft PR | Change the candidate, mark ready, merge, or deploy |
 
-```yaml
-trustCeiling: propose
-propose:
-  forge: github
-  host: github.com
-  owner: example
-  repository: app
-  repositoryNodeId: R_kgDOExample
-  remoteName: origin
-  baseBranch: main
-  branchPrefix: mill/
-  allowedActors: [founder]
-  allowedMergerLogins: [founder]
-  requiredChecks: [validate, CodeQL]
-  reviewPolicy:
-    mode: local_only
-    requiredReviewerLogins: []
-  allowedMergeMethods: [linear_tree_preserving]
-```
+Codex uses your existing Codex CLI session and therefore your own provider
+billing. GitHub operations use your existing `gh` session. Another maintainer
+can clone Mill and use their own Codex and GitHub accounts after the downstream
+repo explicitly allows their identity. Mill stores neither credential.
+
+The Codex worker runs on the trusted host with a workspace-write sandbox. This
+is not containment against hostile code, host files, keychains, processes, or
+network access. Native candidate verification is the stronger boundary: a
+pre-pulled digest-pinned OCI image, no network, read-only source/root, dropped
+capabilities, deadlines, bounded output and resources, and explicit cleanup. Do
+not use this alpha with hostile repositories or sensitive source.
+
+## Recovery
+
+Every run has durable state and an append-only event history. If a controller is
+interrupted, inspect before acting:
 
 ```sh
-node dist/cli.js --json pr plan --task product/tasks/TASK.yaml --run <run-id>
-node dist/cli.js --json pr open --task product/tasks/TASK.yaml --run <run-id> \
-  --approve sha256:<digest-from-pr-plan> --attended
-node dist/cli.js --json pr observe --task product/tasks/TASK.yaml --run <run-id>
-# A human may mark ready; a configured merger merges in GitHub.
-node dist/cli.js --json pr finalize --task product/tasks/TASK.yaml --run <run-id>
+millctl --json status --run <run-id>
+millctl --json resume --task product/tasks/TASK.yaml --run <run-id> --attended
+millctl --json cancel --run <run-id>
+millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
 ```
 
-Only the shipper reads the operator-owned `gh` session. Builder and reviewer
-processes receive neither GitHub credentials nor mutation tools. Mill journals
-intent before push and PR creation, uses an expected-old-head lease, and reads
-GitHub back before claiming an effect. An uncertain outcome becomes
-`effect_unknown`; `pr reconcile` is read-only and must classify it before any
-retry. Expired impact authority blocks a new remote mutation but does not block
-readback, observation, or truthful finalization of an already attempted effect.
-Exact readback proving absence authorizes one retry only while current mutation
-authority remains valid; a second absent outcome blocks. Required checks pass
-only when every latest exact-head result is successful. A configured
-`github_required` reviewer may complete a current-head `APPROVED` or `COMMENTED`
-review, but any current-head actionable finding still blocks, including a
-severity-tagged top-level review body. Mill stops at `awaiting_human`; draft
-readiness is not closure authority and Mill never changes it or merges.
-Finalization verifies the recorded merger against `allowedMergerLogins`. Because
-GitHub does not expose an authoritative distinction between a one-commit squash
-and rebase, the provable policy is `linear_tree_preserving`; Mill never guesses
-a specific linear method from its allowlist.
+Mill never signals a process solely from a stored PID and never retries an
+uncertain external effect without authoritative readback. Use explicit local
+recovery for state and diagnostics:
 
-Use `--json` before the command for the stable machine-readable envelope.
-`--json --version` is machine-readable; help is human-only and combining it with
-`--json` returns a typed usage error. `doctor` and static adoption never execute
-repository-controlled commands. Tool discovery accepts fixed system locations,
-trusted non-repository `PATH` entries, the macOS ChatGPT-bundled Codex, and
-explicit absolute `MILL_GIT_PATH`, `MILL_CODEX_PATH`, or `MILL_GH_PATH`
-overrides. An explicit override is exclusive, and a relative, missing, or
-unusable override blocks readiness rather than falling back silently. Static
-adoption validates normal and linked-worktree Git metadata, inspects common and
-worktree configuration, and blocks syntax it cannot classify without running
-repository-controlled commands.
+```sh
+millctl --json state backup --output /absolute/path/backup.sqlite
+millctl --json state restore --input /absolute/path/backup.sqlite --attended
+millctl --json state purge --attended
+millctl --json support-bundle --output /absolute/path/support.json
+millctl --json detach plan
+```
 
-Codex build execution uses the operator's existing Codex login and provider
-billing. It is attended trusted-host execution: the builder receives an explicit
-`workspace-write` sandbox and `never` approval policy, so Mill cannot approve an
-escalation request. Workspace scope is checked before promotion, but Mill does
-not claim that the Codex process is isolated from the host, network, keychain,
-or unrelated files. Repository validation is separate: selected commands run in
-an already-present digest-pinned OCI image with no network, a read-only
-container root, dropped capabilities, bounded resources, deadlines, and bounded
-output. Mill never pulls the image implicitly. The candidate workspace is
-mounted read-only and ignored builder artifacts are removed before
-exact-candidate evidence is accepted. Each verifier command has a unique
-Mill-owned container name, and Mill force-removes that exact container under a
-fresh cleanup deadline before accepting evidence. Mill ignores operator Codex
-configuration, disables host skill search, and ignores ambient execution rules
-for builder/reviewer invocations; repository-local `AGENTS.override.md` or
-`AGENTS.md` instructions still apply. Provider usage is measured when Codex
-reports it, while currency cost is reported as unavailable rather than
-estimated. Completion events in the redacted support bundle preserve that
-source-qualified token evidence for the initial build, retries, repairs, and
-review.
+Restore validates the database before atomic replacement and quarantines newer
+unreferenced worktrees. Detach is plan-only; the operator performs the reviewed
+removal. A generated/adopted repo must continue to build and test natively after
+Mill is removed.
 
-The builder can read the non-sensitive tracked files in its disposable worktree;
-`contextPaths` are frozen, read-only priority inputs, not a filesystem read ACL.
-They, `mill.yaml`, the active task, authority files, the frozen effective
-repository-instruction set, and each selected command's declared `controlPaths`
-cannot overlap task output scope or enter the candidate. `controlPaths` name the
-scripts, tests, manifests, or other repository files that define the selected
-command's acceptance oracle. Qualification therefore rejects tracked symlinks
-and any tracked path matched by `sensitivePaths`. Keep secrets and other
-excluded material untracked and outside the repository.
+## Audit and qualification
 
-## Status
+`millctl audit` is a bounded, read-only milestone check for Mill's selected
+recipe and release path. It requires a clean exact Git candidate and reports
+product, code, UX, accessibility, security, dependency, architecture,
+operations, and release checks in a schema-valid JSON envelope.
 
-Not published. Local attended delivery and the bounded draft-PR lifecycle are
-implemented, and the first disposable real-Codex/GitHub canary was human-merged,
-verified on resulting main, and truthfully finalized. Product continuity, worker
-admission, transactional application of one exact web recipe, compatible
-adoption, and the resumable founder path are implemented. Autonomous planning,
-stronger hostile-host worker containment, longitudinal qualification, genesis
-release, and generalized stack-compatibility claims remain pending their
-explicit gates.
+```sh
+millctl --json --cwd . audit
+millctl --json --cwd . qualify public-alpha \
+  --file /absolute/path/qualification.json
+```
 
-## License
+Public-alpha qualification requires at least five dependent accepted changes,
+item-level new-behavior and preservation evidence, a rejected and recovered
+seeded-fault branch, a current exact support tuple, every required packed and
+integration canary, and all nine audits. A later success cannot conceal an
+earlier unresolved preservation failure.
 
-Apache-2.0. Contributions require a Developer Certificate of Origin sign-off.
+The one-time genesis release additionally requires two independent clean builds
+from the exact annotated tag, canonical content equality, a preserved tarball,
+SBOM, trusted npm OIDC publication, provenance, registry reinstallation, and
+GitHub Release readback. See [the release runbook](docs/release.md).
+
+## Troubleshooting
+
+- `WRONG_MILL_VERSION`: run the exact package version in `mill.lock`; Mill does
+  not silently delegate to another version.
+- `BASE_REF_DRIFT` or context drift: stop, review the new repository state, and
+  requalify. Never reuse the old approval digest.
+- missing OCI image: pull the exact digest explicitly outside Mill, then rerun
+  readiness. Mill never pulls implicitly.
+- provider login failure: run `codex login` as the operator; do not pass a token
+  through the task or repository.
+- GitHub identity or destination mismatch: correct `mill.yaml` or log in with
+  the explicitly allowed `gh` identity. Do not weaken the binding.
+- `effect_unknown`: run read-only reconciliation. Do not retry push or PR
+  creation until absence or success is authoritative.
+- active-run conflict: resume or safely terminalize the existing run; do not
+  start a second writer.
+
+Use [GitHub Issues](https://github.com/davidahmann/mill/issues) for reproducible
+defects and private vulnerability reporting for security issues. Support is
+best-effort with no SLA.
+
+## Limitations
+
+- local and attended only;
+- one repository, outcome, and writer at a time;
+- one exact web recipe and compatible adoption shape;
+- operator-supplied structured proposal, not autonomous planning research;
+- Codex and GitHub through the operator's existing sessions;
+- no hostile-host containment for the coding agent;
+- no daemon, hosted control plane, scheduler, fleet, or parallel agents;
+- no automatic readiness, merge, deployment, repository provisioning, or issue
+  synchronization;
+- no general migration engine, automatic upgrade/rollback, or automatic detach;
+- no self-improvement loop or model-authored acceptance authority.
+
+For system detail, read the [product requirements](product/PRD.md),
+[architecture](architecture/ARCHITECTURE.md),
+[development guide](docs/development.md), [workflow](WORKFLOW.md), and
+[agent operating contract](AGENTS.md).

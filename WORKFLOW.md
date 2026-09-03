@@ -42,6 +42,27 @@ tools, but Mill does not track a Factory profile, verifier, pack, or runtime
 dependency. Mill's native repository commands, Git workflow, and GitHub checks
 remain sufficient and authoritative for development and shipping.
 
+Wave 5 preserves the one-wave/one-PR rule for its implementation. Audit,
+qualification, release scripts, schemas, tests, operator/agent documentation,
+and task closure land together. The resulting implementation PR does not itself
+authorize the release tag, npm publication, GitHub Release, deployment, or a
+public support claim.
+
+The public-alpha release has two manual workflow phases. `candidate` consumes an
+existing annotated tag plus exact support-tuple and longitudinal evidence,
+compares two clean builds, preserves one tarball, runs packed greenfield and
+adoption canaries, audits the tag, and emits qualification. `publish` consumes
+that prior run by ID, publishes the preserved tarball through the protected npm
+environment, reads npm and GitHub back, requalifies the registry download, and
+finalizes evidence. It never repacks at publication time.
+
+Longitudinal acceptance requires five or more strictly dependent changes. A
+later step begins at the previous accepted candidate, reports new-behavior and
+prior-behavior evidence separately, and cannot hide an earlier failure. A
+known-bad branch from accepted history must fail its independent oracle and stay
+outside the accepted chain before recovery. Support is limited to the exact
+non-expired tuple and recipe in that evidence.
+
 For greenfield or adoption onboarding, first assess and explicitly approve the
 source-backed product proposal, then inspect and separately approve the exact
 repository integration plan. Greenfield apply publishes no target until the

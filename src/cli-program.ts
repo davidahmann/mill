@@ -3,6 +3,7 @@ import path from "node:path";
 import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { parse as parseYaml } from "yaml";
 
+import { auditRepository } from "./audit/repository.js";
 import { findRepositoryRoot, enforceExactVersion } from "./config/lock.js";
 import { contractSchemas, type ContractKind } from "./contracts/schemas.js";
 import { doctor, doctorReady, type DoctorMode } from "./doctor.js";
@@ -27,6 +28,7 @@ import {
   assessImpactManifest,
   loadImpactPlanningInputs,
 } from "./planning/impact.js";
+import { loadPublicAlphaQualification } from "./qualification/public-alpha.js";
 import {
   finalizeDraftPr,
   observeDraftPr,
@@ -747,18 +749,28 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       }
     });
 
-  program
+  const qualify = program
     .command("qualify")
     .description(
       "qualify declared commands in a disposable exact-base worktree",
     )
-    .requiredOption("--baseline", "qualify the pre-change base")
-    .requiredOption("--task <path>", "approved task packet path")
-    .action(async (options: { task: string }) => {
+    .option("--baseline", "qualify the pre-change base")
+    .option("--task <path>", "approved task packet path")
+    .action(async (options: { baseline?: boolean; task?: string }) => {
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
-      const result = await qualifyBaseline({ root, taskPath: options.task });
+      if (options.baseline !== true) {
+        throw new MillError(
+          "USAGE_ERROR",
+          "Baseline qualification requires --baseline.",
+          ExitCode.usage,
+        );
+      }
+      const result = await qualifyBaseline({
+        root,
+        taskPath: requiredValue(options.task, "--task"),
+      });
       const { evidence } = result;
       emit(
         io,
@@ -782,6 +794,79 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         throw new MillError(
           "BASELINE_QUALIFICATION_FAILED",
           "A required baseline command failed or was blocked.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+  qualify
+    .command("public-alpha")
+    .description(
+      "assess one exact longitudinal and clean-room qualification record",
+    )
+    .requiredOption("--file <path>", "qualification record path")
+    .action(async (options: { file: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const assessment = await loadPublicAlphaQualification({
+        root,
+        file: options.file,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "qualify.public-alpha",
+          ok: assessment.passed,
+          status: assessment.passed ? "ok" : "blocked",
+          data: assessment,
+          reasons: assessment.blockers.map((message) => ({
+            code: "PUBLIC_ALPHA_QUALIFICATION_BLOCKED",
+            message,
+          })),
+        }),
+      );
+      if (!assessment.passed) {
+        throw new MillError(
+          "PUBLIC_ALPHA_QUALIFICATION_BLOCKED",
+          "The public-alpha qualification record is not promotable.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("audit")
+    .description("run the bounded read-only public-alpha repository audit")
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const report = await auditRepository({ root });
+      const ok = report.status === "passed";
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "audit",
+          ok,
+          status: ok ? "ok" : "blocked",
+          data: report,
+          reasons: report.checks
+            .filter((check) => check.status === "blocked")
+            .map((check) => ({
+              code: "AUDIT_CHECK_BLOCKED",
+              message: check.summary,
+              details: { category: check.category, checkId: check.id },
+            })),
+        }),
+      );
+      if (!ok) {
+        throw new MillError(
+          "AUDIT_BLOCKED",
+          "One or more bounded audit categories are blocked.",
           ExitCode.configuration,
           { resultAlreadyEmitted: true },
         );

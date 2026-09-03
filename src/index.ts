@@ -1,4 +1,5 @@
 export { runCli, createProgram, type CliIo } from "./cli-program.js";
+export { auditRepository, type AuditReport } from "./audit/repository.js";
 export {
   canonicalDigest,
   canonicalJson,
@@ -38,6 +39,12 @@ export {
   type RecipeFile,
   type RecipeManifest,
 } from "./recipes/node-typescript-next-web.js";
+export {
+  assessPublicAlphaQualification,
+  loadPublicAlphaQualification,
+  type PublicAlphaQualification,
+  type PublicAlphaQualificationAssessment,
+} from "./qualification/public-alpha.js";
 export {
   applyAdoptionIntegration,
   applyGreenfieldIntegration,

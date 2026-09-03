@@ -1,0 +1,131 @@
+task_id: mill-wave-5-public-alpha
+status: closed
+objective: >-
+  Qualify Mill's cumulative delivery behavior, add bounded read-only audits,
+  establish one exact-artifact genesis release path, and make the supported
+  operator and coding-agent journeys clear enough for a truthful public alpha.
+risk_class: high
+base_commit: dce4f1b3048c2f0ffe80954a672ca24960c7e827
+impact_manifest: product/impacts/WAVE_5.yaml
+design_decisions:
+  - release qualification is an exact identity chain, not a version label or a
+    successful build in the candidate checkout
+  - the package test must exercise five dependent accepted candidates and a
+    rejected seeded-fault branch from accepted history
+  - audit is read-only, exact-candidate-bound, and deliberately limited to the
+    nine categories needed for the supported recipe and genesis release
+  - two clean tag builders compare canonical package contents and one preserved
+    tarball is the only artifact eligible for publication
+  - candidate qualification and publication are separate manual workflow runs;
+    neither creates a tag, and publication requires a protected npm environment
+  - README.md is the primary operator guide and AGENTS.md is primarily the
+    operating contract for coding agents using Mill; contribution guidance is
+    secondary and linked
+allowed_paths:
+  - .github/**
+  - architecture/**
+  - docs/**
+  - product/**
+  - quality/**
+  - recipes/**
+  - schemas/**
+  - scripts/**
+  - src/**
+  - test/**
+  - AGENTS.md
+  - CHANGELOG.md
+  - README.md
+  - SECURITY.md
+  - SUPPORT.md
+  - WORKFLOW.md
+  - package-lock.json
+  - package.json
+forbidden_paths:
+  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - .env*
+acceptance_items:
+  - W5-A1 audit emits a schema-valid read-only report bound to a clean exact
+    commit/tree and covers product, code, UX, accessibility, security,
+    dependencies, architecture, operations, and release without claiming a
+    generic audit platform
+  - W5-A2 public-alpha qualification rejects stale or experimental support,
+    discontinuous or duplicate accepted identities, incomplete new-behavior or
+    preservation evidence, skipped canaries, incomplete audits, invented usage,
+    and a seeded fault that enters accepted history
+  - W5-A3 the packed CLI test drives five dependent reviewed candidates from the
+    prior accepted output and proves a known-bad branch fails before recovery
+  - W5-A4 two independent exact-tag builders compare canonical artifact contents
+    and preserve one tarball with SHA-256 and npm integrity; publication
+    consumes that file and never rebuilds or repacks it
+  - W5-A5 prepublication and postpublication canaries install the packed or
+    registry-downloaded artifact with lifecycle scripts disabled and exercise
+    greenfield, compatible adoption, native downstream checks, recovery, and
+    path-escape rejection
+  - W5-A6 release evidence binds reviewed tree, resulting main, tag, both
+    builders, selected artifact, qualification, SBOM, registry provenance, and
+    GitHub release readback; any mismatch blocks
+  - W5-A7 the release workflow has separate manually approved candidate and
+    publish phases, trusted npm OIDC, least privilege, explicit timeouts, pinned
+    actions, and a documented withdrawal path
+  - W5-A8 README.md and AGENTS.md alone let a new operator or coding agent find
+    authority, onboard a supported repository, select and execute approved work,
+    validate, recover, and reach a reviewed draft PR without Factory or private
+    conversation history
+  - W5-A9 architecture, development, workflow, support, security, release,
+    canary, schema, changelog, plan, recipe-agent, and repository-setting docs
+    agree with implemented commands, claims, limitations, and external-effect
+    boundaries
+  - W5-A10 code, tests, schemas, docs, and same-change closure land in one PR;
+    tag creation, npm publication, GitHub Release creation, and deployment
+    remain separately authorized external effects
+validation_commands:
+  - npm run format:check
+  - npm run lint
+  - npm run typecheck
+  - npm run check:workflows
+  - npm run schemas:check
+  - npm run test:coverage
+  - npm run test:package
+final_validation_commands:
+  - npm run check
+  - exact clean-candidate millctl audit
+required_reviews:
+  - code
+  - security
+  - architecture
+scope_exclusions:
+  - release tag creation, npm publication, GitHub Release creation, deployment,
+    or a public support claim before separate approval and successful readback
+  - daemon, hosted control plane, scheduler, parallel writers, auto-merge,
+    automatic readiness, remote repository provisioning, or issue-tracker sync
+  - generic audit plugins, a second model or harness, arbitrary stack support,
+    autonomous research, automated detach, or cross-version migration/rollback
+  - self-improvement, feedback ingestion, evaluator mutation, or post-alpha
+    learning automation
+stop_conditions:
+  - a candidate can certify its own release without independent exact-artifact
+    reproduction and authoritative readback
+  - a required canary, audit, preservation item, support tuple, or release
+    identity is skipped, stale, ambiguous, or mismatched
+  - publication needs a long-lived npm credential or an untrusted fork artifact
+  - documentation claims support beyond the qualified tuple and recipe
+  - the same subsystem produces recurring P0/P1 review findings
+retry_budget: 1
+changelog_intent:
+  add Wave 5 qualification, audit, release, and public-alpha documentation
+  contracts
+versioning_impact: establish the v0.1.0 public-alpha release candidate
+migration_impact: no released-state migration exists or is claimed
+docs_sync_refs:
+  - README.md
+  - AGENTS.md
+  - product/PLAN.md
+  - product/PRD.md
+  - architecture/ARCHITECTURE.md
+  - docs/development.md
+  - docs/release.md
+  - docs/canaries/wave-5-public-alpha.md
+  - WORKFLOW.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

@@ -1,27 +1,189 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description:
+          Build a qualified candidate or publish a previously qualified run
+        required: true
+        type: choice
+        options: [candidate, publish]
+      tag:
+        description: Existing annotated release tag
+        required: true
+        type: string
+      candidate_run_id:
+        description: Candidate workflow run ID required for publish mode
+        required: false
+        type: string
+      support_tuple_base64:
+        description: Base64 support-tuple JSON required for candidate mode
+        required: false
+        type: string
+      sequence_base64:
+        description:
+          Base64 longitudinal-sequence JSON required for candidate mode
+        required: false
+        type: string
 
 permissions:
+  actions: read
   contents: read
-  id-token: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: publish
+  build:
+    name: build-${{ matrix.builder }}
+    if: inputs.mode == 'candidate'
+    strategy:
+      fail-fast: false
+      matrix:
+        builder: [a, b]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    environment: npm
+    timeout-minutes: 25
     steps:
       - name: Checkout immutable tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Verify release identity
+        env:
+          MILL_RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/verify-release-tag.mjs
+      - name: Full native gate
+        run: npm run check
+      - name: Build release tarball once
+        run: |
+          mkdir -p "$RUNNER_TEMP/builder-${{ matrix.builder }}"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/builder-${{ matrix.builder }}"
+      - name: Preserve independent artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: builder-${{ matrix.builder }}
+          path: ${{ runner.temp }}/builder-${{ matrix.builder }}/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  qualify:
+    name: qualify-candidate
+    if: inputs.mode == 'candidate'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Validate qualification inputs
+        env:
+          SUPPORT_TUPLE_BASE64: ${{ inputs.support_tuple_base64 }}
+          SEQUENCE_BASE64: ${{ inputs.sequence_base64 }}
+        run: |
+          test -n "$SUPPORT_TUPLE_BASE64"
+          test -n "$SEQUENCE_BASE64"
+      - name: Checkout immutable tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Build release tools
+        run: npm run build
+      - name: Verify release identity
+        env:
+          MILL_RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/verify-release-tag.mjs > "$RUNNER_TEMP/identity.json"
+      - name: Audit exact tag candidate
+        run: node dist/cli.js --json --cwd . audit > "$RUNNER_TEMP/audit.json"
+      - name: Download both independent artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: builder-*
+          path: ${{ runner.temp }}/builders
+      - name: Compare and preserve one artifact
+        run: |
+          artifact_a=$(find "$RUNNER_TEMP/builders/builder-a" -maxdepth 1 -type f -name '*.tgz')
+          artifact_b=$(find "$RUNNER_TEMP/builders/builder-b" -maxdepth 1 -type f -name '*.tgz')
+          test -n "$artifact_a" && test -n "$artifact_b"
+          node scripts/compare-release-artifacts.mjs "$artifact_a" "$artifact_b" "$RUNNER_TEMP/qualified"
+      - name: Pull the explicitly qualified verifier image
+        run:
+          docker pull "$(node -e 'const fs=require("node:fs");const
+          y=require("yaml");process.stdout.write(y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage)')"
+      - name: Run packed greenfield and adoption canaries
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          cd "$RUNNER_TEMP"
+          node "$GITHUB_WORKSPACE/scripts/qualify-release-artifact.mjs" \
+            "$artifact" --full-canary \
+            --sbom-output "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            --report-output "$RUNNER_TEMP/qualified/release-canary.json"
+      - name: Add exact source evidence
+        run: |
+          cp "$RUNNER_TEMP/identity.json" "$RUNNER_TEMP/qualified/identity.json"
+          cp "$RUNNER_TEMP/audit.json" "$RUNNER_TEMP/qualified/audit.json"
+      - name: Assemble and validate public-alpha qualification
+        env:
+          SUPPORT_TUPLE_BASE64: ${{ inputs.support_tuple_base64 }}
+          SEQUENCE_BASE64: ${{ inputs.sequence_base64 }}
+        run: |
+          node -e 'require("node:fs").writeFileSync(process.argv[1],Buffer.from(process.env.SUPPORT_TUPLE_BASE64,"base64"),{flag:"wx",mode:0o600})' "$RUNNER_TEMP/support-tuple.json"
+          node -e 'require("node:fs").writeFileSync(process.argv[1],Buffer.from(process.env.SEQUENCE_BASE64,"base64"),{flag:"wx",mode:0o600})' "$RUNNER_TEMP/sequence.json"
+          node scripts/assemble-public-alpha-qualification.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/support-tuple.json" \
+            "$RUNNER_TEMP/sequence.json" \
+            "$RUNNER_TEMP/qualified/release-canary.json" \
+            "$RUNNER_TEMP/audit.json" \
+            "$RUNNER_TEMP/qualified/qualification.json"
+          node dist/cli.js --json --cwd . qualify public-alpha \
+            --file "$RUNNER_TEMP/qualified/qualification.json"
+      - name: Preserve qualified genesis candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: genesis-candidate-${{ inputs.tag }}
+          path: ${{ runner.temp }}/qualified/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish-qualified-artifact
+    if: inputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: npm
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    steps:
+      - name: Validate publish inputs
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]
+      - name: Checkout immutable tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Node and npm registry
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -31,9 +193,92 @@ jobs:
           cache: npm
       - name: Install without lifecycle scripts
         run: npm ci --ignore-scripts
+      - name: Build release tools
+        run: npm run build
       - name: Verify release identity
-        run: node scripts/verify-release-tag.mjs
-      - name: Full native gate
-        run: npm run check
-      - name: Publish with npm trusted publishing
-        run: npm publish --provenance --access public
+        env:
+          MILL_RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/verify-release-tag.mjs > "$RUNNER_TEMP/identity.json"
+      - name: Download the qualified candidate run
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: genesis-candidate-${{ inputs.tag }}
+          path: ${{ runner.temp }}/qualified
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+      - name: Verify preserved public-alpha qualification
+        run: |
+          node dist/cli.js --json --cwd . qualify public-alpha \
+            --file "$RUNNER_TEMP/qualified/qualification.json"
+      - name: Bind qualification and prepublication release evidence
+        run: |
+          node scripts/assemble-release-evidence.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/identity.json" \
+            "$RUNNER_TEMP/qualified/release-evidence-prepublication.json"
+      - name: Publish the exact preserved artifact with provenance
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          test -n "$artifact"
+          npm publish "$artifact" --provenance --access public --tag alpha
+      - name: Read back npm and verify signatures
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          npm view "@davidahmann/mill@$version" dist --json > "$RUNNER_TEMP/registry-dist.json"
+          npm view "@davidahmann/mill@$version" dist-tags --json > "$RUNNER_TEMP/registry-tags.json"
+          node -e 'const tags=require(process.argv[1]);const version=require("./package.json").version;if(tags.alpha!==version)process.exit(1)' "$RUNNER_TEMP/registry-tags.json"
+          mkdir -p "$RUNNER_TEMP/registry-install"
+          cd "$RUNNER_TEMP/registry-install"
+          npm init --yes >/dev/null
+          npm install --ignore-scripts "@davidahmann/mill@$version"
+          npm audit signatures
+      - name: Requalify the registry-downloaded package
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p "$RUNNER_TEMP/registry-download"
+          npm pack "@davidahmann/mill@$version" --pack-destination "$RUNNER_TEMP/registry-download" >/dev/null
+          registry_artifact=$(find "$RUNNER_TEMP/registry-download" -maxdepth 1 -type f -name '*.tgz')
+          cd "$RUNNER_TEMP"
+          node "$GITHUB_WORKSPACE/scripts/qualify-release-artifact.mjs" "$registry_artifact" --full-canary
+      - name: Create draft GitHub Release with exact artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          checksum=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.sha256')
+          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --title "Mill $RELEASE_TAG" \
+            --notes-file docs/releases/v0.1.0.md \
+            "$artifact" "$checksum" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/qualified/release-evidence-prepublication.json"
+      - name: Read back GitHub Release and finalize evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          filename=$(basename "$artifact")
+          mkdir -p "$RUNNER_TEMP/github-download"
+          gh release view "$RELEASE_TAG" --json url,tagName,assets > "$RUNNER_TEMP/github-release.json"
+          gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/github-download"
+          node scripts/capture-release-readback.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/registry-dist.json" \
+            "$RUNNER_TEMP/github-release.json" \
+            "$RUNNER_TEMP/github-download/$filename" \
+            "$RUNNER_TEMP/registry-readback.json" \
+            "$RUNNER_TEMP/github-readback.json"
+          node scripts/assemble-release-evidence.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/identity.json" \
+            "$RUNNER_TEMP/release-evidence-final.json" \
+            "$RUNNER_TEMP/registry-readback.json" \
+            "$RUNNER_TEMP/github-readback.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease

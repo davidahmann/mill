@@ -8,6 +8,47 @@ import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { contractSchemas } from "../src/contracts/schemas.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
+const integrity = `sha512-${Buffer.alloc(64).toString("base64")}`;
+const supportTupleSample = {
+  id: "darwin-arm64-node-24-codex",
+  status: "qualified",
+  testedAt: "2026-09-03T12:00:00.000Z",
+  expiresAt: "2026-10-03T12:00:00.000Z",
+  host: { os: "darwin", architecture: "arm64" },
+  runtime: { node: "24.20.0", npm: "11.19.0" },
+  container: {
+    engine: "docker",
+    version: "29.7.2",
+    verifierImage: `playwright@${digest}`,
+  },
+  worker: {
+    adapter: "codex-cli",
+    harnessVersion: "0.153.0-alpha.5",
+    modelIdentity: "provider-mutable",
+    authMode: "operator-session",
+  },
+  forge: {
+    gitVersion: "2.50.1",
+    ghVersion: "2.74.2",
+    host: "github.com",
+  },
+  recipe: {
+    id: "node-typescript-next-web",
+    version: "1.0.0",
+    digest,
+  },
+} as const;
+const auditCategories = [
+  "product",
+  "code",
+  "ux",
+  "accessibility",
+  "security",
+  "dependencies",
+  "architecture",
+  "operations",
+  "release",
+] as const;
 const samples = {
   sourceManifest: {
     schemaVersion: "1",
@@ -210,7 +251,7 @@ const samples = {
   },
   millLock: {
     schemaVersion: "1",
-    mill: { package: "@davidahmann/mill", version: "0.0.0-development" },
+    mill: { package: "@davidahmann/mill", version: "0.1.0" },
     schemaDigests: {},
   },
   taskPacket: {
@@ -398,17 +439,127 @@ const samples = {
     networkDisclosure: ["HTTPS package installation"],
     baseline: "unverified",
   },
+  auditReport: {
+    schemaVersion: "1",
+    candidate: { commit: "a".repeat(40), tree: "b".repeat(40) },
+    generatedAt: "2026-09-03T12:00:00.000Z",
+    status: "passed",
+    checks: auditCategories.map((category, index) => ({
+      id: `${category}.check-${index}`,
+      category,
+      status: "passed" as const,
+      summary: `${category} evidence passed`,
+      evidence: [`evidence/${category}.json`],
+    })),
+  },
+  supportTuple: supportTupleSample,
+  publicAlphaQualification: {
+    schemaVersion: "1",
+    package: {
+      name: "@davidahmann/mill",
+      version: "0.1.0",
+      artifactDigest: digest,
+      npmIntegrity: integrity,
+    },
+    supportTuple: supportTupleSample,
+    sequence: {
+      steps: ["1", "2", "3", "4", "5"].map((id, index) => ({
+        id: `step-${id}`,
+        dependsOn: index === 0 ? [] : [`step-${index}`],
+        baseCommit: String(index + 1).repeat(40),
+        candidateCommit: String(index + 2).repeat(40),
+        status: "accepted" as const,
+        newBehavior: {
+          requiredIds: [`ACC-${id}`],
+          passedIds: [`ACC-${id}`],
+        },
+        preservation: {
+          requiredIds: ["INV-CONTINUITY"],
+          passedIds: ["INV-CONTINUITY"],
+        },
+        scenarioIds: [`SCN-${id}`],
+        usage: {
+          inputTokens: 10,
+          outputTokens: 2,
+          currencyCost: null,
+          source: "provider-measured" as const,
+        },
+      })),
+      seededFault: {
+        baseCommit: "3".repeat(40),
+        candidateCommit: "f".repeat(40),
+        status: "failed",
+        rejected: true,
+        recovered: true,
+        enteredAcceptedSequence: false,
+        reason: "preservation check rejected the candidate",
+      },
+    },
+    canaries: {
+      packedInstall: "passed",
+      greenfield: "passed",
+      adoption: "passed",
+      downstreamWithoutMill: "passed",
+      recovery: "passed",
+      security: "passed",
+    },
+    auditCandidate: { commit: "6".repeat(40), tree: "b".repeat(40) },
+    audits: auditCategories.map((category) => ({
+      category,
+      status: "passed" as const,
+      reportDigest: digest,
+    })),
+    generatedAt: "2026-09-03T12:30:00.000Z",
+  },
+  releaseEvidence: {
+    schemaVersion: "1",
+    state: "qualified",
+    package: {
+      name: "@davidahmann/mill",
+      version: "0.1.0",
+      tag: "v0.1.0",
+    },
+    source: {
+      reviewedCandidateTree: "b".repeat(40),
+      resultingMainCommit: "a".repeat(40),
+      resultingMainTree: "b".repeat(40),
+      tagCommit: "a".repeat(40),
+    },
+    builders: ["builder-a", "builder-b"].map((builder) => ({
+      builder,
+      filename: "davidahmann-mill-0.1.0.tgz",
+      sha256: digest,
+      npmIntegrity: integrity,
+      contentsDigest: digest,
+    })),
+    selectedArtifact: {
+      builder: "builder-a",
+      filename: "davidahmann-mill-0.1.0.tgz",
+      sha256: digest,
+      npmIntegrity: integrity,
+      contentsDigest: digest,
+    },
+    qualificationDigest: digest,
+    sbomDigest: digest,
+    registry: null,
+    githubRelease: null,
+    generatedAt: "2026-09-03T12:30:00.000Z",
+  },
 } as const;
 
 const schemaFiles = {
+  auditReport: "audit-report.schema.json",
   sourceManifest: "source-manifest.schema.json",
   managedRepository: "managed-repository.schema.json",
   productContract: "product-contract.schema.json",
+  publicAlphaQualification: "public-alpha-qualification.schema.json",
   recipeManifest: "recipe-manifest.schema.json",
+  releaseEvidence: "release-evidence.schema.json",
   repositoryIntegrationPlan: "repository-integration-plan.schema.json",
   specificationProposal: "specification-proposal.schema.json",
   blueprint: "blueprint.schema.json",
   scenarioSet: "scenario-set.schema.json",
+  supportTuple: "support-tuple.schema.json",
   outcomePlan: "outcome-plan.schema.json",
   impactManifest: "impact-manifest.schema.json",
   millConfig: "mill-config.schema.json",

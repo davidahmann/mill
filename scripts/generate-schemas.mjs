@@ -9,6 +9,7 @@ import { contractSchemas } from "../dist/contracts/schemas.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 const definitions = {
+  auditReport: ["audit-report.schema.json", "AuditReport"],
   blueprint: ["blueprint.schema.json", "Blueprint"],
   contextManifest: ["context-manifest.schema.json", "ContextManifest"],
   deliveryRecord: ["delivery-record.schema.json", "DeliveryRecord"],
@@ -18,7 +19,12 @@ const definitions = {
   millLock: ["mill-lock.schema.json", "MillLock"],
   outcomePlan: ["outcome-plan.schema.json", "OutcomePlan"],
   productContract: ["product-contract.schema.json", "ProductContract"],
+  publicAlphaQualification: [
+    "public-alpha-qualification.schema.json",
+    "PublicAlphaQualification",
+  ],
   recipeManifest: ["recipe-manifest.schema.json", "RecipeManifest"],
+  releaseEvidence: ["release-evidence.schema.json", "ReleaseEvidence"],
   repositoryIntegrationPlan: [
     "repository-integration-plan.schema.json",
     "RepositoryIntegrationPlan",
@@ -26,6 +32,7 @@ const definitions = {
   reviewResult: ["review-result.schema.json", "ReviewResult"],
   scenarioSet: ["scenario-set.schema.json", "ScenarioSet"],
   sourceManifest: ["source-manifest.schema.json", "SourceManifest"],
+  supportTuple: ["support-tuple.schema.json", "SupportTuple"],
   specificationProposal: [
     "specification-proposal.schema.json",
     "SpecificationProposal",

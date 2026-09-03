@@ -1,0 +1,53 @@
+schemaVersion: "1"
+id: mill-wave-5-public-alpha
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: repository-audit
+    kind: system
+    change:
+      Assess the exact clean candidate across nine bounded release-readiness
+      categories without mutation.
+  - id: longitudinal-qualification
+    kind: system
+    change:
+      Reject discontinuous history, unresolved item evidence, stale support,
+      skipped canaries, or an admitted seeded fault.
+  - id: genesis-release
+    kind: system
+    change:
+      Preserve one byte-exact artifact across independent build, qualification,
+      npm publication, and GitHub readback stages.
+  - id: operator-and-agent-docs
+    kind: user
+    change:
+      Make the supported journey, authority model, recovery path, and limits
+      usable from README.md and AGENTS.md.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+  - SCN-RESUME-NO-REPLAY
+  - SCN-FOUNDER-RESUME
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-NODE-24
+  - DEC-WEB-RECIPE
+  - DEC-OPERATOR-SESSIONS
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T10:00:00.000Z"
+  proposalDigest: sha256:c3854515741cc5af29b5366b15cab2bf87e54201fff53a3de8bb77d67d196d89

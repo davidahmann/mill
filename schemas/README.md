@@ -23,6 +23,10 @@ documents use the same data model.
 - `validation-evidence.schema.json`
 - `review-result.schema.json`
 - `delivery-record.schema.json`
+- `audit-report.schema.json`
+- `support-tuple.schema.json`
+- `public-alpha-qualification.schema.json`
+- `release-evidence.schema.json`
 
 Task packets are Git-owned approval contracts. Context manifests, validation
 evidence, review results, and delivery records are schema-versioned operational
@@ -46,6 +50,14 @@ dependency targets are currently the literal `node_modules`; writable paths are
 comma-free top-level directories because they become explicit read-only or tmpfs
 OCI mounts. Dependency configuration also binds the supported npm manager and
 exact HTTPS registry origin; those fields participate in snapshot identity.
+
+Audit reports bind nine bounded readiness categories to a clean exact candidate.
+Support tuples bind the observed host, runtime, container, worker, forge, and
+recipe and expire explicitly. Public-alpha qualification requires a continuous
+accepted sequence of at least five changes, a rejected/recovered seeded fault,
+complete canaries, and every audit category. Release evidence reconstructs the
+reviewed/main/tag identity and the two-builder, selected-artifact,
+qualification, SBOM, registry, and GitHub Release chain.
 
 JSON Schemas are generated from the runtime Zod contracts in input mode. Run
 `npm run schemas:generate` after an intentional contract change;

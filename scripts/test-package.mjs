@@ -72,17 +72,21 @@ try {
     "dist/index.js",
     "README.md",
     "LICENSE",
+    "schemas/audit-report.schema.json",
     "schemas/context-manifest.schema.json",
     "schemas/delivery-record.schema.json",
     "schemas/impact-manifest.schema.json",
     "schemas/mill-config.schema.json",
     "schemas/recipe-manifest.schema.json",
+    "schemas/release-evidence.schema.json",
     "schemas/repository-integration-plan.schema.json",
     "schemas/review-result.schema.json",
     "schemas/source-manifest.schema.json",
+    "schemas/support-tuple.schema.json",
     "schemas/specification-proposal.schema.json",
     "schemas/task-packet.schema.json",
     "schemas/validation-evidence.schema.json",
+    "schemas/public-alpha-qualification.schema.json",
     "schemas/worker-invocation.schema.json",
     "schemas/worker-profile.schema.json",
     "recipes/node-typescript-next-web/recipe.yaml",
@@ -112,7 +116,7 @@ try {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (version.status !== 0 || version.stdout.trim() !== "0.0.0-development") {
+  if (version.status !== 0 || version.stdout.trim() !== "0.1.0") {
     throw new Error(
       `packed millctl version smoke failed: ${version.stdout}${version.stderr}`,
     );
@@ -195,6 +199,7 @@ try {
     );
   }
   for (const command of [
+    "audit",
     "new",
     "adopt",
     "auth",
@@ -227,6 +232,7 @@ try {
   }
 
   await Promise.all([
+    mkdir(path.join(consumer, "product", "impacts"), { recursive: true }),
     mkdir(path.join(consumer, "product", "tasks"), { recursive: true }),
     mkdir(path.join(consumer, "quality"), { recursive: true }),
     mkdir(path.join(consumer, "src"), { recursive: true }),
@@ -250,14 +256,12 @@ try {
     assumptions: [],
     unknowns: [],
     sourceRefs: ["SRC-PACKAGE-CANARY"],
-    acceptance: [
-      {
-        id: "PKG-A1",
-        kind: "functional",
-        statement: acceptanceStatement,
-        sourceRefs: ["SRC-PACKAGE-CANARY"],
-      },
-    ],
+    acceptance: [1, 2, 3, 4, 5].map((step) => ({
+      id: `PKG-A${step}`,
+      kind: "functional",
+      statement: `${acceptanceStatement} Step ${step}.`,
+      sourceRefs: ["SRC-PACKAGE-CANARY"],
+    })),
     invariants: [
       {
         id: "INV-PACKAGE-POSITIVE",
@@ -277,63 +281,114 @@ try {
   const scenarioSet = {
     schemaVersion: "1",
     productContractDigest,
-    scenarios: [
-      {
-        id: "SCN-PACKAGE-CANARY",
-        kind: "normal",
-        given: ["the package canary repository"],
-        when: ["the native test runs against the candidate"],
-        then: ["the exported value remains positive"],
-        oracleOwner: "repository",
-        acceptanceRefs: ["PKG-A1"],
-        invariantRefs: ["INV-PACKAGE-POSITIVE"],
-        coverage: "both",
-        visibility: "builder_visible",
-        executionRef: "test",
-        forbidden: [],
-      },
-    ],
+    scenarios: [1, 2, 3, 4, 5].map((step) => ({
+      id: `SCN-PACKAGE-CANARY-${step}`,
+      kind: "normal",
+      given: ["the package canary repository"],
+      when: [`dependent step ${step} runs from the prior accepted candidate`],
+      then: ["the exported value remains positive"],
+      oracleOwner: "repository",
+      acceptanceRefs: [`PKG-A${step}`],
+      invariantRefs: ["INV-PACKAGE-POSITIVE"],
+      coverage: "both",
+      visibility: "builder_visible",
+      executionRef: "test",
+      forbidden: [],
+    })),
   };
   const scenarios = `${JSON.stringify(scenarioSet, undefined, 2)}\n`;
-  const impactProposal = {
-    schemaVersion: "1",
-    id: "package-canary",
-    productContractDigest,
-    outcomeId: "OUT-REVIEWED-CANDIDATE",
-    riskClass: "low",
-    acceptanceIds: ["PKG-A1"],
-    affectedInvariantIds: ["INV-PACKAGE-POSITIVE"],
-    uncertainInvariantIds: [],
-    surfaces: [
-      {
-        id: "src/value.js",
-        kind: "system",
-        change: "Increase the exported positive value.",
-      },
-    ],
-    scenarioIds: ["SCN-PACKAGE-CANARY"],
-    commandIds: ["test"],
-    materialDecisions: [],
-    unresolved: [],
-    exceptions: [],
-    approval: null,
-  };
-  const impact = `${JSON.stringify(
-    {
-      ...impactProposal,
-      approval: {
-        approvedBy: "mill-package-test",
-        approvedAt: "2026-09-02T00:00:00.000Z",
-        proposalDigest: canonicalDigest(impactProposal),
-      },
-    },
-    undefined,
-    2,
-  )}\n`;
   const policy = "# Package canary policy\n\nOnly src/value.js may change.\n";
+  const taskArtifacts = [1, 2, 3, 4, 5].flatMap((step) => {
+    const taskId = `package-canary-${step}`;
+    const acceptanceId = `PKG-A${step}`;
+    const scenarioId = `SCN-PACKAGE-CANARY-${step}`;
+    const impactProposal = {
+      schemaVersion: "1",
+      id: taskId,
+      productContractDigest,
+      outcomeId: "OUT-REVIEWED-CANDIDATE",
+      riskClass: "low",
+      acceptanceIds: [acceptanceId],
+      affectedInvariantIds: ["INV-PACKAGE-POSITIVE"],
+      uncertainInvariantIds: [],
+      surfaces: [
+        {
+          id: "src/value.js",
+          kind: "system",
+          change: `Increase the exported positive value in step ${step}.`,
+        },
+      ],
+      scenarioIds: [scenarioId],
+      commandIds: ["test"],
+      materialDecisions: [],
+      unresolved: [],
+      exceptions: [],
+      approval: null,
+    };
+    const impact = `${JSON.stringify(
+      {
+        ...impactProposal,
+        approval: {
+          approvedBy: "mill-package-test",
+          approvedAt: "2026-09-02T00:00:00.000Z",
+          proposalDigest: canonicalDigest(impactProposal),
+        },
+      },
+      undefined,
+      2,
+    )}\n`;
+    const impactPath = `product/impacts/canary-${step}.yaml`;
+    const task = `schemaVersion: "2"
+id: ${taskId}
+title: Exercise dependent packed lifecycle step ${step}
+objective: Increase the positive exported value from the prior accepted output.
+riskClass: low
+baseRef: HEAD
+authority:
+  productContract:
+    path: product/contract.yaml
+    digest: "${digest(product)}"
+  scenarioSet:
+    path: quality/scenarios.yaml
+    digest: "${digest(scenarios)}"
+  policy:
+    path: WORKFLOW.md
+    digest: "${digest(policy)}"
+  impactManifest:
+    path: ${impactPath}
+    digest: "${digest(impact)}"
+contextPaths: [WORKFLOW.md, test/value.test.js]
+allowedPaths: [src/value.js]
+commandIds: [test]
+acceptance:
+  - id: ${acceptanceId}
+    statement: ${acceptanceStatement} Step ${step}.
+    invariantIds: [INV-PACKAGE-POSITIVE]
+    scenarioIds: [${scenarioId}]
+    coverage: both
+    evidence:
+      mode: command
+      commandId: test
+commit:
+  message: "feat: pass package canary step ${step}"
+  authorName: "Mill Package Test"
+  authorEmail: "mill-package@example.invalid"
+budget:
+  deadlineSeconds: 60
+  maxOutputBytes: 1048576
+  retryCount: 1
+`;
+    return [
+      writeFile(path.join(consumer, impactPath), impact),
+      writeFile(
+        path.join(consumer, "product", "tasks", `canary-${step}.yaml`),
+        task,
+      ),
+    ];
+  });
   await Promise.all([
+    ...taskArtifacts,
     writeFile(path.join(consumer, "product", "contract.yaml"), product),
-    writeFile(path.join(consumer, "product", "impact.yaml"), impact),
     writeFile(path.join(consumer, "quality", "scenarios.yaml"), scenarios),
     writeFile(path.join(consumer, "WORKFLOW.md"), policy),
     writeFile(
@@ -382,49 +437,6 @@ commands:
     execution: oci
 `,
     ),
-    writeFile(
-      path.join(consumer, "product", "tasks", "canary.yaml"),
-      `schemaVersion: "2"
-id: package-canary
-title: Exercise the packed local lifecycle
-objective: Change src/value.js to export the value two.
-riskClass: low
-baseRef: HEAD
-authority:
-  productContract:
-    path: product/contract.yaml
-    digest: "${digest(product)}"
-  scenarioSet:
-    path: quality/scenarios.yaml
-    digest: "${digest(scenarios)}"
-  policy:
-    path: WORKFLOW.md
-    digest: "${digest(policy)}"
-  impactManifest:
-    path: product/impact.yaml
-    digest: "${digest(impact)}"
-contextPaths: [WORKFLOW.md, test/value.test.js]
-allowedPaths: [src/value.js]
-commandIds: [test]
-acceptance:
-  - id: PKG-A1
-    statement: ${acceptanceStatement}
-    invariantIds: [INV-PACKAGE-POSITIVE]
-    scenarioIds: [SCN-PACKAGE-CANARY]
-    coverage: both
-    evidence:
-      mode: command
-      commandId: test
-commit:
-  message: "feat: pass package canary"
-  authorName: "Mill Package Test"
-  authorEmail: "mill-package@example.invalid"
-budget:
-  deadlineSeconds: 60
-  maxOutputBytes: 1048576
-  retryCount: 1
-`,
-    ),
   ]);
   command("/usr/bin/git", ["init", "--initial-branch=main"], consumer);
   command(
@@ -461,7 +473,7 @@ budget:
   await writeFile(
     codex,
     `#!${process.execPath}
-import {writeFile} from "node:fs/promises";
+import {readFile,writeFile} from "node:fs/promises";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
@@ -481,7 +493,10 @@ if(args.includes("--output-schema")){
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));
 }else{
-  await writeFile(path.join(cwd,"src/value.js"),"export const value = 2;\\n");
+  const valuePath=path.join(cwd,"src/value.js");
+  const current=await readFile(valuePath,"utf8");
+  const value=Number(/value = (\\d+)/u.exec(current)?.[1]??"0");
+  await writeFile(valuePath,"export const value = "+(value+1)+";\\n");
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));
 }
 `,
@@ -561,43 +576,236 @@ else process.exit(2);
     MILL_DOCKER_PATH: docker,
     MILL_STATE_HOME: state,
   };
-  const mill = (args) =>
-    JSON.parse(
+  const sequenceSteps = [];
+  let seededFault;
+  let reviewed;
+  let runId;
+  let lastCanaryEnvironment = canaryEnvironment;
+  for (const step of [1, 2, 3, 4, 5]) {
+    const stepState = path.join(state, `step-${step}`);
+    await mkdir(stepState, { recursive: true, mode: 0o700 });
+    const stepEnvironment = {
+      ...canaryEnvironment,
+      MILL_STATE_HOME: stepState,
+    };
+    lastCanaryEnvironment = stepEnvironment;
+    const mill = (args) =>
+      JSON.parse(
+        command(
+          bin,
+          ["--json", "--cwd", consumer, ...args],
+          consumer,
+          stepEnvironment,
+        ),
+      );
+    const task = `product/tasks/canary-${step}.yaml`;
+    const baseCommit = command(
+      "/usr/bin/git",
+      ["rev-parse", "HEAD"],
+      consumer,
+    ).trim();
+    const qualification = mill(["qualify", "--baseline", "--task", task]);
+    const started = mill([
+      "run",
+      "--task",
+      task,
+      "--approve",
+      qualification.data.approvalDigest,
+      "--attended",
+    ]);
+    runId = started.data.run.id;
+    mill(["verify", "--task", task, "--run", runId]);
+    reviewed = mill(["review", "--task", task, "--run", runId]);
+    if (
+      reviewed.data.run.status !== "reviewed" ||
+      typeof reviewed.data.run.candidateCommit !== "string"
+    ) {
+      throw new Error(`packed lifecycle step ${step} was not reviewed`);
+    }
+    const candidateCommit = reviewed.data.run.candidateCommit;
+    sequenceSteps.push({
+      id: `step-${step}`,
+      dependsOn: step === 1 ? [] : [`step-${step - 1}`],
+      baseCommit,
+      candidateCommit,
+      status: "accepted",
+      newBehavior: {
+        requiredIds: [`PKG-A${step}`],
+        passedIds: [`PKG-A${step}`],
+      },
+      preservation: {
+        requiredIds: ["INV-PACKAGE-POSITIVE"],
+        passedIds: ["INV-PACKAGE-POSITIVE"],
+      },
+      scenarioIds: [`SCN-PACKAGE-CANARY-${step}`],
+      usage: {
+        inputTokens: null,
+        outputTokens: null,
+        currencyCost: null,
+        source: "unavailable",
+      },
+    });
+    if (step < 5) {
       command(
-        bin,
-        ["--json", "--cwd", consumer, ...args],
+        "/usr/bin/git",
+        ["merge", "--ff-only", candidateCommit],
         consumer,
-        canaryEnvironment,
-      ),
+      );
+    }
+
+    if (step === 2) {
+      command(
+        "/usr/bin/git",
+        ["switch", "--create", "mill-seeded-fault"],
+        consumer,
+      );
+      await writeFile(
+        path.join(consumer, "src", "value.js"),
+        "export const value = 0;\n",
+      );
+      command("/usr/bin/git", ["add", "src/value.js"], consumer);
+      command(
+        "/usr/bin/git",
+        [
+          "-c",
+          "user.name=Mill Package Test",
+          "-c",
+          "user.email=mill-package@example.invalid",
+          "commit",
+          "--no-gpg-sign",
+          "-m",
+          "test: seed rejected continuity fault",
+        ],
+        consumer,
+      );
+      const faultCommit = command(
+        "/usr/bin/git",
+        ["rev-parse", "HEAD"],
+        consumer,
+      ).trim();
+      const faultTest = spawnSync(process.execPath, ["--test"], {
+        cwd: consumer,
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      if (faultTest.status === 0) {
+        throw new Error("seeded continuity fault unexpectedly passed");
+      }
+      command("/usr/bin/git", ["switch", "main"], consumer);
+      const recovered = command(
+        "/usr/bin/git",
+        ["rev-parse", "HEAD"],
+        consumer,
+      ).trim();
+      if (recovered !== candidateCommit) {
+        throw new Error("seeded fault recovery changed the accepted base");
+      }
+      seededFault = {
+        baseCommit: candidateCommit,
+        candidateCommit: faultCommit,
+        status: "failed",
+        rejected: true,
+        recovered: true,
+        enteredAcceptedSequence: false,
+        reason: "the repository preservation oracle rejected a zero value",
+      };
+    }
+  }
+  if (
+    reviewed === undefined ||
+    runId === undefined ||
+    seededFault === undefined
+  ) {
+    throw new Error("longitudinal package qualification is incomplete");
+  }
+  const finalCommit = sequenceSteps.at(-1)?.candidateCommit;
+  if (finalCommit === undefined) {
+    throw new Error("longitudinal package qualification has no final commit");
+  }
+  const finalTree = command(
+    "/usr/bin/git",
+    ["rev-parse", `${finalCommit}^{tree}`],
+    consumer,
+  ).trim();
+  const auditCategories = [
+    "product",
+    "code",
+    "ux",
+    "accessibility",
+    "security",
+    "dependencies",
+    "architecture",
+    "operations",
+    "release",
+  ];
+  const artifactDigest = `sha256:${createHash("sha256")
+    .update(await readFile(tarball))
+    .digest("hex")}`;
+  const longitudinalQualification =
+    installedMill.assessPublicAlphaQualification(
+      installedMill.contractSchemas.publicAlphaQualification.parse({
+        schemaVersion: "1",
+        package: {
+          name: "@davidahmann/mill",
+          version: "0.1.0",
+          artifactDigest,
+          npmIntegrity: packResult.integrity,
+        },
+        supportTuple: {
+          id: "package-fixture",
+          status: "qualified",
+          testedAt: "2026-09-03T12:00:00.000Z",
+          expiresAt: "2027-09-03T12:00:00.000Z",
+          host: { os: process.platform, architecture: process.arch },
+          runtime: { node: "24.20.0", npm: "11.19.0" },
+          container: {
+            engine: "fixture",
+            version: "1.0.0",
+            verifierImage: `node@sha256:${"a".repeat(64)}`,
+          },
+          worker: {
+            adapter: "codex-cli",
+            harnessVersion: "package-fixture-1",
+            modelIdentity: "provider-mutable",
+            authMode: "operator-session",
+          },
+          forge: {
+            gitVersion: "fixture-1",
+            ghVersion: "fixture-1",
+            host: "github.com",
+          },
+          recipe: {
+            id: "node-typescript-next-web",
+            version: "1.0.0",
+            digest: `sha256:${"b".repeat(64)}`,
+          },
+        },
+        sequence: { steps: sequenceSteps, seededFault },
+        canaries: {
+          packedInstall: "passed",
+          greenfield: "passed",
+          adoption: "passed",
+          downstreamWithoutMill: "passed",
+          recovery: "passed",
+          security: "passed",
+        },
+        auditCandidate: { commit: finalCommit, tree: finalTree },
+        audits: auditCategories.map((category) => ({
+          category,
+          status: "passed",
+          reportDigest: `sha256:${"c".repeat(64)}`,
+        })),
+        generatedAt: "2026-09-03T12:30:00.000Z",
+      }),
+      new Date("2026-09-03T13:00:00.000Z"),
     );
-  const qualification = mill([
-    "qualify",
-    "--baseline",
-    "--task",
-    "product/tasks/canary.yaml",
-  ]);
-  const started = mill([
-    "run",
-    "--task",
-    "product/tasks/canary.yaml",
-    "--approve",
-    qualification.data.approvalDigest,
-    "--attended",
-  ]);
-  const runId = started.data.run.id;
-  mill(["verify", "--task", "product/tasks/canary.yaml", "--run", runId]);
-  const reviewed = mill([
-    "review",
-    "--task",
-    "product/tasks/canary.yaml",
-    "--run",
-    runId,
-  ]);
-  if (reviewed.data.run.status !== "reviewed") {
-    throw new Error("packed lifecycle did not reach reviewed state");
+  if (!longitudinalQualification.passed) {
+    throw new Error(
+      `longitudinal package qualification failed: ${longitudinalQualification.blockers.join(", ")}`,
+    );
   }
   const proposalEnvironment = {
-    ...canaryEnvironment,
+    ...lastCanaryEnvironment,
     MILL_GH_PATH: gh,
     MILL_GIT_PATH: git,
   };
@@ -614,7 +822,7 @@ else process.exit(2);
     "pr",
     "plan",
     "--task",
-    "product/tasks/canary.yaml",
+    "product/tasks/canary-5.yaml",
     "--run",
     runId,
   ]);
@@ -622,7 +830,7 @@ else process.exit(2);
     "pr",
     "open",
     "--task",
-    "product/tasks/canary.yaml",
+    "product/tasks/canary-5.yaml",
     "--run",
     runId,
     "--approve",
@@ -636,7 +844,7 @@ else process.exit(2);
     "pr",
     "observe",
     "--task",
-    "product/tasks/canary.yaml",
+    "product/tasks/canary-5.yaml",
     "--run",
     runId,
   ]);

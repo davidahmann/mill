@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "candidate": {
+      "type": "object",
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+      },
+      "required": ["commit", "tree"],
+      "additionalProperties": false
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "status": { "type": "string", "enum": ["passed", "blocked"] },
+    "checks": {
+      "minItems": 9,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+          "category": {
+            "type": "string",
+            "enum": [
+              "product",
+              "code",
+              "ux",
+              "accessibility",
+              "security",
+              "dependencies",
+              "architecture",
+              "operations",
+              "release"
+            ]
+          },
+          "status": { "type": "string", "enum": ["passed", "blocked"] },
+          "summary": { "type": "string", "minLength": 1 },
+          "evidence": {
+            "minItems": 1,
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "required": ["id", "category", "status", "summary", "evidence"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "candidate", "generatedAt", "status", "checks"],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/audit-report.schema.json",
+  "title": "AuditReport"
+}
