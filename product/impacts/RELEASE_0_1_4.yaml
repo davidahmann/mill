@@ -1,0 +1,31 @@
+schemaVersion: "1"
+id: mill-v0.1.4-tag-identity-recovery
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: immutable-tag-recovery
+    kind: operations
+    change: >-
+      Preserve the failed v0.1.3 tag, advance the package identity to v0.1.4,
+      and require local annotated-tag verification before first push.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T14:20:00.000Z"
+  proposalDigest: sha256:26011bd0a8da1563636f528549d4332f46afd0ad6c4c3d4b820942f1f75ae570

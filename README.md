@@ -10,7 +10,7 @@ inside a disposable worktree. Native tests and scenarios verify the committed
 candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity, and it stops at a draft PR.
 
-Mill `0.1.3` is a public-alpha release candidate. The source tree implements the
+Mill `0.1.4` is a public-alpha release candidate. The source tree implements the
 candidate and genesis release gates, but no npm availability or supported tuple
 is claimed until the separately authorized release completes and its registry
 and GitHub readback pass.
@@ -107,7 +107,7 @@ After the separately verified npm release, downstream repositories will pin the
 exact package version rather than `latest`:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.1.3
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.1.4
 npx --no-install millctl --version
 ```
 

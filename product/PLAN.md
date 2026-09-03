@@ -41,7 +41,10 @@ The immutable `v0.1.1` candidate passed the corrected audit and independent
 artifact comparison, then its Linux packed-artifact canary exposed root-owned
 bind-mount output. The immutable `v0.1.2` candidate proved the ownership fix and
 passed the complete Linux canary, then qualification blocked because generated
-evidence was outside the repository safety root. The current release task stages
-those exact bytes through a bounded transient in-root path and restarts the full
-candidate and publication chain as `v0.1.3`. No autonomous-planner or general
-stack-support claim is made.
+evidence was outside the repository safety root. The immutable `v0.1.3`
+candidate then stopped before building because its annotated tag lacked the
+required reviewed-tree trailer. Its source fix remains valid and no package or
+GitHub Release was published. The current release task preserves that failed
+tag, advances the package identity to `v0.1.4`, and requires local tag-identity
+verification before the new immutable tag is first pushed. No autonomous-
+planner or general stack-support claim is made.
