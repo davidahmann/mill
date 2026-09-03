@@ -642,7 +642,7 @@ describe("CLI contracts", () => {
       });
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.3"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n',
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.4"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n',
       );
       const detach = capture();
       expect(
@@ -657,7 +657,7 @@ describe("CLI contracts", () => {
       });
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.3"\n',
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.4"\n',
       );
       const legacyDetach = capture();
       expect(
@@ -708,7 +708,7 @@ describe("CLI contracts", () => {
     expect(JSON.parse(version.stdout.join(""))).toMatchObject({
       command: "version",
       ok: true,
-      data: { version: "0.1.3" },
+      data: { version: "0.1.4" },
     });
 
     const help = capture();
