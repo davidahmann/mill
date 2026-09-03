@@ -188,6 +188,41 @@ export async function resolveCommit(
   return value;
 }
 
+export async function readCandidateIdentity(
+  root: string,
+  reference = "HEAD",
+): Promise<CandidateIdentity> {
+  const commit = await resolveCommit(root, reference);
+  const tree = (await git(root, ["rev-parse", `${commit}^{tree}`])).trim();
+  if (!/^[a-f0-9]{40}$/u.test(tree)) {
+    throw new MillError(
+      "INVALID_CANDIDATE_TREE",
+      "Git did not return a full candidate tree identity.",
+      ExitCode.configuration,
+    );
+  }
+  return { commit, tree };
+}
+
+export async function assertRepositoryWorktreeClean(
+  root: string,
+): Promise<void> {
+  await assertVisibleIndexState(root);
+  const status = await git(root, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
+  if (status.length > 0) {
+    throw new MillError(
+      "DIRTY_CHECKOUT",
+      "Repository audit requires a clean exact candidate checkout.",
+      ExitCode.configuration,
+    );
+  }
+}
+
 export async function repositoryRemoteUrl(
   root: string,
   remoteName: string,

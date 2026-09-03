@@ -44,6 +44,16 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Attended lock/image-bound dependency preparation plus `run next`, resumable
   `start`, and two-step `ship --draft` founder commands over existing lifecycle
   authority.
+- Read-only exact-candidate audits across product, code, UX, accessibility,
+  security, dependencies, architecture, operations, and release.
+- Public-alpha qualification contracts for exact support tuples, five-or-more
+  dependent accepted changes, item-level preservation, rejected seeded faults,
+  packed canaries, and source-qualified usage.
+- A two-phase genesis release workflow that compares independent clean builds,
+  preserves one tarball, qualifies that exact artifact, publishes it through npm
+  trusted OIDC, and verifies npm and GitHub Release readback.
+- A value-led operator README, coding-agent operating contract, release and
+  withdrawal runbook, support policy, and Wave 5 canary guide.
 
 ### Changed
 

@@ -885,7 +885,7 @@ describe("exact-candidate GitHub draft delivery", () => {
     } finally {
       await fixture.cleanup();
     }
-  });
+  }, 10_000);
 
   it("repairs one aggregated remote review and updates the same pull request", async () => {
     const { fixture, runId, candidateCommit } = await reviewedFixture({

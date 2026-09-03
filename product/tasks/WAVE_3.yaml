@@ -1,5 +1,5 @@
 task_id: mill-wave-3-draft-pr
-status: active
+status: closed
 objective: >-
   Publish one already committed, locally verified, locally reviewed candidate as
   a draft GitHub pull request through the operator's own authenticated gh

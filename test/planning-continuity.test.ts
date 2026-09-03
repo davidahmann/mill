@@ -214,16 +214,24 @@ function continuityFixture() {
 describe("product continuity planning", () => {
   it("dogfoods the approved Mill continuity and selected web recipe contracts", async () => {
     const root = process.cwd();
-    const inputs = await loadImpactPlanningInputs({
-      root,
-      productPath: "product/contract.yaml",
-      scenarioPath: "quality/scenarios.yaml",
-      impactPath: "product/impacts/WAVE_4A.yaml",
-    });
-    expect(assessImpactManifest(inputs)).toMatchObject({
-      approved: true,
-      blockers: [],
-    });
+    const impacts = await Promise.all(
+      ["WAVE_4A", "WAVE_4B", "WAVE_5"].map((wave) =>
+        loadImpactPlanningInputs({
+          root,
+          productPath: "product/contract.yaml",
+          scenarioPath: "quality/scenarios.yaml",
+          impactPath: `product/impacts/${wave}.yaml`,
+        }),
+      ),
+    );
+    for (const impact of impacts) {
+      expect(assessImpactManifest(impact)).toMatchObject({
+        approved: true,
+        blockers: [],
+      });
+    }
+    const inputs = impacts[0];
+    if (inputs === undefined) throw new Error("Mill impact fixtures are empty");
     const sources = sourceManifestSchema.parse(
       parseYaml(await readFile("product/sources.yaml", "utf8")),
     );

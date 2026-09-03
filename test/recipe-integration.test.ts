@@ -871,7 +871,7 @@ describe("qualified repository integration", { concurrent: false }, () => {
         planDigest: first.approvalDigest,
         generator: {
           package: "@davidahmann/mill",
-          version: "0.0.0-development",
+          version: "0.1.0",
         },
         mode: "greenfield",
         baseline: "unverified",

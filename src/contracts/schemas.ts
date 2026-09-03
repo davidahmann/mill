@@ -872,7 +872,199 @@ export const repositoryIntegrationPlanSchema = z.strictObject({
   baseline: z.literal("unverified"),
 });
 
+export const auditCategorySchema = z.enum([
+  "product",
+  "code",
+  "ux",
+  "accessibility",
+  "security",
+  "dependencies",
+  "architecture",
+  "operations",
+  "release",
+]);
+
+export const auditReportSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  candidate: z.strictObject({
+    commit: z.string().regex(/^[a-f0-9]{40}$/u),
+    tree: z.string().regex(/^[a-f0-9]{40}$/u),
+  }),
+  generatedAt: z.iso.datetime(),
+  status: z.enum(["passed", "blocked"]),
+  checks: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+        category: auditCategorySchema,
+        status: z.enum(["passed", "blocked"]),
+        summary: z.string().min(1),
+        evidence: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(9),
+});
+
+const qualificationItemSetSchema = z.strictObject({
+  requiredIds: uniqueNonemptyStringArraySchema,
+  passedIds: z.array(z.string().min(1)),
+});
+
+const qualificationStatusSchema = z.enum([
+  "passed",
+  "failed",
+  "blocked",
+  "skipped",
+]);
+
+export const supportTupleSchema = z.strictObject({
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+  status: z.enum(["experimental", "qualified", "expired"]),
+  testedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+  host: z.strictObject({
+    os: z.string().min(1),
+    architecture: z.string().min(1),
+  }),
+  runtime: z.strictObject({
+    node: exactSemverSchema,
+    npm: exactSemverSchema,
+  }),
+  container: z.strictObject({
+    engine: z.string().min(1),
+    version: z.string().min(1),
+    verifierImage: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
+  }),
+  worker: z.strictObject({
+    adapter: z.literal("codex-cli"),
+    harnessVersion: z.string().min(1),
+    modelIdentity: z.literal("provider-mutable"),
+    authMode: z.literal("operator-session"),
+  }),
+  forge: z.strictObject({
+    gitVersion: z.string().min(1),
+    ghVersion: z.string().min(1),
+    host: z.literal("github.com"),
+  }),
+  recipe: z.strictObject({
+    id: z.literal("node-typescript-next-web"),
+    version: exactSemverSchema,
+    digest: digestSchema,
+  }),
+});
+
+export const publicAlphaQualificationSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  package: z.strictObject({
+    name: z.literal("@davidahmann/mill"),
+    version: exactSemverSchema,
+    artifactDigest: digestSchema,
+    npmIntegrity: z.string().regex(/^sha512-[A-Za-z0-9+/]+={0,2}$/u),
+  }),
+  supportTuple: supportTupleSchema,
+  sequence: z.strictObject({
+    steps: z
+      .array(
+        z.strictObject({
+          id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+          dependsOn: z.array(z.string().min(1)).max(1),
+          baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+          candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+          status: z.enum(["accepted", "rejected", "blocked"]),
+          newBehavior: qualificationItemSetSchema,
+          preservation: qualificationItemSetSchema,
+          scenarioIds: uniqueNonemptyStringArraySchema,
+          usage: z.strictObject({
+            inputTokens: z.number().int().min(0).nullable(),
+            outputTokens: z.number().int().min(0).nullable(),
+            currencyCost: z.number().min(0).nullable(),
+            source: z.enum([
+              "provider-measured",
+              "operator-declared",
+              "unavailable",
+            ]),
+          }),
+        }),
+      )
+      .min(5)
+      .max(20),
+    seededFault: z.strictObject({
+      baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+      candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+      status: qualificationStatusSchema,
+      rejected: z.boolean(),
+      recovered: z.boolean(),
+      enteredAcceptedSequence: z.boolean(),
+      reason: z.string().min(1),
+    }),
+  }),
+  canaries: z.strictObject({
+    packedInstall: qualificationStatusSchema,
+    greenfield: qualificationStatusSchema,
+    adoption: qualificationStatusSchema,
+    downstreamWithoutMill: qualificationStatusSchema,
+    recovery: qualificationStatusSchema,
+    security: qualificationStatusSchema,
+  }),
+  auditCandidate: z.strictObject({
+    commit: z.string().regex(/^[a-f0-9]{40}$/u),
+    tree: z.string().regex(/^[a-f0-9]{40}$/u),
+  }),
+  audits: z.array(
+    z.strictObject({
+      category: auditCategorySchema,
+      status: qualificationStatusSchema,
+      reportDigest: digestSchema,
+    }),
+  ),
+  generatedAt: z.iso.datetime(),
+});
+
+const releaseArtifactSchema = z.strictObject({
+  builder: z.string().min(1),
+  filename: z.string().regex(/^[A-Za-z0-9@._+-]+\.tgz$/u),
+  sha256: digestSchema,
+  npmIntegrity: z.string().regex(/^sha512-[A-Za-z0-9+/]+={0,2}$/u),
+  contentsDigest: digestSchema,
+});
+
+export const releaseEvidenceSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  state: z.enum(["qualified", "published", "verified"]),
+  package: z.strictObject({
+    name: z.literal("@davidahmann/mill"),
+    version: exactSemverSchema,
+    tag: z.string().regex(/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u),
+  }),
+  source: z.strictObject({
+    reviewedCandidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
+    resultingMainCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    resultingMainTree: z.string().regex(/^[a-f0-9]{40}$/u),
+    tagCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  }),
+  builders: z.array(releaseArtifactSchema).length(2),
+  selectedArtifact: releaseArtifactSchema,
+  qualificationDigest: digestSchema,
+  sbomDigest: digestSchema,
+  registry: z
+    .strictObject({
+      tarball: z.url(),
+      integrity: z.string().regex(/^sha512-[A-Za-z0-9+/]+={0,2}$/u),
+      provenanceVerified: z.boolean(),
+    })
+    .nullable(),
+  githubRelease: z
+    .strictObject({
+      url: z.url(),
+      tag: z.string().min(1),
+      artifactDigest: digestSchema,
+    })
+    .nullable(),
+  generatedAt: z.iso.datetime(),
+});
+
 export const contractSchemas = {
+  auditReport: auditReportSchema,
   blueprint: blueprintSchema,
   contextManifest: contextManifestSchema,
   impactManifest: impactManifestSchema,
@@ -882,13 +1074,16 @@ export const contractSchemas = {
   outcomePlan: outcomePlanSchema,
   productContract: productContractSchema,
   recipeManifest: recipeManifestSchema,
+  releaseEvidence: releaseEvidenceSchema,
   repositoryIntegrationPlan: repositoryIntegrationPlanSchema,
   reviewResult: reviewResultSchema,
   scenarioSet: scenarioSetSchema,
   sourceManifest: sourceManifestSchema,
+  supportTuple: supportTupleSchema,
   specificationProposal: specificationProposalSchema,
   taskPacket: taskPacketSchema,
   validationEvidence: validationEvidenceSchema,
+  publicAlphaQualification: publicAlphaQualificationSchema,
   workerInvocation: workerInvocationSchema,
   workerProfile: workerProfileSchema,
   deliveryRecord: deliveryRecordSchema,

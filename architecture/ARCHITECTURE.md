@@ -296,8 +296,36 @@ credential access.
 
 ## Release trust
 
-The first public artifact follows a genesis protocol: exact reviewed commit,
-pinned external/native builder, two fresh reproductions outside candidate
-control, artifact comparison, provenance verification, disposable canary, and
-explicit maintainer approval. Trusted release N qualifies N+1 beginning with the
+Wave 5 adds three bounded modules without creating another orchestrator. The
+audit module reads repository contracts and exact Git identity and emits a
+schema-valid report; it has no write or effect capability. The qualification
+module validates a supplied support tuple, a dependency-ordered sequence,
+item-level new/preservation evidence, a rejected seeded fault, packed canaries,
+and audit summaries; it cannot manufacture missing evidence. Release scripts
+compare, preserve, assemble, and read back artifacts under the manual GitHub
+workflow. These modules reuse canonical digests and the public result envelope,
+but they do not enter the run-state machine.
+
+The first public artifact follows a genesis protocol. The exact reviewed
+candidate tree must equal the resulting squash-merged `main` tree. An annotated
+tag binds that reviewed tree and points to the resulting main commit. Two clean
+GitHub-hosted builders check out the tag, pass the full gate, and independently
+pack it. A comparator safely extracts each tarball, rejects unsafe entry types
+or paths, and requires equal canonical path/mode/content identities. One tarball
+is copied without replacement and becomes the sole publication artifact.
+
+The candidate phase installs and qualifies that tarball, exercises greenfield
+and compatible adoption in disposable repositories, runs downstream native
+checks in the pinned verifier image, verifies operation without Mill, records an
+SBOM, and assembles the nine-category audit and longitudinal qualification. The
+separately approved publish phase downloads those exact preserved bytes,
+publishes them through npm trusted OIDC and provenance, re-downloads and
+requalifies the registry artifact, and compares npm and GitHub Release readback.
+No publication-time repack is allowed. A mismatch blocks the support claim and
+enters the withdrawal path. Trusted release N qualifies N+1 beginning with the
 next release.
+
+The release workflow is not a daemon, deployment service, or autonomous release
+authority. Tagging, publication, and GitHub Release creation remain distinct
+maintainer-authorized effects. Support attaches only to the non-expired exact
+tuple and recipe in final evidence.

@@ -25,9 +25,13 @@ Waves 1 through 3 are landed. The attended Wave 3 disposable-repository canary
 opened, reviewed, human-merged, and truthfully finalized the exact candidate;
 its resulting-main check passed. Wave 4A is landed: source and product
 continuity contracts, semantic impact evidence, immutable worker admission, and
-the selected Node.js 24/Next.js 16 web-recipe decision. Wave 4B is delivered by
-the current change: the exact recipe assets, transactional greenfield and
-compatible-adoption integration, lock-bound dependency preparation, read-only
-offline recipe verification, task compilation, manual detach planning, and the
-resumable founder path. No public-alpha, autonomous-planner, or general
-stack-support claim is made before Wave 5 qualification.
+the selected Node.js 24/Next.js 16 web-recipe decision. Wave 4B is landed: the
+exact recipe assets, transactional greenfield and compatible-adoption
+integration, lock-bound dependency preparation, read-only offline recipe
+verification, task compilation, manual detach planning, and the resumable
+founder path. Wave 5 implementation adds bounded exact-candidate audits,
+longitudinal qualification, independent artifact comparison, packed
+greenfield/adoption canaries, genesis release evidence, and the public operator
+and coding-agent documentation. Its implementation may land before the
+separately authorized tag and publication effects. No autonomous-planner or
+general stack-support claim is made.

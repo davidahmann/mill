@@ -113,6 +113,29 @@ shared memory, and native
 format/lint/type/unit/integration/browser/build/package commands. This is one
 qualified recipe tuple, not evidence for arbitrary stacks.
 
+Wave 5 adds three promotion layers. First, `millctl audit` performs a read-only
+assessment of the clean exact repository candidate across product, code, UX,
+Accessibility, security, dependency, architecture, operations, and release
+categories. Second, the packed-package test runs five dependent reviewed
+candidates from the prior accepted output and a separate seeded-fault branch;
+the public-alpha assessor rejects gaps, discontinuity, stale support, invented
+usage, skipped canaries, or concealed preservation failure. Third, the release
+workflow compares two clean exact-tag builds, preserves one tarball, qualifies
+that file, and publishes the same bytes through trusted npm OIDC only in a
+separately authorized run.
+
+The exact web recipe's required native commands include `test:browser`. That
+lane is both delivered-surface verification and the recipe's current
+Accessibility hook. It must remain part of `npm run check` for the supported
+shape; adding a more specialized accessibility oracle requires a product and
+scenario change, not an undocumented CI-only check.
+
+The Wave 5 package canary uses deterministic fake provider/forge adapters to
+prove lifecycle composition without credentials. Live Codex, GitHub, clean
+builder, npm, and registry-readback evidence is collected only through the
+attended genesis procedure in `docs/release.md`. Do not record the deterministic
+fixture as a qualified real support tuple.
+
 The npm dependency target is exactly `node_modules`; writable scratch paths must
 be comma-free top-level repository directories. They cannot already exist in the
 exact candidate because a mount would hide candidate content. The verifier also
@@ -143,7 +166,9 @@ Wave 4B recipe qualification is recorded in
 test must load the installed tarball's recipe and assert that packable aliases
 render required dotfiles and untrusted product strings remain valid source
 literals. Integration tests must also prove the same approved plan digest
-appears in the plan result and generated `mill.lock`.
+appears in the plan result and generated `mill.lock`. The Wave 5 implementation
+and remaining live evidence are recorded in
+[`docs/canaries/wave-5-public-alpha.md`](canaries/wave-5-public-alpha.md).
 
 ## Architecture questions
 

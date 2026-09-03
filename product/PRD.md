@@ -1,6 +1,6 @@
 # Mill product requirements
 
-Status: approved v1 contract Owner: David Ahmann Last updated: 2026-09-02
+Status: approved v1 contract Owner: David Ahmann Last updated: 2026-09-03
 
 ## Problem
 
@@ -31,13 +31,18 @@ Given a PRD and supporting evidence, Mill must:
 7. run native deterministic gates and realistic delivered-surface scenarios;
 8. obtain isolated-context local review and at most one normal repair wave;
 9. push only the verified commit and open one draft PR through local `gh`;
-10. reconcile ambiguous external effects and observe human merge/main checks.
+10. reconcile ambiguous external effects and observe human merge/main checks;
+11. audit the clean exact repository candidate across the bounded product and
+    release-readiness categories required by the supported shape;
+12. qualify cumulative behavior across dependent changes and preserve one exact
+    independently reproduced artifact through genesis release readback.
 
-In the current pre-alpha, an operator supplies the structured source manifest
-and specification proposal that Mill assesses and freezes. Mill does not yet
-claim autonomous live research or proposal generation from prose alone. Once a
-repository is integrated, `start` coordinates one already approved ready outcome
-through the existing lifecycle; it does not reinterpret the PRD on every run.
+In the current public-alpha candidate, an operator supplies the structured
+source manifest and specification proposal that Mill assesses and freezes. Mill
+does not yet claim autonomous live research or proposal generation from prose
+alone. Once a repository is integrated, `start` coordinates one already approved
+ready outcome through the existing lifecycle; it does not reinterpret the PRD on
+every run.
 
 For every material slice, Mill must also preserve product continuity: stable
 acceptance and invariant IDs, an approved impact manifest, a realistic scenario
@@ -89,6 +94,11 @@ self-modification.
 - Durable worker admission precedes process launch, and a possibly started
   mutating invocation is reconciled rather than blindly replayed.
 - Required pending, skipped, stale, or flaky evidence does not count as pass.
+- A later successful task cannot conceal an earlier unresolved preservation
+  failure; public-alpha evidence includes dependent history and a rejected
+  known-bad branch.
+- Release qualification publishes one preserved tarball. Tag, source, builders,
+  package integrity, SBOM, registry provenance, and GitHub asset must reconcile.
 - Downstream repositories work without Mill.
 - Dependency preparation may use attended registry network, but candidate
   verification is offline, source-read-only, and limited to declared scratch;

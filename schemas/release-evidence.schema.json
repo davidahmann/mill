@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "state": {
+      "type": "string",
+      "enum": ["qualified", "published", "verified"]
+    },
+    "package": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "const": "@davidahmann/mill" },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+        }
+      },
+      "required": ["name", "version", "tag"],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "reviewedCandidateTree": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "resultingMainCommit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "resultingMainTree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tagCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+      },
+      "required": [
+        "reviewedCandidateTree",
+        "resultingMainCommit",
+        "resultingMainTree",
+        "tagCommit"
+      ],
+      "additionalProperties": false
+    },
+    "builders": {
+      "minItems": 2,
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "builder": { "type": "string", "minLength": 1 },
+          "filename": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9@._+-]+\\.tgz$"
+          },
+          "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "npmIntegrity": {
+            "type": "string",
+            "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+          },
+          "contentsDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "builder",
+          "filename",
+          "sha256",
+          "npmIntegrity",
+          "contentsDigest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "selectedArtifact": {
+      "type": "object",
+      "properties": {
+        "builder": { "type": "string", "minLength": 1 },
+        "filename": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9@._+-]+\\.tgz$"
+        },
+        "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "npmIntegrity": {
+          "type": "string",
+          "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+        },
+        "contentsDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "builder",
+        "filename",
+        "sha256",
+        "npmIntegrity",
+        "contentsDigest"
+      ],
+      "additionalProperties": false
+    },
+    "qualificationDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "sbomDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "registry": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "tarball": { "type": "string", "format": "uri" },
+            "integrity": {
+              "type": "string",
+              "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+            },
+            "provenanceVerified": { "type": "boolean" }
+          },
+          "required": ["tarball", "integrity", "provenanceVerified"],
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "githubRelease": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string", "format": "uri" },
+            "tag": { "type": "string", "minLength": 1 },
+            "artifactDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": ["url", "tag", "artifactDigest"],
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "state",
+    "package",
+    "source",
+    "builders",
+    "selectedArtifact",
+    "qualificationDigest",
+    "sbomDigest",
+    "registry",
+    "githubRelease",
+    "generatedAt"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/release-evidence.schema.json",
+  "title": "ReleaseEvidence"
+}

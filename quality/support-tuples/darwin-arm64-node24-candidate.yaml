@@ -1,0 +1,27 @@
+id: darwin-arm64-node24-codex
+status: experimental
+testedAt: "2026-09-03T10:00:00.000Z"
+expiresAt: "2026-10-03T10:00:00.000Z"
+host:
+  os: darwin
+  architecture: arm64
+runtime:
+  node: 24.20.0
+  npm: 11.19.0
+container:
+  engine: docker
+  version: 29.7.2
+  verifierImage: mcr.microsoft.com/playwright@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+worker:
+  adapter: codex-cli
+  harnessVersion: 0.153.0-alpha.5
+  modelIdentity: provider-mutable
+  authMode: operator-session
+forge:
+  gitVersion: 2.50.1
+  ghVersion: 2.74.2
+  host: github.com
+recipe:
+  id: node-typescript-next-web
+  version: 1.0.0
+  digest: sha256:908489bd1c3257bd421e09807cb024a39234598d11748120583308d016e8f286

@@ -1,4 +1,5 @@
 task_id: mill-wave-1-foundation
+status: closed
 objective: >-
   Deliver an installable exact-version millctl foundation with compact schemas,
   static PRD/repository inspection, truthful doctor output, native checks and

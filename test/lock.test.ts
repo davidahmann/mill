@@ -47,7 +47,7 @@ describe("exact version and safe path contracts", () => {
       );
       await writeFile(
         path.join(nested, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\n',
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.0"\n',
       );
 
       const root = await findRepositoryRoot(nested);
@@ -71,7 +71,7 @@ describe("exact version and safe path contracts", () => {
       }
       await writeFile(
         path.join(nested, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\n',
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.0"\n',
       );
 
       await expect(findRepositoryRoot(nested)).rejects.toMatchObject({
@@ -88,7 +88,7 @@ describe("exact version and safe path contracts", () => {
     try {
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.0.0-development"\n',
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.0"\n',
       );
       await expect(
         enforceExactVersion(temporary.path),

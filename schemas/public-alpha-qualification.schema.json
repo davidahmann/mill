@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "package": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "const": "@davidahmann/mill" },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "artifactDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "npmIntegrity": {
+          "type": "string",
+          "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+        }
+      },
+      "required": ["name", "version", "artifactDigest", "npmIntegrity"],
+      "additionalProperties": false
+    },
+    "supportTuple": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "status": {
+          "type": "string",
+          "enum": ["experimental", "qualified", "expired"]
+        },
+        "testedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "host": {
+          "type": "object",
+          "properties": {
+            "os": { "type": "string", "minLength": 1 },
+            "architecture": { "type": "string", "minLength": 1 }
+          },
+          "required": ["os", "architecture"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+            },
+            "npm": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+            }
+          },
+          "required": ["node", "npm"],
+          "additionalProperties": false
+        },
+        "container": {
+          "type": "object",
+          "properties": {
+            "engine": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 },
+            "verifierImage": {
+              "type": "string",
+              "pattern": "^[^@\\s]+@sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": ["engine", "version", "verifierImage"],
+          "additionalProperties": false
+        },
+        "worker": {
+          "type": "object",
+          "properties": {
+            "adapter": { "type": "string", "const": "codex-cli" },
+            "harnessVersion": { "type": "string", "minLength": 1 },
+            "modelIdentity": { "type": "string", "const": "provider-mutable" },
+            "authMode": { "type": "string", "const": "operator-session" }
+          },
+          "required": [
+            "adapter",
+            "harnessVersion",
+            "modelIdentity",
+            "authMode"
+          ],
+          "additionalProperties": false
+        },
+        "forge": {
+          "type": "object",
+          "properties": {
+            "gitVersion": { "type": "string", "minLength": 1 },
+            "ghVersion": { "type": "string", "minLength": 1 },
+            "host": { "type": "string", "const": "github.com" }
+          },
+          "required": ["gitVersion", "ghVersion", "host"],
+          "additionalProperties": false
+        },
+        "recipe": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "const": "node-typescript-next-web" },
+            "version": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+            },
+            "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          },
+          "required": ["id", "version", "digest"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "testedAt",
+        "expiresAt",
+        "host",
+        "runtime",
+        "container",
+        "worker",
+        "forge",
+        "recipe"
+      ],
+      "additionalProperties": false
+    },
+    "sequence": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "minItems": 5,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+              "dependsOn": {
+                "maxItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+              "candidateCommit": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{40}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["accepted", "rejected", "blocked"]
+              },
+              "newBehavior": {
+                "type": "object",
+                "properties": {
+                  "requiredIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "uniqueItems": true
+                  },
+                  "passedIds": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                },
+                "required": ["requiredIds", "passedIds"],
+                "additionalProperties": false
+              },
+              "preservation": {
+                "type": "object",
+                "properties": {
+                  "requiredIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "uniqueItems": true
+                  },
+                  "passedIds": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                },
+                "required": ["requiredIds", "passedIds"],
+                "additionalProperties": false
+              },
+              "scenarioIds": {
+                "minItems": 1,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "uniqueItems": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "inputTokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      { "type": "null" }
+                    ]
+                  },
+                  "outputTokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      { "type": "null" }
+                    ]
+                  },
+                  "currencyCost": {
+                    "anyOf": [
+                      { "type": "number", "minimum": 0 },
+                      { "type": "null" }
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "provider-measured",
+                      "operator-declared",
+                      "unavailable"
+                    ]
+                  }
+                },
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "currencyCost",
+                  "source"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "dependsOn",
+              "baseCommit",
+              "candidateCommit",
+              "status",
+              "newBehavior",
+              "preservation",
+              "scenarioIds",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "seededFault": {
+          "type": "object",
+          "properties": {
+            "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "candidateCommit": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["passed", "failed", "blocked", "skipped"]
+            },
+            "rejected": { "type": "boolean" },
+            "recovered": { "type": "boolean" },
+            "enteredAcceptedSequence": { "type": "boolean" },
+            "reason": { "type": "string", "minLength": 1 }
+          },
+          "required": [
+            "baseCommit",
+            "candidateCommit",
+            "status",
+            "rejected",
+            "recovered",
+            "enteredAcceptedSequence",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["steps", "seededFault"],
+      "additionalProperties": false
+    },
+    "canaries": {
+      "type": "object",
+      "properties": {
+        "packedInstall": {
+          "type": "string",
+          "enum": ["passed", "failed", "blocked", "skipped"]
+        },
+        "greenfield": {
+          "type": "string",
+          "enum": ["passed", "failed", "blocked", "skipped"]
+        },
+        "adoption": {
+          "type": "string",
+          "enum": ["passed", "failed", "blocked", "skipped"]
+        },
+        "downstreamWithoutMill": {
+          "type": "string",
+          "enum": ["passed", "failed", "blocked", "skipped"]
+        },
+        "recovery": {
+          "type": "string",
+          "enum": ["passed", "failed", "blocked", "skipped"]
+        },
+        "security": {
+          "type": "string",
+          "enum": ["passed", "failed", "blocked", "skipped"]
+        }
+      },
+      "required": [
+        "packedInstall",
+        "greenfield",
+        "adoption",
+        "downstreamWithoutMill",
+        "recovery",
+        "security"
+      ],
+      "additionalProperties": false
+    },
+    "auditCandidate": {
+      "type": "object",
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+      },
+      "required": ["commit", "tree"],
+      "additionalProperties": false
+    },
+    "audits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "product",
+              "code",
+              "ux",
+              "accessibility",
+              "security",
+              "dependencies",
+              "architecture",
+              "operations",
+              "release"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "blocked", "skipped"]
+          },
+          "reportDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": ["category", "status", "reportDigest"],
+        "additionalProperties": false
+      }
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "package",
+    "supportTuple",
+    "sequence",
+    "canaries",
+    "auditCandidate",
+    "audits",
+    "generatedAt"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/public-alpha-qualification.schema.json",
+  "title": "PublicAlphaQualification"
+}
