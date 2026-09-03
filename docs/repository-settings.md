@@ -22,18 +22,19 @@ After the Wave 1 checks have run at least once, configure:
 Codex review is optional repository policy in v1; frozen local review and
 required machine checks are portable and mandatory.
 
-Before the genesis publication run:
+The genesis publication boundary is configured as follows:
 
-- create a protected GitHub environment named `npm` with David as the required
-  approver and tag/branch restrictions appropriate to immutable releases;
-- configure npm trusted publishing for package `@davidahmann/mill`, repository
-  `davidahmann/mill`, and workflow `.github/workflows/release.yml`;
+- the protected GitHub environment `npm` requires David's approval and permits
+  deployment only from protected refs;
+- npm trusted publishing binds package `@davidahmann/mill`, repository
+  `davidahmann/mill`, workflow `release.yml`, and environment `npm`;
 - require passkey or 2FA on the npm maintainer account and store recovery codes
   offline;
 - keep GitHub Actions artifact retention long enough for the seven-day
   candidate-to-publish window;
 - keep release/tag mutation limited to the maintainer and never store an npm
-  token in GitHub, the repository, or a task packet;
+  token in GitHub, the repository, or a task packet. The one package-identity
+  bootstrap used the maintainer's interactive 2FA session and stored no token;
 - preserve published tags and releases. Withdrawal deprecates the npm version
   and publishes an advisory instead of moving identities.
 

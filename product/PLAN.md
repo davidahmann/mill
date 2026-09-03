@@ -43,8 +43,12 @@ bind-mount output. The immutable `v0.1.2` candidate proved the ownership fix and
 passed the complete Linux canary, then qualification blocked because generated
 evidence was outside the repository safety root. The immutable `v0.1.3`
 candidate then stopped before building because its annotated tag lacked the
-required reviewed-tree trailer. Its source fix remains valid and no package or
-GitHub Release was published. The current release task preserves that failed
-tag, advances the package identity to `v0.1.4`, and requires local tag-identity
-verification before the new immutable tag is first pushed. No autonomous-
-planner or general stack-support claim is made.
+required reviewed-tree trailer. The `v0.1.4` candidate then passed both builders
+and complete qualification. Its exact artifact was published under the npm
+`bootstrap` tag solely to create the package identity required before npm allows
+a trusted publisher to be configured. It has no CI provenance or GitHub Release
+and is not the supported alpha. The protected GitHub environment and package-
+specific OIDC trust are now active; the current release task advances the
+unchanged qualified source to `v0.1.5` for the complete provenance, readback,
+and GitHub Release chain. No autonomous-planner or general stack-support claim
+is made.

@@ -10,7 +10,7 @@ effects. Run a stage only after the maintainer explicitly authorizes it.
 
 ## Genesis release
 
-`v0.1.4` is the one-time bootstrap exception to the normal rule that trusted
+`v0.1.5` is the one-time bootstrap exception to the normal rule that trusted
 release N qualifies candidate N+1. The remote `v0.1.0`, `v0.1.1`, and `v0.1.2`
 tags are retained as failed prepublication evidence. Version `v0.1.0` exposed
 GitHub `actions/checkout`'s inert `gc.auto=0` setting as an audit compatibility
@@ -20,8 +20,13 @@ Version `v0.1.2` passed the corrected full canary, then qualification could not
 read generated evidence outside the repository safety root. Version `v0.1.3`
 then stopped at identity verification because its annotated tag omitted the
 required reviewed-tree trailer. None produced an npm package or GitHub Release.
-The corrected candidate uses GitHub-hosted clean builders outside the tagged
-checkout and the following gates.
+Version `v0.1.4` passed complete candidate qualification and its exact artifact
+was published under the npm `bootstrap` tag using the maintainer's 2FA session,
+because npm requires an existing package before trusted publishing can be
+configured. It has no CI provenance or GitHub Release and is not the supported
+alpha. The package-specific trusted publisher and protected GitHub `npm`
+environment now exist. The corrected supported candidate uses GitHub-hosted
+clean builders outside the tagged checkout and the following gates.
 
 ### 1. Qualify the source candidate
 
@@ -88,7 +93,7 @@ Recheck that the package version and intended tag match. Record the reviewed
 candidate tree in exactly one annotated-tag trailer:
 
 ```sh
-tag=v0.1.4
+tag=v0.1.5
 reviewed_tree=$(git rev-parse <reviewed-candidate>^{tree})
 main_tree=$(git rev-parse origin/main^{tree})
 test "$reviewed_tree" = "$main_tree"
@@ -111,7 +116,7 @@ support_tuple_base64=$(base64 < /absolute/path/support-tuple.json | tr -d '\n')
 sequence_base64=$(base64 < /absolute/path/sequence.json | tr -d '\n')
 gh workflow run release.yml \
   -f mode=candidate \
-  -f tag=v0.1.4 \
+  -f tag=v0.1.5 \
   -f support_tuple_base64="$support_tuple_base64" \
   -f sequence_base64="$sequence_base64"
 ```
@@ -129,7 +134,7 @@ and compatible-adoption canaries in clean temporary repositories, executes the
 downstream native gate in the exact verifier image, proves downstream operation
 without Mill, exercises recovery and path-escape rejection, produces an SBOM,
 runs all nine read-only audits, assembles the public-alpha qualification, and
-stores one seven-day `genesis-candidate-v0.1.4` artifact.
+stores one seven-day `genesis-candidate-v0.1.5` artifact.
 
 Inspect that artifact and workflow result. A missing or skipped required result
 is a failure, not an exception.
@@ -143,7 +148,7 @@ to this repository and workflow:
 ```sh
 gh workflow run release.yml \
   -f mode=publish \
-  -f tag=v0.1.4 \
+  -f tag=v0.1.5 \
   -f candidate_run_id=<successful-run-id>
 ```
 
@@ -164,7 +169,7 @@ every identity, uploads final evidence, and only then publishes the prerelease.
 
 Record the workflow run, tag commit/tree, tarball digest/integrity, npm tarball
 and provenance, GitHub Release URL and asset digest, qualification digest,
-support tuple, and canary window. Reinstall `@davidahmann/mill@0.1.4` in an
+support tuple, and canary window. Reinstall `@davidahmann/mill@0.1.5` in an
 empty directory with lifecycle scripts disabled and confirm its version and
 help.
 
