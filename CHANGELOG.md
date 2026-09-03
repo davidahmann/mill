@@ -4,12 +4,26 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-03
+
+Version `0.1.4` passed complete candidate qualification and its exact artifact
+was published under the npm `bootstrap` tag to create the package identity that
+npm requires before trusted publishing can be configured. That bootstrap used
+the maintainer's 2FA session, has no CI provenance or GitHub Release, and is not
+the supported alpha. The package-specific OIDC publisher and protected GitHub
+environment are now active. Version `0.1.5` is the provenance-backed candidate.
+
+### Changed
+
+- Advance the unchanged qualified package identity for publication through the
+  protected OIDC workflow and complete npm and GitHub Release readback.
+
 ## [0.1.4] - 2026-09-03
 
 Version `0.1.3` was retained as failed prepublication evidence after both clean
 builders rejected its annotated tag for omitting the mandatory reviewed-tree
-trailer. It was never published to npm or as a GitHub Release. Version `0.1.4`
-is the next public alpha candidate.
+trailer. Version `0.1.4` was the first fully qualified candidate and later
+became the package-identity bootstrap described above.
 
 ### Changed
 

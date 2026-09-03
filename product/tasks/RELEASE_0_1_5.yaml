@@ -1,0 +1,81 @@
+task_id: mill-v0.1.5-oidc-genesis-release
+status: closed
+objective: >-
+  Record the real npm package-identity bootstrap, preserve its limitations, and
+  prepare the complete public-alpha publication and readback chain to run as
+  v0.1.5 through the protected package-specific OIDC publisher.
+risk_class: high
+base_commit: d0a58c281b72a8196277634a6f5770499cc0859c
+impact_manifest: product/impacts/RELEASE_0_1_5.yaml
+design_decisions:
+  - retain v0.1.4 as immutable package-identity bootstrap evidence
+  - do not claim bootstrap publication as the supported public alpha
+  - store no npm token and use the package-specific trusted publisher
+  - repeat candidate qualification before the v0.1.5 publish effect
+allowed_paths:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - scripts/test-package.mjs
+  - test/cli.test.ts
+  - test/lock.test.ts
+  - test/recipe-integration.test.ts
+  - docs/release.md
+  - docs/repository-settings.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/releases/v0.1.2.md
+  - docs/releases/v0.1.3.md
+  - docs/releases/v0.1.4.md
+  - docs/releases/v0.1.5.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+  - product/impacts/RELEASE_0_1_5.yaml
+  - product/tasks/RELEASE_0_1_5.yaml
+forbidden_paths:
+  - .env*
+acceptance_items:
+  - R015-A1 v0.1.4 remains immutable, installable bootstrap evidence
+  - R015-A2 docs state that v0.1.4 lacks CI provenance and is unsupported
+  - R015-A3 package, CLI, fixtures, and active release docs use v0.1.5
+  - R015-A4 no npm token is introduced and publication remains OIDC-bound
+  - R015-A5 the full native source and installed-package gates pass
+validation_commands:
+  - npm run check
+  - assess the exact approved impact manifest
+  - verify the exact annotated tag locally before its first push
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - moving, deleting, or republishing a prior tag or npm version
+  - weakening the protected GitHub environment or OIDC binding
+  - claiming release success before external qualification and readback pass
+stop_conditions:
+  - any tag, package, candidate tree, artifact, qualification, or readback
+    differs
+  - publication requests a stored or long-lived npm credential
+retry_budget: 1
+changelog_intent: complete the first provenance-backed public alpha
+versioning_impact: patch release 0.1.5; v0.1.4 remains bootstrap-only
+migration_impact: none; no qualified public-alpha state migration exists
+docs_sync_refs:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/repository-settings.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/releases/v0.1.2.md
+  - docs/releases/v0.1.3.md
+  - docs/releases/v0.1.4.md
+  - docs/releases/v0.1.5.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

@@ -1,0 +1,32 @@
+schemaVersion: "1"
+id: mill-v0.1.5-oidc-genesis-release
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: oidc-genesis-publication
+    kind: operations
+    change: >-
+      Preserve the exact v0.1.4 package-identity bootstrap and advance the
+      unchanged qualified source to v0.1.5 for protected OIDC publication,
+      provenance, registry qualification, GitHub Release, and final readback.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T14:43:00.000Z"
+  proposalDigest: sha256:e7eb6182bfd97d03f30de57e33a4716cc4110596b7033902bf87e170c748c785

@@ -166,7 +166,7 @@ millctl --json support-bundle --output <absolute-path>
 
 ## Release boundary
 
-Release work follows `docs/release.md`. The `v0.1.4` genesis path requires an
+Release work follows `docs/release.md`. The `v0.1.5` genesis path requires an
 annotated tag on the reviewed tree's resulting `main` commit, two independent
 clean builds with equal canonical package contents, one preserved tarball,
 longitudinal and packed-artifact qualification, a protected npm environment,

@@ -1,6 +1,6 @@
 # Wave 5 public-alpha qualification
 
-Status: live canary complete; v0.1.4 release qualification pending
+Status: live canary complete; v0.1.5 OIDC release pending
 
 Owner: David Ahmann
 
@@ -76,9 +76,20 @@ trailer. The tag remains immutable failure evidence. No artifact, npm package,
 or GitHub Release was produced; the corrected source is carried forward as
 `v0.1.4`, whose tag must pass local identity verification before its first push.
 
+The `v0.1.4` tag passed that local identity check, both independent builders,
+exact-tag audit, artifact comparison, the full Linux packed-artifact canary, and
+public-alpha qualification. npm requires a package to exist before its trusted
+publisher can be configured, so the exact qualified artifact was published once
+under the `bootstrap` tag using the maintainer's 2FA session. Registry bytes,
+signature, install, version, and help read back correctly. Because that
+bootstrap publication did not carry CI provenance and has no GitHub Release, it
+is not the supported public alpha. The package-specific OIDC publisher and
+protected GitHub environment are now configured for the complete `v0.1.5`
+release.
+
 The remaining release-chain results are:
 
-1. the `v0.1.4` annotated tag points to the reviewed resulting-main tree and
+1. the `v0.1.5` annotated tag points to the reviewed resulting-main tree and
    contains exactly one matching reviewed-tree trailer;
 2. two clean tag builders produce equal canonical package contents;
 3. the preserved tarball passes clean install, greenfield, compatible-adoption,
