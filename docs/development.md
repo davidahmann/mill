@@ -23,6 +23,13 @@ The repository enforces these native gates:
 Do not replace native commands with a Mill- or Factory-only runner. CI invokes
 the same definitions.
 
+The maintainer-only `mill.yaml` delegates to those same scripts in the exact
+offline OCI image. Read `docs/canaries/maintainer-verifier.md` for its bootstrap
+status, separate dependency preparation, source/dependency immutability and
+scratch limits. It is not a new supported downstream stack. Cleanup retains
+generated output roots so they can be mounted scratch directories; Vitest's
+native config loader and cache/report locations avoid writing into dependencies.
+
 ## Testing matrix
 
 Only applicable tiers are active. A skipped required lane blocks promotion.

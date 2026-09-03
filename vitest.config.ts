@@ -1,11 +1,13 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  cacheDir: "coverage/.vite-cache",
   test: {
     clearMocks: true,
     exclude: ["recipes/**", "node_modules/**", "dist/**"],
     testTimeout: 10_000,
     coverage: {
+      reportsDirectory: "coverage/report",
       provider: "v8",
       reporter: ["text", "json-summary"],
       include: ["src/**/*.ts"],

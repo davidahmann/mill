@@ -40,8 +40,8 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --configLoader native",
+    "test:coverage": "vitest run --configLoader native --coverage",
     "test:package": "npm run clean && npm run build && node scripts/test-package.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run check:workflows && npm run schemas:check && npm run test:coverage && npm run test:package",
     "prepack": "npm run clean && npm run build"

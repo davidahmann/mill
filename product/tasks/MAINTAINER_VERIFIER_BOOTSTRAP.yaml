@@ -1,0 +1,85 @@
+task_id: mill-maintainer-verifier-bootstrap
+status: approved
+owner: David Ahmann
+objective: >-
+  Qualify Mill's unchanged native acceptance suite in a dedicated offline,
+  read-only-source maintainer verifier without widening product or release
+  authority, then freeze that verifier for the subsequent version-2 task.
+risk_class: high
+base_commit: ceaf76a0e4b8237d2dcb0d016ed84e3c9ba5cfb8
+impact_manifest: product/impacts/MAINTAINER_VERIFIER_BOOTSTRAP.yaml
+authority_exception: MB-001
+execution_mode: one_time_native_maintainer_bootstrap
+verifier_image: local/mill-maintainer-bootstrap@sha256:cb36daaac8d15771dafbbe32dacbc9e630c7f5a72cb7f690dc9e08254af9cb51
+source_package_digest: sha256:00c9e17baabab8915958f1b3fc41337a95c0b433296739579f67a01cf0a03eb0
+source_lock_digest: sha256:c279f604d1528fba77753ed92e47bdee3cebd1bb48568ecf5b8bc68a0f590936
+allowed_paths:
+  - mill.yaml
+  - package.json
+  - scripts/clean.mjs
+  - vitest.config.ts
+  - .gitignore
+  - .prettierignore
+  - scripts/maintainer-verifier/**
+  - test/maintainer-verifier.test.ts
+  - docs/development.md
+  - docs/canaries/maintainer-verifier.md
+protected_authority_paths:
+  - AGENTS.md
+  - WORKFLOW.md
+  - product/**
+  - quality/**
+constraints:
+  - package.json changes only native test config-loader options
+  - all existing test file bytes remain unchanged
+  - preserve test exclusions, assertions, timeouts and coverage thresholds
+  - never write candidate source, dependency mounts or image during verification
+  - copy the immutable npm seed into bounded scratch for offline index writes
+  - no changes to runtime verification policy, product behavior or dependencies
+acceptance_items:
+  - MB-A1 exact Node 24.20.0, npm 11.19.0 and Git are usable without network
+  - MB-A2 non-root offline package installation succeeds from a seeded cache
+    copy
+  - MB-A3 the entire native npm run check passes on host and in bounded OCI
+  - MB-A4 cleanup handles mounted outputs and rejects unsafe path indirection
+  - MB-A5 all existing test bytes and configured acceptance thresholds are
+    preserved
+  - MB-A6 source writes, undeclared output writes and verification network
+    remain denied
+  - MB-A7 exact-candidate independent review and native audit pass
+  - MB-A8 the completed verifier is frozen before brownfield baseline
+    qualification
+validation_commands:
+  - npm ci --ignore-scripts
+  - npm run check
+  - npm run check in the exact image with read-only source and declared scratch
+  - node dist/cli.js --json --cwd . audit on the clean final commit
+required_reviews:
+  - exact-candidate read-only local Codex code and security review
+independent_evidence:
+  - unchanged ceaf76a test assertions and thresholds
+  - before-and-after OCI containment and failure probes
+  - reviewer verification of approved scope and exact candidate
+supplementary_evidence:
+  - newly added maintainer-verifier regression tests
+scope_exclusions:
+  - brownfield implementation under this exception
+  - existing test oracles and product/scenario authority changes
+  - runtime sandbox-policy changes or writable dependency mounts
+  - automatic image pulls during verification
+  - remote effects, merge, tags, npm publication and release qualification
+budget:
+  max_execution_seconds: 7200
+  max_output_bytes: 2000000
+  repair_generations: 1
+  approval_ttl_seconds: 86400
+stop_conditions:
+  - authority, source, scope or candidate identity drift
+  - a required check remains failing, skipped or unavailable
+  - required changes exceed the approved paths or constraints
+  - repeated same-subsystem P0 or P1 findings
+  - approval expiry or execution budget exhaustion
+closure:
+  owner: attended_maintainer_not_builder
+  rule: record evidence and closure only after exact validation and review
+  invalidation: any candidate-byte change requires fresh exact review and audit
