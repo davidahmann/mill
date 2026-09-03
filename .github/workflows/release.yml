@@ -111,7 +111,11 @@ jobs:
           MILL_RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/verify-release-tag.mjs > "$RUNNER_TEMP/identity.json"
       - name: Audit exact tag candidate
-        run: node dist/cli.js --json --cwd . audit > "$RUNNER_TEMP/audit.json"
+        run: |
+          if ! node dist/cli.js --json --cwd . audit > "$RUNNER_TEMP/audit.json"; then
+            cat "$RUNNER_TEMP/audit.json"
+            exit 1
+          fi
       - name: Download both independent artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
@@ -250,8 +254,10 @@ jobs:
         run: |
           artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
           checksum=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.sha256')
+          notes_file="docs/releases/${RELEASE_TAG}.md"
+          test -f "$notes_file"
           gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --title "Mill $RELEASE_TAG" \
-            --notes-file docs/releases/v0.1.0.md \
+            --notes-file "$notes_file" \
             "$artifact" "$checksum" \
             "$RUNNER_TEMP/qualified/sbom.cdx.json" \
             "$RUNNER_TEMP/qualified/release-evidence-prepublication.json"

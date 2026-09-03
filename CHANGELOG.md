@@ -4,8 +4,21 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-03
+
+Version `0.1.0` was retained as failed prepublication evidence after GitHub's
+checkout action exposed an audit compatibility defect. It was never published to
+npm or as a GitHub Release. Version `0.1.1` is the first publishable public
+alpha candidate.
+
 ### Fixed
 
+- Accept only the exact inert `gc.auto=0` repository setting written by GitHub's
+  checkout action while continuing to reject other unclassified Git
+  garbage-collection configuration.
+- Print the structured exact-tag audit report when release qualification blocks,
+  and select release notes from the immutable requested tag rather than a
+  hard-coded version.
 - Accept non-authoritative Codex review progress messages while consuming only
   the CLI's private, bounded final-message file as the structured review result.
 - Qualify process-group cancellation on Linux by recognizing a killed zombie

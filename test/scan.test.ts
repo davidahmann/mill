@@ -293,6 +293,32 @@ describe("static repository scan", () => {
     }
   });
 
+  it("allows only the inert checkout-action garbage-collection override", async () => {
+    const temporary = await temporaryDirectory("mill-scan-actions-config-");
+    try {
+      await mkdir(path.join(temporary.path, ".git"));
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        "[gc]\n  auto = 0\n",
+      );
+      await expect(scanRepository(temporary.path)).resolves.toMatchObject({
+        gitConfigHazards: [],
+      });
+
+      await writeFile(
+        path.join(temporary.path, ".git", "config"),
+        "[gc]\n  auto = 1\n  writeCommitGraph = false\n",
+      );
+      const unknown = await scanRepository(temporary.path);
+      expect(unknown.gitConfigHazards).toEqual([
+        "unclassified_git_config:gc.auto",
+        "unclassified_git_config:gc.writecommitgraph",
+      ]);
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("counts directories against the entry budget", async () => {
     const temporary = await temporaryDirectory("mill-scan-budget-");
     try {

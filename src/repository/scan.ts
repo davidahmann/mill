@@ -310,6 +310,11 @@ function isAllowedStaticGitConfig(
   key: string,
   value: string,
 ): boolean {
+  if (section === "gc") {
+    // actions/checkout disables automatic maintenance in the ephemeral runner
+    // checkout. This exact static value neither names nor executes a helper.
+    return key === "auto" && value === "0";
+  }
   if (section === "core") {
     return [
       "bare",

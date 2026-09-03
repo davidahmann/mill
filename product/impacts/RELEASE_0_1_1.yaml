@@ -1,0 +1,36 @@
+schemaVersion: "1"
+id: mill-v0.1.1-actions-audit-recovery
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: actions-checkout-audit-compatibility
+    kind: system
+    change: >-
+      Recognize only the inert gc.auto=0 repository setting installed by the
+      pinned checkout action while default-denying other unknown Git config.
+  - id: immutable-release-recovery
+    kind: operations
+    change: >-
+      Preserve failed v0.1.0 evidence and restart the exact build,
+      qualification, publication, and readback chain under v0.1.1.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T13:30:22.000Z"
+  proposalDigest: sha256:18663751216d3b3c2879da26f01dad4aa2bd74b06650df9214bdb69d80a752cc
