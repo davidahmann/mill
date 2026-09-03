@@ -24,7 +24,7 @@ commands:
         vitest.config.ts,
         tsconfig.json,
         tsconfig.build.json,
-        eslint.config.mjs,
+        eslint.config.js,
         .prettierignore,
         .prettierrc.json,
       ]

@@ -1,10 +1,10 @@
 # Maintainer verifier bootstrap
 
-Status: implementation under the approved one-time MB-001 exception. Full
-exact-candidate OCI qualification, independent review and audit remain required
-before this bootstrap can be called complete. This is not a downstream recipe
-support claim, a runtime task approval, a release qualification, or permission
-to publish.
+Status: blocked under the approved one-time MB-001 exception. The real verifier
+ran the full native command against candidate
+`5d3e0f210a270c10d042322182860c4071929426` and returned failure. This bootstrap
+is not complete. This is not a downstream recipe support claim, a runtime task
+approval, a release qualification, or permission to publish.
 
 ## Identity and authority
 
@@ -53,9 +53,11 @@ Native verification uses a fresh clean exact-commit checkout, with no existing
 verifier provides a read-only root, read-only source mounts, non-root UID/GID,
 no capabilities, no-new-privileges, no network, 256 PIDs, two CPUs and 1 GiB
 RAM. Each declared output (`dist`, `coverage`, `.mill-scratch`) is a separate
-bounded 256 MiB tmpfs. `/tmp` remains noexec. Temporary executable fake-provider
-fixtures live in the explicitly declared `.mill-scratch` tmpfs, not in source or
-the dependency mount. This does not change runtime sandbox policy.
+bounded 256 MiB tmpfs. Direct mount inspection proved that `/tmp`, `/dev/shm`
+and the declared top-level tmpfs mounts are all **noexec**, including mounts
+whose Docker options do not spell out that default. There is currently no
+qualified writable location for executable fake-provider fixtures. No runtime
+sandbox policy has been changed.
 
 The npm seed at `/opt/npm-cache` stays read-only. Before a native command, the
 runner copies it into a unique scratch child, sets an offline writable cache and
@@ -92,6 +94,43 @@ seed. That smoke test is not the full packed-package canary. Record final native
 gate, source-preservation, OCI, review and audit results against exact
 identities before promotion. The source base's earlier host gate cannot
 substitute for the candidate's gate or for real OCI execution.
+
+### Blocking real-verifier result
+
+The original host check passed all 186 then-present tests, coverage thresholds
+and the packed-package lifecycle canary. One supplementary argument-boundary
+test was added afterward; that earlier host result is not final-candidate
+qualification.
+
+The real unchanged `verifyDeclaredCommands` implementation at the source base
+then executed `check` on exact candidate
+`5d3e0f210a270c10d042322182860c4071929426`, tree
+`f88ff90dba4dd9670584025ad224c362f5fc195a`. It passed formatting, lint, types,
+workflow policy and schema drift, but failed coverage execution: 122 tests
+passed, 65 failed, with one unhandled error. The packed-package stage did not
+run. Its command result was `NONZERO_EXIT`, exit 1, duration 38033 ms, output
+digest
+`sha256:e3d55c9e15dfcdf90af6645bf0307010c1c2232c9826ddaca5e48825c30741b1`. This
+direct MB-001 native invocation is not a version-2 task run or a baseline
+approval.
+
+Two setup problems are evidenced, without changing the tests:
+
+- All writable locations are noexec. Executable fixture tools consequently fail
+  `X_OK` admission and cannot be launched. The normal verifier's default Docker
+  tmpfs flags cannot be overridden by the current `mill.yaml` schema.
+- Temporary repositories under `/workspace/.mill-scratch` can inherit the outer
+  repository marker and package context, unlike ordinary temporary directories
+  outside the source checkout. Moving them outside the repository would solve
+  that isolation problem but not the noexec blocker.
+
+The narrow next design would provide an explicitly approved, bounded executable
+fixture scratch outside `/workspace`, while keeping source/dependencies
+read-only, all other scratch noexec, and networking disabled. That requires a
+runtime verifier-policy change; MB-001 explicitly excludes it. No remount,
+privilege escalation, interpreter bypass, assertion change, timeout increase,
+test exclusion or host-only substitution was used to manufacture a passing gate.
+Do not promote this candidate or begin brownfield execution from it.
 
 After qualification and attended closure, freeze this verifier and its command
 controls as the next task's base. Normal version-2 task admission and exact
