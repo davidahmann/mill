@@ -56,9 +56,25 @@ if (
     "npm registry readback does not expose provenance attestation",
   );
 }
+const expectedTag = `v${metadata.package.version}`;
+let releaseUrl;
+try {
+  releaseUrl = new URL(release.url);
+} catch {
+  throw new Error("GitHub Release readback does not expose a valid URL");
+}
 if (
-  release.tagName !== `v${metadata.package.version}` ||
+  release.tagName !== expectedTag ||
   typeof release.url !== "string" ||
+  releaseUrl.protocol !== "https:" ||
+  releaseUrl.origin !== "https://github.com" ||
+  releaseUrl.username !== "" ||
+  releaseUrl.password !== "" ||
+  releaseUrl.search !== "" ||
+  releaseUrl.hash !== "" ||
+  !releaseUrl.pathname.endsWith(
+    `/releases/tag/${encodeURIComponent(expectedTag)}`,
+  ) ||
   !Array.isArray(release.assets) ||
   !release.assets.some(
     (asset) => asset.name === path.basename(downloadedArtifactPath),
@@ -87,7 +103,7 @@ await Promise.all([
     `${JSON.stringify(
       {
         url: release.url,
-        tag: release.tagName,
+        tag: expectedTag,
         artifactDigest: downloadedDigest,
       },
       undefined,

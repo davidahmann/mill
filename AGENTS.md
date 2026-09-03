@@ -166,12 +166,12 @@ millctl --json support-bundle --output <absolute-path>
 
 ## Release boundary
 
-Release work follows `docs/release.md`. The `v0.1.5` genesis path requires an
-annotated tag on the reviewed tree's resulting `main` commit, two independent
-clean builds with equal canonical package contents, one preserved tarball,
-longitudinal and packed-artifact qualification, a protected npm environment,
-trusted OIDC publication, and npm/GitHub readback. Creating the tag, publishing
-to npm, and creating the GitHub Release are separate human-authorized effects.
+Release work follows `docs/release.md`. The qualified `v0.1.5` genesis release
+is the trust root for later candidates. Routine releases must retain its
+annotated-tag binding, two independent clean builds with equal canonical
+contents, one preserved tarball, longitudinal and packed-artifact qualification,
+protected OIDC publication, and npm/GitHub readback. Tag, package, and release
+effects remain separately human authorized.
 
 ## Engineering rules
 

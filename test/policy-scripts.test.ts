@@ -17,6 +17,9 @@ const releaseTagScript = path.resolve("scripts/verify-release-tag.mjs");
 const releaseReadbackScript = path.resolve(
   "scripts/capture-release-readback.mjs",
 );
+const npmSignatureReadbackScript = path.resolve(
+  "scripts/retry-npm-signatures.mjs",
+);
 const qualifyReleaseArtifactScript = path.resolve(
   "scripts/qualify-release-artifact.mjs",
 );
@@ -424,6 +427,92 @@ describe("repository policy scripts", () => {
         tag: "v0.1.0",
         artifactDigest,
       });
+
+      await writeFile(
+        release,
+        JSON.stringify({
+          url: "https://github.com/davidahmann/mill/releases/tag/untagged-draft",
+          tagName: "v0.1.0",
+          assets: [{ name: path.basename(downloaded) }],
+        }),
+      );
+      const transientUrl = run(
+        process.execPath,
+        [
+          releaseReadbackScript,
+          metadata,
+          registry,
+          release,
+          downloaded,
+          path.join(temporary.path, "transient-registry-output.json"),
+          path.join(temporary.path, "transient-github-output.json"),
+        ],
+        temporary.path,
+      );
+      expect(transientUrl.status).toBe(1);
+      expect(transientUrl.stderr).toContain(
+        "GitHub Release readback does not expose the expected tag and artifact",
+      );
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("retries bounded npm signature propagation and preserves final failure", async () => {
+    const temporary = await temporaryDirectory("mill-npm-signatures-");
+    try {
+      const fakeBin = path.join(temporary.path, "bin");
+      await mkdir(fakeBin);
+      const fakeNpm = path.join(fakeBin, "npm");
+      const counter = path.join(temporary.path, "attempts");
+      await writeFile(
+        fakeNpm,
+        [
+          "#!/usr/bin/env node",
+          'import {readFileSync,writeFileSync} from "node:fs";',
+          "const file=process.env.MILL_TEST_COUNTER;",
+          'const count=Number(readFileSync(file,"utf8"))+1;',
+          "writeFileSync(file,String(count));",
+          'if(process.argv.slice(2).join(" ")!=="audit signatures")process.exit(2);',
+          'if(count<3){process.stderr.write("attestation not propagated\\n");process.exit(1);}',
+          'process.stdout.write("verified signatures\\n");',
+          "",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+      await writeFile(counter, "0");
+      const recovered = run(
+        process.execPath,
+        [npmSignatureReadbackScript, temporary.path],
+        temporary.path,
+        {
+          MILL_NPM_SIGNATURE_ATTEMPTS: "3",
+          MILL_NPM_SIGNATURE_DELAY_MS: "1",
+          MILL_TEST_COUNTER: counter,
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        },
+      );
+      expect(recovered.status, recovered.stderr).toBe(0);
+      expect(recovered.stdout).toContain("verified signatures");
+      expect(await readFile(counter, "utf8")).toBe("3");
+
+      await writeFile(counter, "0");
+      const exhausted = run(
+        process.execPath,
+        [npmSignatureReadbackScript, temporary.path],
+        temporary.path,
+        {
+          MILL_NPM_SIGNATURE_ATTEMPTS: "2",
+          MILL_NPM_SIGNATURE_DELAY_MS: "1",
+          MILL_TEST_COUNTER: counter,
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        },
+      );
+      expect(exhausted.status).toBe(1);
+      expect(exhausted.stderr).toContain(
+        "npm audit signatures did not settle after 2 attempts",
+      );
+      expect(await readFile(counter, "utf8")).toBe("2");
     } finally {
       await temporary.cleanup();
     }

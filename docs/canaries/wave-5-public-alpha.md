@@ -1,6 +1,6 @@
 # Wave 5 public-alpha qualification
 
-Status: live canary complete; v0.1.5 OIDC release pending
+Status: complete; v0.1.5 qualified public alpha released
 
 Owner: David Ahmann
 
@@ -87,7 +87,7 @@ is not the supported public alpha. The package-specific OIDC publisher and
 protected GitHub environment are now configured for the complete `v0.1.5`
 release.
 
-The remaining release-chain results are:
+The `v0.1.5` release-chain results are:
 
 1. the `v0.1.5` annotated tag points to the reviewed resulting-main tree and
    contains exactly one matching reviewed-tree trailer;
@@ -100,9 +100,25 @@ The remaining release-chain results are:
 7. the GitHub Release contains the same artifact, checksum, SBOM, and final
    evidence.
 
-Any pending, skipped, stale, mismatched, or failed item blocks release and the
-support claim. The repository claims the completed attended canary only, not a
-qualified public release, until every remaining result passes.
+All seven results passed. Candidate workflow run `33769558396` qualified the
+exact source and preserved artifact. Publish workflow run `33770023370`
+published that artifact through npm OIDC with SLSA provenance, then stopped at
+its immediate signature check because npm's attestation endpoint had not yet
+propagated. The publish was not replayed. After propagation, signature audit,
+exact registry digest and integrity, clean reinstall, all six registry-artifact
+canaries, and final GitHub asset readback passed. The workflow now retries only
+that readback within a fixed budget and still fails closed on exhaustion.
+
+The qualified release is
+<https://github.com/davidahmann/mill/releases/tag/v0.1.5>. The npm `alpha` and
+`latest` tags resolve to `0.1.5`; `0.1.4` remains under the `bootstrap` tag and
+is deprecated as bootstrap-only evidence. The selected tarball SHA-256 is
+`7eb0b1fa20502bdffdab84edecec74a4323d19956ebb2ad30a21605322b8b848`. The attached
+final evidence records the durable tag URL, OIDC provenance, qualification
+identity, and identical npm/GitHub artifact digest.
+
+Any pending, skipped, stale, mismatched, or failed item continues to block a
+future release and support claim.
 
 ## Evidence locations
 
