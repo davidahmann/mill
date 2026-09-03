@@ -1,0 +1,31 @@
+schemaVersion: "1"
+id: mill-v0.1.0-greenfield-format-fix
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: greenfield-authority-rendering
+    kind: system
+    change: >-
+      Align generated structured product authority with the exact formatter
+      required by the generated repository's native gate.
+scenarioIds:
+  - SCN-TRANSACTIONAL-GREENFIELD
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T11:30:00.000Z"
+  proposalDigest: sha256:48e8e7fc8b5990de32a3c2af75d545b2ca860da2f724045614664edc09e4be74

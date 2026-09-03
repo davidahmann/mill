@@ -17,6 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 
 import { parse as parseYaml } from "yaml";
+import { format } from "prettier";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runCli } from "../src/cli-program.js";
@@ -200,7 +201,8 @@ async function authorityFixture(root: string): Promise<{
     id: "acme-status",
     title: "Acme Status",
     primaryUser: "Founder",
-    jobToBeDone: "Start from a qualified, independently operable product.",
+    jobToBeDone:
+      "Start from a qualified, independently operable product while preserving its native repository checks.",
     outcomes: [
       {
         id: "OUT-HEALTHY-WEB",
@@ -884,6 +886,13 @@ describe("qualified repository integration", { concurrent: false }, () => {
       expect(first.plan.files.some((file) => file.path === "mill.lock")).toBe(
         true,
       );
+      const productContract = first.files.find(
+        (file) => file.path === "product/contract.yaml",
+      );
+      expect(productContract).toBeDefined();
+      expect(
+        await format(productContract?.content ?? "", { parser: "yaml" }),
+      ).toBe(productContract?.content);
       await expect(
         applyGreenfieldIntegration({
           ...authority.options,

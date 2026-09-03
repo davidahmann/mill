@@ -18,6 +18,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   style so release qualification measures adoption rather than fixture drift.
 - Use a single explicit integration-test timeout that remains stable under the
   full parallel suite instead of accumulating per-test timing exceptions.
+- Align generated YAML wrapping with the generated repository's native formatter
+  so realistic product contracts qualify before Git publication.
 
 ### Added
 

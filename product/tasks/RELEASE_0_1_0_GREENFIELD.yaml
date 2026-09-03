@@ -1,0 +1,48 @@
+task_id: mill-v0.1.0-greenfield-format-fix
+status: closed
+objective: >-
+  Correct the generated YAML formatting mismatch discovered by applying a
+  realistic source-backed product through the live v0.1.0 greenfield path.
+risk_class: high
+base_commit: 700cb72a7275871832e8642eaaf881af1a99e056
+impact_manifest: product/impacts/RELEASE_0_1_0_GREENFIELD.yaml
+design_decisions:
+  - generated authority must already satisfy the generated repository's native
+    formatter before dependency preparation or Git publication
+  - the YAML serializer and recipe formatter share the same explicit width
+allowed_paths:
+  - src/repository/integration.ts
+  - test/recipe-integration.test.ts
+  - test/planning-continuity.test.ts
+  - product/impacts/RELEASE_0_1_0_GREENFIELD.yaml
+  - product/tasks/RELEASE_0_1_0_GREENFIELD.yaml
+  - CHANGELOG.md
+forbidden_paths:
+  - .env*
+  - .github/workflows/release.yml
+acceptance_items:
+  - R01G-A1 generated product contracts containing realistic long statements are
+    byte-for-byte compliant with the exact native formatter
+  - R01G-A2 the unchanged source-backed proposal completes a real greenfield
+    apply and all native checks before Git authority appears
+validation_commands:
+  - npm run check
+  - real source-backed millctl new plan and attended apply
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - release tag creation, npm publication, or GitHub Release creation in this
+    corrective PR
+stop_conditions:
+  - generated authority changes semantics during formatting
+  - the real greenfield apply still fails a required native check
+retry_budget: 1
+changelog_intent: align generated YAML with downstream native formatting
+versioning_impact: v0.1.0 pre-release correction with no published migration
+migration_impact: none; no package has been published
+docs_sync_refs:
+  - CHANGELOG.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main
