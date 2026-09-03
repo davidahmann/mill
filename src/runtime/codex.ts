@@ -163,6 +163,7 @@ export function decodeCodexEvents(
   role: "builder" | "reviewer",
 ): {
   lastMessage?: string;
+  agentMessages: string[];
   threadId?: string;
   providerErrorCode?: string;
   usage: ProviderUsage;
@@ -175,6 +176,7 @@ export function decodeCodexEvents(
   let completedTerminalCount = 0;
   let failedTerminalCount = 0;
   let agentMessageCount = 0;
+  const agentMessages: string[] = [];
   for (const line of output.split(/\r?\n/u)) {
     if (line.trim().length === 0) continue;
     let event: unknown;
@@ -219,6 +221,7 @@ export function decodeCodexEvents(
         ) {
           lastMessage = itemRecord.text;
           agentMessageCount += 1;
+          agentMessages.push(itemRecord.text);
         }
       }
     }
@@ -254,18 +257,17 @@ export function decodeCodexEvents(
       { completedTerminalCount, failedTerminalCount, terminalCount },
     );
   }
-  if (role === "reviewer" && agentMessageCount !== 1) {
+  if (role === "reviewer" && agentMessageCount === 0) {
     throw new MillError(
-      agentMessageCount === 0
-        ? "WORKER_RESULT_MISSING"
-        : "WORKER_RESULT_CONFLICT",
-      "Codex review did not emit exactly one structured result message.",
+      "WORKER_RESULT_MISSING",
+      "Codex review did not emit a structured result message.",
       ExitCode.data,
       { agentMessageCount },
     );
   }
   return {
     ...(lastMessage === undefined ? {} : { lastMessage }),
+    agentMessages,
     ...(threadId === undefined ? {} : { threadId }),
     ...(providerErrorCode === undefined ? {} : { providerErrorCode }),
     usage:
@@ -535,6 +537,21 @@ export async function runCodexReview(input: ReviewerWorkerInput): Promise<{
       "Codex completed without a structured final review result.",
       ExitCode.data,
     );
+  }
+  for (const message of result.events.agentMessages.slice(0, -1)) {
+    try {
+      const prior = reviewResultSchema.safeParse(JSON.parse(message));
+      if (prior.success) {
+        throw new MillError(
+          "WORKER_RESULT_CONFLICT",
+          "Codex emitted a structured review result before its final agent message.",
+          ExitCode.data,
+        );
+      }
+    } catch (error) {
+      if (error instanceof MillError) throw error;
+      // Intermediate progress prose and non-review JSON are not authority.
+    }
   }
   let raw: unknown;
   try {

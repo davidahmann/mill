@@ -11,6 +11,30 @@ import {
 } from "../src/runtime/process.js";
 import { temporaryDirectory } from "./helpers.js";
 
+async function processIsTerminated(pid: number): Promise<boolean> {
+  try {
+    if (process.platform === "linux") {
+      const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+      const commandEnd = stat.lastIndexOf(")");
+      if (commandEnd >= 0) {
+        const state = stat
+          .slice(commandEnd + 1)
+          .trim()
+          .split(/\s+/u)[0];
+        if (state === "Z") return true;
+      }
+    }
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ESRCH" || error.code === "ENOENT")
+    );
+  }
+}
+
 describe("controlled process runner", () => {
   it("propagates and disposes an optional operation cancellation scope", () => {
     const sigintListeners = process.listenerCount("SIGINT");
@@ -82,24 +106,13 @@ describe("controlled process runner", () => {
       expect(result.cancelled).toBe(true);
       expect(result.signal).not.toBeNull();
       const descendantPid = Number(await readFile(pidFile, "utf8"));
+      let terminated = false;
       for (let attempt = 0; attempt < 20; attempt += 1) {
-        try {
-          process.kill(descendantPid, 0);
-          await new Promise((resolve) => setTimeout(resolve, 25));
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            "code" in error &&
-            error.code === "ESRCH"
-          ) {
-            break;
-          }
-          throw error;
-        }
+        terminated = await processIsTerminated(descendantPid);
+        if (terminated) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
       }
-      expect(() => process.kill(descendantPid, 0)).toThrow(
-        expect.objectContaining({ code: "ESRCH" }),
-      );
+      expect(terminated).toBe(true);
     } finally {
       await temporary.cleanup();
     }

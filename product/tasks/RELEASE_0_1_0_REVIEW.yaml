@@ -1,0 +1,62 @@
+task_id: mill-v0.1.0-live-review-result-fix
+status: closed
+objective: >-
+  Correct the real Codex review result boundary and Linux cancellation oracle
+  exposed by the live v0.1.0 Gate D sequence without weakening either control.
+risk_class: high
+base_commit: 6a4420f96c17b77727b51232f0f9976158afb102
+impact_manifest: product/impacts/RELEASE_0_1_0_REVIEW.yaml
+design_decisions:
+  - Codex JSONL remains authoritative for exactly one successful terminal turn
+    settlement, not for identifying the structured final review payload
+  - only the final agent message may become the structured review result
+  - intermediate agent messages may exist, but any earlier schema-valid review
+    result is a conflict rather than alternate authority
+allowed_paths:
+  - src/runtime/codex.ts
+  - test/runtime-codex.test.ts
+  - test/runtime-process.test.ts
+  - architecture/ARCHITECTURE.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/impacts/RELEASE_0_1_0_REVIEW.yaml
+  - product/tasks/RELEASE_0_1_0_REVIEW.yaml
+  - CHANGELOG.md
+forbidden_paths:
+  - .env*
+  - .github/workflows/release.yml
+acceptance_items:
+  - R01R-A1 a real Codex review may emit non-authoritative progress messages
+    while only the final agent message supplies review authority
+  - R01R-A2 missing, malformed, schema-invalid, candidate-mismatched, or
+    conflicting structured review output fails closed
+  - R01R-A3 terminal event settlement remains exactly one successful turn
+  - R01R-A4 the interrupted live run resumes through exact-candidate review
+  - R01R-A5 Linux cancellation qualification accepts a killed zombie descendant
+    but still fails while the descendant can execute
+validation_commands:
+  - npm run test:coverage
+  - npm run check
+  - resume the live Gate D review with the actual Codex CLI session
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - release tag creation, npm publication, or GitHub Release creation in this
+    corrective PR
+stop_conditions:
+  - the final result cannot be isolated from progress messages
+  - more than one schema-valid review result can become authoritative
+  - the exact candidate identity is not revalidated
+retry_budget: 1
+changelog_intent:
+  accept current Codex progress messages without weakening final review
+  authority
+versioning_impact: v0.1.0 pre-release correction with no published migration
+migration_impact: none; no package has been published
+docs_sync_refs:
+  - architecture/ARCHITECTURE.md
+  - docs/canaries/wave-5-public-alpha.md
+  - CHANGELOG.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

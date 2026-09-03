@@ -1,0 +1,37 @@
+schemaVersion: "1"
+id: mill-v0.1.0-live-review-result-fix
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-EXACT-EVIDENCE
+uncertainInvariantIds: []
+surfaces:
+  - id: codex-review-result
+    kind: interface
+    change: >-
+      Treat the final agent message as the sole structured review result while
+      permitting non-authoritative progress messages and retaining strict
+      event-stream settlement.
+  - id: linux-process-group-oracle
+    kind: operations
+    change: >-
+      Treat a Linux zombie descendant as terminated when qualifying process
+      group cancellation while still rejecting any executing descendant.
+scenarioIds:
+  - SCN-TRUNCATED-WORKER
+  - SCN-RESUME-NO-REPLAY
+commandIds:
+  - test:coverage
+materialDecisions:
+  - DEC-OPERATOR-SESSIONS
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T11:56:30.000Z"
+  proposalDigest: sha256:4e8abddb94def9f77bd543b401a8d2a4662015b7888aa092370c1e6075e9a67f
