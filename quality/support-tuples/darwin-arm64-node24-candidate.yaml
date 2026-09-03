@@ -11,7 +11,7 @@ runtime:
 container:
   engine: docker
   version: 29.7.2
-  verifierImage: mcr.microsoft.com/playwright@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+  verifierImage: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
 worker:
   adapter: codex-cli
   harnessVersion: 0.153.0-alpha.5

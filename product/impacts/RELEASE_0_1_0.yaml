@@ -1,0 +1,31 @@
+schemaVersion: "1"
+id: mill-v0.1.0-gate-d-fix
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: support-tuple-verifier-binding
+    kind: system
+    change: >-
+      Require public-alpha support evidence to name the exact verifier image
+      embedded in the qualified recipe and exercised by artifact canaries.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T11:08:00.000Z"
+  proposalDigest: sha256:7e8ba2e0f46c0c0f2e76fb1e1c8374772b3af8f2c2e22b16bd616ce87c4721b9

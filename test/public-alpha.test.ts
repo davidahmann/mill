@@ -133,6 +133,7 @@ describe("public-alpha longitudinal qualification", () => {
       version: recipe.manifest.version,
       digest: recipe.digest,
     });
+    expect(tuple.container.verifierImage).toBe(recipe.manifest.verifierImage);
   });
 
   it("accepts a continuous five-step sequence and rejected seeded fault", () => {

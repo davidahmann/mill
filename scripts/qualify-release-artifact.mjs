@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { format } from "prettier";
 
 const [artifactArgument, ...flags] = process.argv.slice(2);
 if (artifactArgument === undefined) {
@@ -189,6 +190,21 @@ async function authorityFixture(mill, root, repositoryId) {
         recipeOracle: "web-title-and-health",
         forbidden: [],
       },
+      {
+        id: "SCN-NATIVE-WEB-FAULT",
+        kind: "adversarial",
+        given: ["the generated product returns an unhealthy response"],
+        when: ["the browser oracle exercises the generated product"],
+        then: ["the native repository check rejects the candidate"],
+        oracleOwner: "repository",
+        acceptanceRefs: ["ACC-HEALTHY-WEB"],
+        invariantRefs: ["INV-NATIVE-CHECK"],
+        coverage: "preservation",
+        visibility: "reviewer_owned",
+        executionRef: "test:browser",
+        recipeOracle: "web-title-and-health",
+        forbidden: ["accepting an unhealthy response"],
+      },
     ],
   });
   const proposal = mill.contractSchemas.specificationProposal.parse({
@@ -217,10 +233,15 @@ async function authorityFixture(mill, root, repositoryId) {
     questions: [],
     status: "proposed",
   });
+  const [sourcesJson, proposalJson] = await Promise.all(
+    [sources, proposal].map((value) =>
+      format(JSON.stringify(value), { parser: "json" }),
+    ),
+  );
   await Promise.all([
     write(root, "product/PRD.md", prd),
-    write(root, "product/sources.json", `${JSON.stringify(sources)}\n`),
-    write(root, "product/proposal.json", `${JSON.stringify(proposal)}\n`),
+    write(root, "product/sources.json", sourcesJson),
+    write(root, "product/proposal.json", proposalJson),
   ]);
   return {
     sourceRoot: root,
@@ -237,12 +258,43 @@ async function authorityFixture(mill, root, repositoryId) {
 }
 
 async function runNativeRepositoryCheck(root, verifierImage) {
-  npm(["ci", "--ignore-scripts"], root, 10 * 60_000);
+  const docker = process.env.MILL_DOCKER_PATH ?? "docker";
+  const lockPath = path.join(root, "package-lock.json");
+  const lockBefore = await readFile(lockPath);
   run(
-    process.env.MILL_DOCKER_PATH ?? "docker",
+    docker,
     [
       "run",
       "--rm",
+      "--pull",
+      "never",
+      "--workdir",
+      "/workspace",
+      "--mount",
+      `type=bind,source=${root},target=/workspace`,
+      verifierImage,
+      "npm",
+      "ci",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+    ],
+    root,
+    { timeout: 10 * 60_000 },
+  );
+  const lockAfter = await readFile(lockPath);
+  if (!lockBefore.equals(lockAfter)) {
+    throw new Error(
+      "container dependency preparation changed package-lock.json",
+    );
+  }
+  run(
+    docker,
+    [
+      "run",
+      "--rm",
+      "--pull",
+      "never",
       "--network",
       "none",
       "--workdir",
@@ -429,6 +481,7 @@ try {
       id: recipe.manifest.id,
       version: recipe.manifest.version,
       digest: recipe.digest,
+      verifierImage: recipe.manifest.verifierImage,
     },
     canaries,
     generatedAt: new Date().toISOString(),

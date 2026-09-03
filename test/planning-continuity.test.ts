@@ -215,7 +215,7 @@ describe("product continuity planning", () => {
   it("dogfoods the approved Mill continuity and selected web recipe contracts", async () => {
     const root = process.cwd();
     const impacts = await Promise.all(
-      ["WAVE_4A", "WAVE_4B", "WAVE_5"].map((wave) =>
+      ["WAVE_4A", "WAVE_4B", "WAVE_5", "RELEASE_0_1_0"].map((wave) =>
         loadImpactPlanningInputs({
           root,
           productPath: "product/contract.yaml",
