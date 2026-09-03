@@ -1,6 +1,6 @@
 # Wave 5 public-alpha qualification
 
-Status: live canary complete; v0.1.2 release qualification pending
+Status: live canary complete; v0.1.3 release qualification pending
 
 Owner: David Ahmann
 
@@ -63,9 +63,16 @@ correction by running greenfield, adoption, downstream independence, recovery,
 and security canaries as the invoking host user. No package or GitHub Release
 was published from `v0.1.1`; its tag also remains immutable failure evidence.
 
+The `v0.1.2` candidate proved the ownership correction on GitHub's Linux runner:
+the complete packed-artifact canary and cleanup passed. Qualification then
+blocked because the workflow asked Mill to read its generated evidence from
+outside the repository safety root. No package or GitHub Release was published;
+the corrected workflow stages the exact bytes at a collision-checked transient
+in-root path and removes them on every exit.
+
 The remaining release-chain results are:
 
-1. the `v0.1.2` annotated tag points to the reviewed resulting-main tree;
+1. the `v0.1.3` annotated tag points to the reviewed resulting-main tree;
 2. two clean tag builders produce equal canonical package contents;
 3. the preserved tarball passes clean install, greenfield, compatible-adoption,
    downstream-without-Mill, recovery, and security canaries;

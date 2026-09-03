@@ -150,15 +150,20 @@ jobs:
         run: |
           node -e 'require("node:fs").writeFileSync(process.argv[1],Buffer.from(process.env.SUPPORT_TUPLE_BASE64,"base64"),{flag:"wx",mode:0o600})' "$RUNNER_TEMP/support-tuple.json"
           node -e 'require("node:fs").writeFileSync(process.argv[1],Buffer.from(process.env.SEQUENCE_BASE64,"base64"),{flag:"wx",mode:0o600})' "$RUNNER_TEMP/sequence.json"
+          qualification_input=.mill-release-qualification.json
+          test ! -e "$qualification_input"
+          trap 'rm -f "$qualification_input"' EXIT
           node scripts/assemble-public-alpha-qualification.mjs \
             "$RUNNER_TEMP/qualified/artifact-metadata.json" \
             "$RUNNER_TEMP/support-tuple.json" \
             "$RUNNER_TEMP/sequence.json" \
             "$RUNNER_TEMP/qualified/release-canary.json" \
             "$RUNNER_TEMP/audit.json" \
-            "$RUNNER_TEMP/qualified/qualification.json"
+            "$qualification_input"
           node dist/cli.js --json --cwd . qualify public-alpha \
-            --file "$RUNNER_TEMP/qualified/qualification.json"
+            --file "$qualification_input"
+          mv "$qualification_input" "$RUNNER_TEMP/qualified/qualification.json"
+          trap - EXIT
       - name: Preserve qualified genesis candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -213,8 +218,15 @@ jobs:
           run-id: ${{ inputs.candidate_run_id }}
       - name: Verify preserved public-alpha qualification
         run: |
+          qualification_input=.mill-release-qualification.json
+          test ! -e "$qualification_input"
+          node -e 'require("node:fs").copyFileSync(process.argv[1],process.argv[2],require("node:fs").constants.COPYFILE_EXCL)' \
+            "$RUNNER_TEMP/qualified/qualification.json" "$qualification_input"
+          trap 'rm -f "$qualification_input"' EXIT
           node dist/cli.js --json --cwd . qualify public-alpha \
-            --file "$RUNNER_TEMP/qualified/qualification.json"
+            --file "$qualification_input"
+          rm -f "$qualification_input"
+          trap - EXIT
       - name: Bind qualification and prepublication release evidence
         run: |
           node scripts/assemble-release-evidence.mjs \

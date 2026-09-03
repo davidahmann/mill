@@ -4,12 +4,27 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-03
+
+Version `0.1.2` was retained as failed prepublication evidence after the full
+Linux artifact canary passed but qualification could not read its generated
+evidence outside the repository safety root. It was never published to npm or as
+a GitHub Release. Version `0.1.3` is the next public alpha candidate.
+
+### Fixed
+
+- Stage generated qualification evidence at a collision-checked transient path
+  inside the repository safety root for validation, remove it on every exit, and
+  preserve the same bytes in the release artifact.
+- Apply the same bounded staging protocol when the separate publish job
+  revalidates the preserved candidate.
+
 ## [0.1.2] - 2026-09-03
 
 Version `0.1.1` was retained as failed prepublication evidence after the real
 Linux packed-artifact canary exposed root-owned bind-mount output. It was never
-published to npm or as a GitHub Release. Version `0.1.2` is the next public
-alpha candidate.
+published to npm or as a GitHub Release. Version `0.1.2` was the third
+prepublication candidate.
 
 ### Fixed
 

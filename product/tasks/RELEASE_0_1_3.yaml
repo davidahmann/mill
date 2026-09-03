@@ -1,0 +1,78 @@
+task_id: mill-v0.1.3-qualification-evidence-path
+status: closed
+objective: >-
+  Correct the qualification evidence-path failure exposed after the real v0.1.2
+  Linux canary passed, preserve prior tags as immutable evidence, and prepare
+  the complete public-alpha release chain to restart as v0.1.3.
+risk_class: high
+base_commit: 50ef424c863387e5745c6cef7747024f7d78519a
+impact_manifest: product/impacts/RELEASE_0_1_3.yaml
+design_decisions:
+  - retain Mill's repository-root read boundary for qualification input
+  - use one collision-checked transient in-root file and remove it on every exit
+  - preserve the validated exact bytes in the out-of-root candidate artifact
+  - use the same staging protocol in candidate and publish jobs
+  - retain v0.1.0 through v0.1.2 as failed prepublication evidence
+allowed_paths:
+  - .github/workflows/release.yml
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - scripts/test-package.mjs
+  - test/cli.test.ts
+  - test/lock.test.ts
+  - test/recipe-integration.test.ts
+  - docs/release.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/releases/v0.1.2.md
+  - docs/releases/v0.1.3.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+  - product/impacts/RELEASE_0_1_3.yaml
+  - product/tasks/RELEASE_0_1_3.yaml
+forbidden_paths:
+  - .env*
+acceptance_items:
+  - R013-A1 candidate qualification validates generated evidence through a
+    collision-checked path inside the repository safety root
+  - R013-A2 publish revalidation uses the same in-root staging boundary
+  - R013-A3 the transient evidence path is removed after success or failure
+  - R013-A4 the validated exact bytes are preserved in the candidate artifact
+  - R013-A5 prior tags remain immutable failed prepublication evidence and
+    v0.1.3 carries the corrected package identity
+  - R013-A6 the full native source and installed-package gates pass
+validation_commands:
+  - npm run check
+  - assemble and validate a real qualification through the workflow staging path
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - weakening safe-path checks to permit arbitrary external reads
+  - moving or deleting prior release tags
+  - claiming release success before external qualification and readback pass
+stop_conditions:
+  - staging can overwrite a repository-controlled path or alter validated bytes
+  - any release identity, artifact, qualification, or readback differs
+retry_budget: 1
+changelog_intent: validate release evidence without weakening the root boundary
+versioning_impact: patch release 0.1.3; prior candidates were never published
+migration_impact: none; no package has been published
+docs_sync_refs:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/releases/v0.1.2.md
+  - docs/releases/v0.1.3.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

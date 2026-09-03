@@ -1,0 +1,37 @@
+schemaVersion: "1"
+id: mill-v0.1.3-qualification-evidence-path
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: qualification-evidence-staging
+    kind: operations
+    change: >-
+      Validate exact generated qualification bytes through a collision-checked
+      transient path inside Mill's repository safety root, then preserve the
+      same bytes outside the checkout.
+  - id: immutable-release-recovery
+    kind: operations
+    change: >-
+      Preserve all prior failed prepublication tags and restart the exact build,
+      qualification, publication, and readback chain under v0.1.3.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T14:06:56.000Z"
+  proposalDigest: sha256:b5d52c2a33fe13217ca6cc2532c3b56452c6ffd5dbf28491d193e52ec7b9a1d7
