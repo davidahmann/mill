@@ -345,7 +345,7 @@ function assertApprovedRecipe(
 }
 
 function yaml(value: unknown): string {
-  return stringifyYaml(value, { lineWidth: 88 });
+  return stringifyYaml(value, { lineWidth: 80 });
 }
 
 function recipeCommands(
