@@ -1,5 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { chmod, lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import {
   reviewResultSchema,
@@ -161,9 +164,9 @@ function codexEnvironment(): NodeJS.ProcessEnv {
 export function decodeCodexEvents(
   output: string,
   role: "builder" | "reviewer",
+  resultSource: "event-stream" | "final-message-file" = "event-stream",
 ): {
   lastMessage?: string;
-  agentMessages: string[];
   threadId?: string;
   providerErrorCode?: string;
   usage: ProviderUsage;
@@ -176,7 +179,6 @@ export function decodeCodexEvents(
   let completedTerminalCount = 0;
   let failedTerminalCount = 0;
   let agentMessageCount = 0;
-  const agentMessages: string[] = [];
   for (const line of output.split(/\r?\n/u)) {
     if (line.trim().length === 0) continue;
     let event: unknown;
@@ -221,7 +223,6 @@ export function decodeCodexEvents(
         ) {
           lastMessage = itemRecord.text;
           agentMessageCount += 1;
-          agentMessages.push(itemRecord.text);
         }
       }
     }
@@ -257,17 +258,22 @@ export function decodeCodexEvents(
       { completedTerminalCount, failedTerminalCount, terminalCount },
     );
   }
-  if (role === "reviewer" && agentMessageCount === 0) {
+  if (
+    role === "reviewer" &&
+    resultSource === "event-stream" &&
+    agentMessageCount !== 1
+  ) {
     throw new MillError(
-      "WORKER_RESULT_MISSING",
-      "Codex review did not emit a structured result message.",
+      agentMessageCount === 0
+        ? "WORKER_RESULT_MISSING"
+        : "WORKER_RESULT_CONFLICT",
+      "Codex review did not emit exactly one structured result message.",
       ExitCode.data,
       { agentMessageCount },
     );
   }
   return {
     ...(lastMessage === undefined ? {} : { lastMessage }),
-    agentMessages,
     ...(threadId === undefined ? {} : { threadId }),
     ...(providerErrorCode === undefined ? {} : { providerErrorCode }),
     usage:
@@ -319,6 +325,7 @@ async function invoke(
     onExit?: (process?: ActiveProcess) => void;
     cancellationRequested?: () => boolean;
   } = {},
+  resultSource: "event-stream" | "final-message-file" = "event-stream",
 ): Promise<{
   process: ProcessResult;
   events: ReturnType<typeof decodeCodexEvents>;
@@ -369,7 +376,7 @@ async function invoke(
       },
     );
   }
-  const events = decodeCodexEvents(result.stdout, role);
+  const events = decodeCodexEvents(result.stdout, role, resultSource);
   return { process: result, events };
 }
 
@@ -492,70 +499,94 @@ export async function runCodexReview(input: ReviewerWorkerInput): Promise<{
       .map((item) => `${item.path}=${item.digest}`)
       .join(", "),
   });
-  const result = await invoke(
-    input.root,
-    [
-      "exec",
-      "--strict-config",
-      "--ignore-user-config",
-      "--ignore-rules",
-      "--disable",
-      "skill_search",
-      "--ephemeral",
-      "--color",
-      "never",
-      "--json",
-      "-c",
-      'approval_policy="never"',
-      "--sandbox",
-      "read-only",
-      "--output-schema",
-      schemaPath,
-      "--cd",
-      input.root,
-      "-",
-    ],
-    prompt,
-    input.deadlineMs,
-    input.maxOutputBytes,
-    "reviewer",
-    {
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-      ...(input.onBeforeSpawn === undefined
-        ? {}
-        : { onBeforeSpawn: input.onBeforeSpawn }),
-      ...(input.onSpawn === undefined ? {} : { onSpawn: input.onSpawn }),
-      ...(input.onExit === undefined ? {} : { onExit: input.onExit }),
-      ...(input.cancellationRequested === undefined
-        ? {}
-        : { cancellationRequested: input.cancellationRequested }),
-    },
+  const resultDirectory = await mkdtemp(
+    path.join(tmpdir(), "mill-review-result-"),
   );
-  if (result.events.lastMessage === undefined) {
-    throw new MillError(
-      "INVALID_REVIEW_RESULT",
-      "Codex completed without a structured final review result.",
-      ExitCode.data,
+  await chmod(resultDirectory, 0o700);
+  const resultPath = path.join(resultDirectory, "review.json");
+  let result: Awaited<ReturnType<typeof invoke>>;
+  let finalMessage: string;
+  try {
+    result = await invoke(
+      input.root,
+      [
+        "exec",
+        "--strict-config",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--disable",
+        "skill_search",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-c",
+        'approval_policy="never"',
+        "--sandbox",
+        "read-only",
+        "--output-schema",
+        schemaPath,
+        "--output-last-message",
+        resultPath,
+        "--cd",
+        input.root,
+        "-",
+      ],
+      prompt,
+      input.deadlineMs,
+      input.maxOutputBytes,
+      "reviewer",
+      {
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        ...(input.onBeforeSpawn === undefined
+          ? {}
+          : { onBeforeSpawn: input.onBeforeSpawn }),
+        ...(input.onSpawn === undefined ? {} : { onSpawn: input.onSpawn }),
+        ...(input.onExit === undefined ? {} : { onExit: input.onExit }),
+        ...(input.cancellationRequested === undefined
+          ? {}
+          : { cancellationRequested: input.cancellationRequested }),
+      },
+      "final-message-file",
     );
-  }
-  for (const message of result.events.agentMessages.slice(0, -1)) {
+    let information;
     try {
-      const prior = reviewResultSchema.safeParse(JSON.parse(message));
-      if (prior.success) {
+      information = await lstat(resultPath);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
         throw new MillError(
-          "WORKER_RESULT_CONFLICT",
-          "Codex emitted a structured review result before its final agent message.",
+          "WORKER_RESULT_MISSING",
+          "Codex completed without its explicit final-message result.",
           ExitCode.data,
         );
       }
-    } catch (error) {
-      if (error instanceof MillError) throw error;
-      // Intermediate progress prose and non-review JSON are not authority.
+      throw error;
     }
+    if (!information.isFile() || information.isSymbolicLink()) {
+      throw new MillError(
+        "INVALID_REVIEW_RESULT",
+        "Codex final-message output is not a regular file.",
+        ExitCode.data,
+      );
+    }
+    if (information.size > input.maxOutputBytes) {
+      throw new MillError(
+        "CODEX_OUTPUT_BUDGET_EXCEEDED",
+        "Codex final-message output exceeded the task output budget.",
+        ExitCode.data,
+      );
+    }
+    finalMessage = await readFile(resultPath, "utf8");
+  } finally {
+    await rm(resultDirectory, { recursive: true, force: true });
   }
   let raw: unknown;
   try {
-    raw = JSON.parse(result.events.lastMessage);
+    raw = JSON.parse(finalMessage);
   } catch (error) {
     throw new MillError(
       "INVALID_REVIEW_RESULT",

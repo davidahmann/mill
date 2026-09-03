@@ -72,16 +72,15 @@ Before every builder, repair, or reviewer process starts, Mill records an
 immutable redacted invocation envelope containing the task, context epoch,
 candidate when applicable, role profile, prompt-template digest, allowed scope,
 deadline, and output budget. Launch intent is durable before spawn. Exactly one
-terminal provider event settles an invocation. A reviewer may emit progress
-messages, but only its final agent message may become the schema-valid review
-result; an earlier schema-valid result conflicts and fails closed. Candidate
-publication is atomic with its mutating-worker settlement, and review-result
-publication is atomic with its reviewer settlement, so a crash cannot consume an
-attempt without preserving the corresponding result. Process exit is journaled
-against the invocation in the same transaction that clears its active-process
-binding. A possibly started mutating invocation becomes uncertain and is
-reconciled from candidate, process, and worktree state instead of being blindly
-replayed.
+terminal provider event settles an invocation. Reviewer JSONL may contain
+progress messages, but the CLI's private, bounded `--output-last-message` file
+is the sole schema-valid review result. Candidate publication is atomic with its
+mutating-worker settlement, and review-result publication is atomic with its
+reviewer settlement, so a crash cannot consume an attempt without preserving the
+corresponding result. Process exit is journaled against the invocation in the
+same transaction that clears its active-process binding. A possibly started
+mutating invocation becomes uncertain and is reconciled from candidate, process,
+and worktree state instead of being blindly replayed.
 
 Wave 4B turns those approved contracts into repository integration without
 adding another executor. The bundled `node-typescript-next-web` recipe binds one

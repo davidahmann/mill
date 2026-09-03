@@ -40,10 +40,9 @@ with the actual supported Codex profile and exact host tuple. Then execute the
 candidate and publish phases in `docs/release.md`. Required results are:
 
 The first live sequence attempt also proved that the current Codex CLI can emit
-non-authoritative progress messages before its schema-bound final review. Mill
-therefore keeps strict single-terminal settlement while treating only the final
-agent message as review authority and rejecting any earlier schema-valid review
-as a conflict.
+multiple schema-shaped agent messages before settlement. Mill therefore keeps
+strict single-terminal settlement while consuming only the CLI's explicit,
+private, bounded final-message file as review authority.
 
 1. reviewed candidate tree equals resulting `main` tree;
 2. annotated tag points to that exact `main` commit;

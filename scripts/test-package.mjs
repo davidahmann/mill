@@ -490,6 +490,9 @@ const index=args.indexOf("--cd");const cwd=index>=0?args[index+1]:process.cwd();
 if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:"clean",findings:[]});
+  const outputIndex=args.indexOf("--output-last-message");
+  if(outputIndex<0||!args[outputIndex+1])process.exit(2);
+  await writeFile(args[outputIndex+1],text,{mode:0o600});
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:2,output_tokens:1}}));
 }else{
