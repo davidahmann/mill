@@ -873,7 +873,7 @@ describe("qualified repository integration", { concurrent: false }, () => {
         planDigest: first.approvalDigest,
         generator: {
           package: "@davidahmann/mill",
-          version: "0.1.2",
+          version: "0.1.3",
         },
         mode: "greenfield",
         baseline: "unverified",
