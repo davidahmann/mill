@@ -37,6 +37,8 @@ separately authorized tag and publication effects. The five-step live canary,
 seeded-fault rejection, real draft PR, human merge, and truthful closure are
 complete. The immutable `v0.1.0` candidate stopped before publication when
 GitHub's checkout-added `gc.auto=0` setting exposed an audit compatibility gap.
-The current release task corrects that narrow boundary and restarts the full
-candidate and publication chain as `v0.1.1`. No autonomous-planner or general
-stack-support claim is made.
+The immutable `v0.1.1` candidate passed the corrected audit and independent
+artifact comparison, then its Linux packed-artifact canary exposed root-owned
+bind-mount output. The current release task binds canary containers to the
+invoking POSIX identity and restarts the full candidate and publication chain as
+`v0.1.2`. No autonomous-planner or general stack-support claim is made.

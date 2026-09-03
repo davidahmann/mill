@@ -1,0 +1,75 @@
+task_id: mill-v0.1.2-linux-canary-ownership
+status: closed
+objective: >-
+  Correct the Linux bind-mount ownership failure exposed by the real v0.1.1
+  packed-artifact canary, preserve prior tags as immutable evidence, and prepare
+  the complete public-alpha release chain to restart as v0.1.2.
+risk_class: high
+base_commit: 19e48d808960193a1fc3485849fa675a35623cdf
+impact_manifest: product/impacts/RELEASE_0_1_2.yaml
+design_decisions:
+  - run release-canary containers as the invoking POSIX user and group
+  - keep npm and XDG caches in writable container-local temporary paths
+  - retain v0.1.0 and v0.1.1 as failed prepublication evidence
+  - rerun the complete canary rather than substituting an ownership-only probe
+allowed_paths:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - scripts/qualify-release-artifact.mjs
+  - scripts/test-package.mjs
+  - test/cli.test.ts
+  - test/lock.test.ts
+  - test/recipe-integration.test.ts
+  - docs/release.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/releases/v0.1.2.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+  - product/impacts/RELEASE_0_1_2.yaml
+  - product/tasks/RELEASE_0_1_2.yaml
+forbidden_paths:
+  - .env*
+acceptance_items:
+  - R012-A1 dependency and verification containers run as the invoking POSIX
+    user and group
+  - R012-A2 npm and XDG cache writes stay in container-local temporary paths
+  - R012-A3 a real packed artifact passes every full canary and cleans up
+    without an ownership failure
+  - R012-A4 v0.1.0 and v0.1.1 remain immutable failed prepublication evidence
+    and v0.1.2 carries the corrected package identity
+  - R012-A5 the full native source and installed-package gates pass
+validation_commands:
+  - npm run check
+  - run a real packed-artifact full canary in the exact verifier image
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - changing the supported recipe or verifier image
+  - moving or deleting prior release tags
+  - claiming release success before external qualification and readback pass
+stop_conditions:
+  - numeric host identity cannot write and clean the bind-mounted workspace
+  - any release identity, artifact, qualification, or readback differs
+retry_budget: 1
+changelog_intent: make Linux release-canary output owned by the runner
+versioning_impact: patch release 0.1.2; prior candidates were never published
+migration_impact: none; no package has been published
+docs_sync_refs:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/releases/v0.1.2.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

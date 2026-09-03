@@ -4,12 +4,25 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-03
+
+Version `0.1.1` was retained as failed prepublication evidence after the real
+Linux packed-artifact canary exposed root-owned bind-mount output. It was never
+published to npm or as a GitHub Release. Version `0.1.2` is the next public
+alpha candidate.
+
+### Fixed
+
+- Run release-canary containers as the invoking POSIX user and group with
+  writable container-local cache homes, so Linux bind-mounted browser and build
+  output remains removable by the runner.
+
 ## [0.1.1] - 2026-09-03
 
 Version `0.1.0` was retained as failed prepublication evidence after GitHub's
 checkout action exposed an audit compatibility defect. It was never published to
-npm or as a GitHub Release. Version `0.1.1` is the first publishable public
-alpha candidate.
+npm or as a GitHub Release. Version `0.1.1` was the second prepublication
+candidate.
 
 ### Fixed
 
