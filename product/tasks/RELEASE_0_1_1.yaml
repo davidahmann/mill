@@ -1,0 +1,76 @@
+task_id: mill-v0.1.1-actions-audit-recovery
+status: closed
+objective: >-
+  Correct the exact-tag audit compatibility gap exposed by GitHub Actions,
+  retain the failed v0.1.0 tag as immutable evidence, and prepare the complete
+  public-alpha release chain to restart as v0.1.1.
+risk_class: high
+base_commit: a8080d02e7688f4f085f8657dd19e290ecdf6a65
+impact_manifest: product/impacts/RELEASE_0_1_1.yaml
+design_decisions:
+  - allow only the exact inert gc.auto=0 setting written by actions/checkout
+  - keep all other unknown Git configuration fail closed
+  - never move or reuse the remote v0.1.0 tag
+  - derive GitHub Release notes from the exact requested release tag
+allowed_paths:
+  - README.md
+  - AGENTS.md
+  - src/repository/scan.ts
+  - test/scan.test.ts
+  - .github/workflows/release.yml
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - test/cli.test.ts
+  - test/lock.test.ts
+  - test/recipe-integration.test.ts
+  - scripts/test-package.mjs
+  - docs/release.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+  - product/impacts/RELEASE_0_1_1.yaml
+  - product/tasks/RELEASE_0_1_1.yaml
+  - CHANGELOG.md
+forbidden_paths:
+  - .env*
+acceptance_items:
+  - R011-A1 exact-tag audit accepts only actions/checkout's inert gc.auto=0
+  - R011-A2 other unknown gc keys and values remain audit hazards
+  - R011-A3 release audit failures print their structured diagnostic output
+  - R011-A4 release notes are selected by the exact immutable tag
+  - R011-A5 v0.1.0 remains immutable failed prepublication evidence and v0.1.1
+    carries the corrected package identity
+  - R011-A6 the full local source gate and checkout-equivalent audit pass for
+    the v0.1.1 candidate
+validation_commands:
+  - npm run check
+  - reproduce exact audit with local gc.auto=0
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - widening accepted Git configuration beyond the observed inert setting
+  - moving or deleting v0.1.0
+  - claiming release success before external qualification and readback pass
+stop_conditions:
+  - the allowlist would permit executable or unclassified Git behavior
+  - any release identity, artifact, qualification, or readback differs
+retry_budget: 1
+changelog_intent:
+  recover the first public alpha without rewriting failed evidence
+versioning_impact: patch release 0.1.1; version 0.1.0 was never published
+migration_impact: none; no package has been published
+docs_sync_refs:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/releases/v0.1.0.md
+  - docs/releases/v0.1.1.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+closure:
+  method: same_change
+  result: closed_when_present_on_main

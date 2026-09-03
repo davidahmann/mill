@@ -33,5 +33,10 @@ founder path. Wave 5 implementation adds bounded exact-candidate audits,
 longitudinal qualification, independent artifact comparison, packed
 greenfield/adoption canaries, genesis release evidence, and the public operator
 and coding-agent documentation. Its implementation may land before the
-separately authorized tag and publication effects. No autonomous-planner or
-general stack-support claim is made.
+separately authorized tag and publication effects. The five-step live canary,
+seeded-fault rejection, real draft PR, human merge, and truthful closure are
+complete. The immutable `v0.1.0` candidate stopped before publication when
+GitHub's checkout-added `gc.auto=0` setting exposed an audit compatibility gap.
+The current release task corrects that narrow boundary and restarts the full
+candidate and publication chain as `v0.1.1`. No autonomous-planner or general
+stack-support claim is made.

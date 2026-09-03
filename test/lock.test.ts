@@ -88,7 +88,7 @@ describe("exact version and safe path contracts", () => {
     try {
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.0"\n',
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.1"\n',
       );
       await expect(
         enforceExactVersion(temporary.path),
