@@ -56,7 +56,7 @@ describe("Codex adapter boundaries", () => {
     }
   });
 
-  it("requires exactly one terminal settlement and one reviewer result", () => {
+  it("requires exactly one terminal settlement and at least one reviewer message", () => {
     expect(() => decodeCodexEvents("", "builder")).toThrow(
       expect.objectContaining({ code: "WORKER_SETTLEMENT_MISSING" }),
     );
@@ -85,9 +85,9 @@ describe("Codex adapter boundaries", () => {
       type: "item.completed",
       item: { type: "agent_message", text: "{}" },
     });
-    expect(() =>
+    expect(
       decodeCodexEvents(`${message}\n${message}\n${terminal}\n`, "reviewer"),
-    ).toThrow(expect.objectContaining({ code: "WORKER_RESULT_CONFLICT" }));
+    ).toMatchObject({ agentMessages: ["{}", "{}"], lastMessage: "{}" });
   });
   it("reports unavailable auth without falling back from an explicit override", async () => {
     const fixture = await runtimeFixture();
@@ -371,6 +371,54 @@ describe("Codex adapter boundaries", () => {
       );
       await expect(invokeReview()).rejects.toMatchObject({
         code: "INVALID_REVIEW_RESULT",
+      });
+    } finally {
+      await Promise.all([fixture.cleanup(), tools.cleanup()]);
+    }
+  });
+
+  it("accepts progress messages but rejects an earlier structured review result", async () => {
+    const fixture = await runtimeFixture();
+    const tools = await temporaryDirectory("mill-codex-review-progress-");
+    const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+    const candidate = "a".repeat(40);
+    const frozen = await buildContextManifest(
+      fixture.root,
+      candidate,
+      inputs.task,
+      inputs.config,
+      inputs.taskDigest,
+    );
+    const invokeReview = () =>
+      runCodexReview({
+        root: fixture.root,
+        task: inputs.task,
+        manifest: frozen.manifest,
+        candidateCommit: candidate,
+        deadlineMs: Date.now() + 5_000,
+        maxOutputBytes: 1024 * 1024,
+      });
+    const review = JSON.stringify({
+      schemaVersion: "1",
+      candidateCommit: candidate,
+      summary: "clean",
+      findings: [],
+    });
+    try {
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
+        `console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:"Inspecting exact candidate."}}));console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(review)}}}));console.log(JSON.stringify({type:"turn.completed"}));`,
+      );
+      await expect(invokeReview()).resolves.toMatchObject({
+        review: { candidateCommit: candidate, findings: [] },
+      });
+
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
+        `const text=${JSON.stringify(review)};console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"turn.completed"}));`,
+      );
+      await expect(invokeReview()).rejects.toMatchObject({
+        code: "WORKER_RESULT_CONFLICT",
       });
     } finally {
       await Promise.all([fixture.cleanup(), tools.cleanup()]);
