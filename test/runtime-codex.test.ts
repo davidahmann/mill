@@ -28,9 +28,18 @@ async function executableScript(
   body: string,
 ): Promise<string> {
   const executable = path.join(directory, "codex-probe");
-  await writeFile(executable, `#!${process.execPath}\n${body}\n`, {
-    mode: 0o755,
-  });
+  await writeFile(
+    executable,
+    `#!${process.execPath}
+const {writeFileSync:__writeFileSync}=require("node:fs");
+const __outputIndex=process.argv.indexOf("--output-last-message");
+const __outputPath=__outputIndex>=0?process.argv[__outputIndex+1]:undefined;
+const __originalLog=console.log.bind(console);
+console.log=(...values)=>{__originalLog(...values);if(__outputPath&&typeof values[0]==="string"){try{const event=JSON.parse(values[0]);if(event?.type==="item.completed"&&event.item?.type==="agent_message"&&typeof event.item.text==="string")__writeFileSync(__outputPath,event.item.text,{encoding:"utf8",mode:0o600});}catch{}}};
+${body}
+`,
+    { mode: 0o755 },
+  );
   await chmod(executable, 0o755);
   return executable;
 }
@@ -56,7 +65,7 @@ describe("Codex adapter boundaries", () => {
     }
   });
 
-  it("requires exactly one terminal settlement and at least one reviewer message", () => {
+  it("requires exactly one terminal settlement and one event-stream reviewer result", () => {
     expect(() => decodeCodexEvents("", "builder")).toThrow(
       expect.objectContaining({ code: "WORKER_SETTLEMENT_MISSING" }),
     );
@@ -85,9 +94,9 @@ describe("Codex adapter boundaries", () => {
       type: "item.completed",
       item: { type: "agent_message", text: "{}" },
     });
-    expect(
+    expect(() =>
       decodeCodexEvents(`${message}\n${message}\n${terminal}\n`, "reviewer"),
-    ).toMatchObject({ agentMessages: ["{}", "{}"], lastMessage: "{}" });
+    ).toThrow(expect.objectContaining({ code: "WORKER_RESULT_CONFLICT" }));
   });
   it("reports unavailable auth without falling back from an explicit override", async () => {
     const fixture = await runtimeFixture();
@@ -343,6 +352,14 @@ describe("Codex adapter boundaries", () => {
     try {
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
+        'console.log(JSON.stringify({type:"turn.completed"}));',
+      );
+      await expect(invokeReview()).rejects.toMatchObject({
+        code: "WORKER_RESULT_MISSING",
+      });
+
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
         'console.log("not-jsonl");console.log(JSON.stringify({type:"other"}));',
       );
       await expect(invokeReview()).rejects.toMatchObject({
@@ -377,7 +394,7 @@ describe("Codex adapter boundaries", () => {
     }
   });
 
-  it("accepts progress messages but rejects an earlier structured review result", async () => {
+  it("uses the explicit final-message file despite multiple structured progress events", async () => {
     const fixture = await runtimeFixture();
     const tools = await temporaryDirectory("mill-codex-review-progress-");
     const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
@@ -415,10 +432,60 @@ describe("Codex adapter boundaries", () => {
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        `const text=${JSON.stringify(review)};console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"turn.completed"}));`,
+        `const wrong=JSON.stringify({schemaVersion:"1",candidateCommit:"${"b".repeat(40)}",summary:"superseded",findings:[]});const text=${JSON.stringify(review)};console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:wrong}}));console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));console.log(JSON.stringify({type:"turn.completed"}));`,
+      );
+      await expect(invokeReview()).resolves.toMatchObject({
+        review: { candidateCommit: candidate, summary: "clean" },
+      });
+    } finally {
+      await Promise.all([fixture.cleanup(), tools.cleanup()]);
+    }
+  });
+
+  it("rejects unsafe or oversized explicit final-message outputs", async () => {
+    const fixture = await runtimeFixture();
+    const tools = await temporaryDirectory("mill-codex-review-file-");
+    const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+    const candidate = "a".repeat(40);
+    const frozen = await buildContextManifest(
+      fixture.root,
+      candidate,
+      inputs.task,
+      inputs.config,
+      inputs.taskDigest,
+    );
+    const invokeReview = () =>
+      runCodexReview({
+        root: fixture.root,
+        task: inputs.task,
+        manifest: frozen.manifest,
+        candidateCommit: candidate,
+        deadlineMs: Date.now() + 5_000,
+        maxOutputBytes: 1024,
+      });
+    try {
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
+        'const {symlinkSync}=require("node:fs");const index=process.argv.indexOf("--output-last-message");symlinkSync("/dev/null",process.argv[index+1]);console.log(JSON.stringify({type:"turn.completed"}));',
       );
       await expect(invokeReview()).rejects.toMatchObject({
-        code: "WORKER_RESULT_CONFLICT",
+        code: "INVALID_REVIEW_RESULT",
+      });
+
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
+        'const {mkdirSync}=require("node:fs");const index=process.argv.indexOf("--output-last-message");mkdirSync(process.argv[index+1]);console.log(JSON.stringify({type:"turn.completed"}));',
+      );
+      await expect(invokeReview()).rejects.toMatchObject({
+        code: "INVALID_REVIEW_RESULT",
+      });
+
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
+        'const {writeFileSync}=require("node:fs");const index=process.argv.indexOf("--output-last-message");writeFileSync(process.argv[index+1],"x".repeat(1025));console.log(JSON.stringify({type:"turn.completed"}));',
+      );
+      await expect(invokeReview()).rejects.toMatchObject({
+        code: "CODEX_OUTPUT_BUDGET_EXCEEDED",
       });
     } finally {
       await Promise.all([fixture.cleanup(), tools.cleanup()]);

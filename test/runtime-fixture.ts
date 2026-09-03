@@ -312,6 +312,9 @@ if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   ${reviewer}
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:findings.length?"repair required":"clean",findings});
+  const outputIndex=args.indexOf("--output-last-message");
+  if(outputIndex<0||!args[outputIndex+1])process.exit(2);
+  await writeFile(args[outputIndex+1],text,{mode:0o600});
   console.log(JSON.stringify({type:"thread.started",thread_id:"fake-review"}));
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:10,output_tokens:5}}));

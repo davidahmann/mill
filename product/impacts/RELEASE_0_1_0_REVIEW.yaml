@@ -14,9 +14,8 @@ surfaces:
   - id: codex-review-result
     kind: interface
     change: >-
-      Treat the final agent message as the sole structured review result while
-      permitting non-authoritative progress messages and retaining strict
-      event-stream settlement.
+      Consume the Codex CLI's explicit final-message file as the sole structured
+      review result while retaining strict event-stream settlement.
   - id: linux-process-group-oracle
     kind: operations
     change: >-
@@ -34,4 +33,4 @@ exceptions: []
 approval:
   approvedBy: davidahmann
   approvedAt: "2026-09-03T11:56:30.000Z"
-  proposalDigest: sha256:4e8abddb94def9f77bd543b401a8d2a4662015b7888aa092370c1e6075e9a67f
+  proposalDigest: sha256:446b61a93d75287bdfd4541a3b1b555a1f05c6d5641cc778e1d1393ab24ca8de

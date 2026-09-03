@@ -9,13 +9,15 @@ impact_manifest: product/impacts/RELEASE_0_1_0_REVIEW.yaml
 design_decisions:
   - Codex JSONL remains authoritative for exactly one successful terminal turn
     settlement, not for identifying the structured final review payload
-  - only the final agent message may become the structured review result
-  - intermediate agent messages may exist, but any earlier schema-valid review
-    result is a conflict rather than alternate authority
+  - the Codex CLI output-last-message file is created in a private temporary
+    directory and is the sole structured result source
+  - intermediate agent messages may exist but cannot become review authority
 allowed_paths:
   - src/runtime/codex.ts
   - test/runtime-codex.test.ts
   - test/runtime-process.test.ts
+  - test/runtime-fixture.ts
+  - scripts/test-package.mjs
   - architecture/ARCHITECTURE.md
   - docs/canaries/wave-5-public-alpha.md
   - product/impacts/RELEASE_0_1_0_REVIEW.yaml
@@ -25,10 +27,10 @@ forbidden_paths:
   - .env*
   - .github/workflows/release.yml
 acceptance_items:
-  - R01R-A1 a real Codex review may emit non-authoritative progress messages
-    while only the final agent message supplies review authority
-  - R01R-A2 missing, malformed, schema-invalid, candidate-mismatched, or
-    conflicting structured review output fails closed
+  - R01R-A1 a real Codex review may emit intermediate agent messages while
+    exactly one explicit final-message file supplies review authority
+  - R01R-A2 missing, symbolic, non-regular, oversized, malformed,
+    schema-invalid, or candidate-mismatched final output fails closed
   - R01R-A3 terminal event settlement remains exactly one successful turn
   - R01R-A4 the interrupted live run resumes through exact-candidate review
   - R01R-A5 Linux cancellation qualification accepts a killed zombie descendant
@@ -45,7 +47,7 @@ scope_exclusions:
     corrective PR
 stop_conditions:
   - the final result cannot be isolated from progress messages
-  - more than one schema-valid review result can become authoritative
+  - the result path can escape its private temporary directory
   - the exact candidate identity is not revalidated
 retry_budget: 1
 changelog_intent:

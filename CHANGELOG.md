@@ -6,9 +6,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- Accept non-authoritative Codex review progress messages while keeping the
-  final schema-valid agent message as the sole review result and rejecting
-  conflicting earlier structured results.
+- Accept non-authoritative Codex review progress messages while consuming only
+  the CLI's private, bounded final-message file as the structured review result.
 - Qualify process-group cancellation on Linux by recognizing a killed zombie
   descendant as terminated without accepting an executing descendant.
 - Bind public-alpha support evidence to the exact verifier image embedded in the
