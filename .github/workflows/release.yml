@@ -250,7 +250,7 @@ jobs:
           cd "$RUNNER_TEMP/registry-install"
           npm init --yes >/dev/null
           npm install --ignore-scripts "@davidahmann/mill@$version"
-          npm audit signatures
+          node "$GITHUB_WORKSPACE/scripts/retry-npm-signatures.mjs" "$RUNNER_TEMP/registry-install"
       - name: Requalify the registry-downloaded package
         run: |
           version=$(node -p 'require("./package.json").version')
@@ -282,6 +282,7 @@ jobs:
           filename=$(basename "$artifact")
           mkdir -p "$RUNNER_TEMP/github-download"
           gh release view "$RELEASE_TAG" --json url,tagName,assets > "$RUNNER_TEMP/github-release.json"
+          node -e 'const fs=require("node:fs");const file=process.argv[1];const release=JSON.parse(fs.readFileSync(file,"utf8"));release.url=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/releases/tag/${encodeURIComponent(process.env.RELEASE_TAG)}`;fs.writeFileSync(file,`${JSON.stringify(release)}\n`,{flag:"w",mode:0o600})' "$RUNNER_TEMP/github-release.json"
           gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/github-download"
           node scripts/capture-release-readback.mjs \
             "$RUNNER_TEMP/qualified/artifact-metadata.json" \

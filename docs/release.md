@@ -10,23 +10,31 @@ effects. Run a stage only after the maintainer explicitly authorizes it.
 
 ## Genesis release
 
-`v0.1.5` is the one-time bootstrap exception to the normal rule that trusted
-release N qualifies candidate N+1. The remote `v0.1.0`, `v0.1.1`, and `v0.1.2`
-tags are retained as failed prepublication evidence. Version `v0.1.0` exposed
-GitHub `actions/checkout`'s inert `gc.auto=0` setting as an audit compatibility
-gap. Version `v0.1.1` passed that audit and independent artifact comparison,
-then its real Linux packed-artifact canary exposed root-owned bind-mount output.
-Version `v0.1.2` passed the corrected full canary, then qualification could not
-read generated evidence outside the repository safety root. Version `v0.1.3`
-then stopped at identity verification because its annotated tag omitted the
-required reviewed-tree trailer. None produced an npm package or GitHub Release.
-Version `v0.1.4` passed complete candidate qualification and its exact artifact
-was published under the npm `bootstrap` tag using the maintainer's 2FA session,
-because npm requires an existing package before trusted publishing can be
-configured. It has no CI provenance or GitHub Release and is not the supported
-alpha. The package-specific trusted publisher and protected GitHub `npm`
-environment now exist. The corrected supported candidate uses GitHub-hosted
-clean builders outside the tagged checkout and the following gates.
+`v0.1.5` completed the one-time bootstrap exception to the normal rule that
+trusted release N qualifies candidate N+1. It is the first qualified public
+alpha and trust root for future candidates. The remote `v0.1.0`, `v0.1.1`, and
+`v0.1.2` tags are retained as failed prepublication evidence. Version `v0.1.0`
+exposed GitHub `actions/checkout`'s inert `gc.auto=0` setting as an audit
+compatibility gap. Version `v0.1.1` passed that audit and independent artifact
+comparison, then its real Linux packed-artifact canary exposed root-owned
+bind-mount output. Version `v0.1.2` passed the corrected full canary, then
+qualification could not read generated evidence outside the repository safety
+root. Version `v0.1.3` then stopped at identity verification because its
+annotated tag omitted the required reviewed-tree trailer. None produced an npm
+package or GitHub Release. Version `v0.1.4` passed complete candidate
+qualification and its exact artifact was published under the npm `bootstrap` tag
+using the maintainer's 2FA session, because npm requires an existing package
+before trusted publishing can be configured. It has no CI provenance or GitHub
+Release and is not the supported alpha. The package-specific trusted publisher
+and protected GitHub `npm` environment now exist. Candidate run `33769558396`,
+OIDC publish run `33770023370`, and the final npm and GitHub readbacks establish
+the result. The publish run stopped after the successful immutable npm effect
+when the new attestation endpoint briefly returned 404; the effect was not
+replayed, and the same artifact completed signature, provenance,
+registry-canary, and GitHub Release verification after propagation. The workflow
+now retries signature readback within a fixed budget. The qualified path uses
+GitHub-hosted clean builders outside the tagged checkout and the following
+gates.
 
 ### 1. Qualify the source candidate
 
@@ -160,10 +168,11 @@ npm publish "$artifact" --provenance --access public --tag alpha
 ```
 
 It does not run `npm pack` again. It verifies that npm's `alpha` dist-tag names
-the exact version, reads the package back, verifies registry signatures,
-downloads and requalifies the registry artifact, creates a draft prerelease with
-the same tarball/checksum/SBOM/evidence, downloads the GitHub asset, checks
-every identity, uploads final evidence, and only then publishes the prerelease.
+the exact version, reads the package back, verifies registry signatures with a
+bounded propagation retry, downloads and requalifies the registry artifact,
+creates a draft prerelease with the same tarball/checksum/SBOM/evidence,
+downloads the GitHub asset, checks every identity, uploads final evidence using
+the durable tag URL, and only then publishes the prerelease.
 
 ### 5. Close the release
 

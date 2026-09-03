@@ -10,10 +10,9 @@ inside a disposable worktree. Native tests and scenarios verify the committed
 candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity, and it stops at a draft PR.
 
-Mill `0.1.5` is a public-alpha release candidate. The source tree implements the
-candidate and genesis release gates, but no npm availability or supported tuple
-is claimed until the separately authorized release completes and its registry
-and GitHub readback pass.
+Mill `0.1.5` is the first qualified public alpha. It is available from npm and
+as a GitHub prerelease with provenance, an SBOM, exact-artifact qualification,
+and registry and GitHub readback evidence.
 
 ## Why Mill
 
@@ -89,8 +88,15 @@ harnesses are experimental or unsupported until independently qualified.
 
 ## Install
 
-Before the first public artifact, develop and evaluate from a clean source
-checkout:
+Install the qualified public alpha at its exact version with lifecycle scripts
+disabled:
+
+```sh
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.1.5
+npx --no-install millctl --version
+```
+
+To develop Mill itself from a clean source checkout:
 
 ```sh
 git clone https://github.com/davidahmann/mill.git
@@ -103,16 +109,9 @@ PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
 node dist/cli.js --version
 ```
 
-After the separately verified npm release, downstream repositories will pin the
-exact package version rather than `latest`:
-
-```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.1.5
-npx --no-install millctl --version
-```
-
-Do not treat the npm command as available until the release exists and the
-downloaded artifact passes the documented readback canary.
+The `alpha` and `latest` npm tags currently resolve to `0.1.5`. Downstream
+repositories should still pin the exact version so a later release cannot alter
+their delivery machinery implicitly.
 
 ## Quick start
 

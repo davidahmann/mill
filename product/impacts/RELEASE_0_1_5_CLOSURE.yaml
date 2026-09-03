@@ -1,0 +1,32 @@
+schemaVersion: "1"
+id: mill-v0.1.5-release-closure
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: public-alpha-release-closure
+    kind: operations
+    change: >-
+      Record the verified v0.1.5 external effects, keep npm and GitHub artifact
+      identity aligned, and make future registry-signature readback tolerate
+      bounded attestation propagation without accepting missing evidence.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T15:13:09.000Z"
+  proposalDigest: sha256:24d4a7e321c797f75ad9f61a680f7259c56f160b7e3a173ab3160479a73c5501

@@ -1,0 +1,71 @@
+task_id: mill-v0.1.5-release-closure
+status: closed
+objective: >-
+  Close the qualified v0.1.5 public-alpha release from exact external readback
+  and encode the two release-path defects exposed after immutable publication.
+risk_class: high
+base_commit: c547762d7644f62ac48011089564f5f46a48b786
+impact_manifest: product/impacts/RELEASE_0_1_5_CLOSURE.yaml
+design_decisions:
+  - never replay an already successful immutable npm publish effect
+  - retry only registry signature readback within a fixed bounded budget
+  - final evidence must name the durable tag URL, not a transient draft URL
+  - retain failed tags and bootstrap package evidence without mutation
+allowed_paths:
+  - .github/workflows/release.yml
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - scripts/capture-release-readback.mjs
+  - scripts/retry-npm-signatures.mjs
+  - test/policy-scripts.test.ts
+  - docs/release.md
+  - docs/releases/v0.1.5.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+  - product/impacts/RELEASE_0_1_5_CLOSURE.yaml
+  - product/tasks/RELEASE_0_1_5_CLOSURE.yaml
+forbidden_paths:
+  - .env*
+acceptance_items:
+  - R015C-A1 npm OIDC provenance, signatures, integrity, installation, and all
+    registry-artifact canaries pass for the exact qualified v0.1.5 bytes
+  - R015C-A2 the public GitHub prerelease contains the same tarball, checksum,
+    SBOM, and final evidence with its durable tag URL
+  - R015C-A3 npm alpha and latest resolve to v0.1.5 while v0.1.4 remains
+    bootstrap-only and visibly deprecated
+  - R015C-A4 signature propagation is retried within a fixed budget and final
+    absence still fails closed
+  - R015C-A5 transient draft URLs cannot enter final release readback evidence
+  - R015C-A6 the full native source and installed-package gates pass
+validation_commands:
+  - npm run check
+  - run the retry helper against the live v0.1.5 registry installation
+  - read back npm provenance, dist-tags, deprecation, and GitHub Release assets
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - republishing or replacing npm package bytes
+  - moving, deleting, or recreating any release tag
+  - widening the qualified stack, host, provider, or forge tuple
+  - weakening provenance, signature, exact-artifact, or release gates
+stop_conditions:
+  - any source, tag, package, artifact, qualification, provenance, or readback
+    identity differs
+  - a retry can replay publication or accept absent signature evidence
+retry_budget: 1
+changelog_intent: close the first qualified public alpha and harden readback
+versioning_impact: none; release-path hardening applies to the next version
+migration_impact: none
+docs_sync_refs:
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/releases/v0.1.5.md
+  - docs/canaries/wave-5-public-alpha.md
+  - product/PLAN.md
+closure:
+  method: same_change
+  result: closed_when_main_records_verified_external_readback

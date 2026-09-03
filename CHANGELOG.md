@@ -4,6 +4,14 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Retry npm signature verification within a fixed budget because registry
+  package bytes and attestations can become visible at slightly different times,
+  while still failing closed when the budget is exhausted.
+- Record the durable tag URL in final GitHub Release evidence instead of the
+  temporary URL returned while a release is still a draft.
+
 ## [0.1.5] - 2026-09-03
 
 Version `0.1.4` passed complete candidate qualification and its exact artifact
@@ -11,7 +19,8 @@ was published under the npm `bootstrap` tag to create the package identity that
 npm requires before trusted publishing can be configured. That bootstrap used
 the maintainer's 2FA session, has no CI provenance or GitHub Release, and is not
 the supported alpha. The package-specific OIDC publisher and protected GitHub
-environment are now active. Version `0.1.5` is the provenance-backed candidate.
+environment are now active. Version `0.1.5` completed the provenance-backed
+release and is the first qualified public alpha.
 
 ### Changed
 
