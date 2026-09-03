@@ -1,0 +1,66 @@
+task_id: mill-v0.1.0-gate-d-fix
+status: closed
+objective: >-
+  Correct and enforce the exact verifier-image binding discovered by the live
+  v0.1.0 Gate D preflight before any release tag or package publication.
+risk_class: high
+base_commit: 7832dbfd1986fa51c0c3e3b82660472e259bd620
+impact_manifest: product/impacts/RELEASE_0_1_0.yaml
+design_decisions:
+  - the support tuple, bundled recipe, and packed-artifact canary must bind the
+    same tag-and-digest verifier image identity
+  - the live preflight failure is corrected before tagging so the immutable
+    release candidate contains the repaired gate
+allowed_paths:
+  - quality/support-tuples/**
+  - scripts/assemble-public-alpha-qualification.mjs
+  - scripts/qualify-release-artifact.mjs
+  - test/public-alpha.test.ts
+  - test/planning-continuity.test.ts
+  - vitest.config.ts
+  - product/impacts/RELEASE_0_1_0.yaml
+  - product/tasks/RELEASE_0_1_0.yaml
+  - CHANGELOG.md
+forbidden_paths:
+  - .env*
+  - .github/workflows/release.yml
+acceptance_items:
+  - R01-A1 the candidate support tuple names the exact resolvable verifier image
+    already embedded in the supported recipe
+  - R01-A2 qualification rejects a support tuple whose verifier image differs
+    from the image exercised by the installed-artifact canary
+  - R01-A3 the native gate and an actual digest-pinned container probe pass
+    before the live longitudinal canary resumes
+  - R01-A4 the packed-artifact qualification fixture supplies both normal and
+    non-normal executable evidence required by its high-risk invariant
+  - R01-A5 release-canary dependencies are installed without lifecycle scripts
+    inside the exact Linux verifier image, the lockfile remains unchanged, and
+    the subsequent native gate runs with network disabled
+  - R01-A6 compatible-adoption fixtures enter the lifecycle with their
+    pre-existing authority artifacts rendered by the release candidate's exact
+    native formatter
+  - R01-A7 the parallel repository suite uses one explicit integration-test
+    budget that tolerates observed CI load without changing runtime deadlines
+validation_commands:
+  - npm run check
+  - docker run against the exact recipe verifier image
+required_reviews:
+  - code
+  - security
+scope_exclusions:
+  - release tag creation, npm publication, or GitHub Release creation in this
+    corrective PR
+stop_conditions:
+  - the declared verifier image cannot be pulled or does not expose the exact
+    Node and npm runtime
+  - support, recipe, and canary verifier identities do not match
+retry_budget: 1
+changelog_intent: enforce exact verifier-image identity in release qualification
+versioning_impact: v0.1.0 pre-release correction with no published migration
+migration_impact: none; no package has been published
+docs_sync_refs:
+  - CHANGELOG.md
+  - quality/support-tuples/darwin-arm64-node24-candidate.yaml
+closure:
+  method: same_change
+  result: closed_when_present_on_main

@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     clearMocks: true,
     exclude: ["recipes/**", "node_modules/**", "dist/**"],
+    testTimeout: 10_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],

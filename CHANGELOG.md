@@ -4,6 +4,21 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Bind public-alpha support evidence to the exact verifier image embedded in the
+  qualified recipe, preventing a stale container identity from entering a
+  release candidate.
+- Give the packed public-alpha canary explicit adversarial evidence so the
+  high-risk greenfield and adoption plans pass the same admission rules as real
+  repositories.
+- Prepare release-canary dependencies inside the exact Linux verifier image so
+  macOS optional native packages cannot leak into the no-network OCI gate.
+- Format pre-existing adoption authority artifacts with the downstream native
+  style so release qualification measures adoption rather than fixture drift.
+- Use a single explicit integration-test timeout that remains stable under the
+  full parallel suite instead of accumulating per-test timing exceptions.
+
 ### Added
 
 - Pre-alpha `millctl` package foundation with exact-version lock enforcement.

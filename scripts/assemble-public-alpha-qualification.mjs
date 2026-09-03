@@ -42,10 +42,11 @@ if (
   canary.package?.version !== metadata.package?.version ||
   canary.recipe?.id !== supportTuple.recipe?.id ||
   canary.recipe?.version !== supportTuple.recipe?.version ||
-  canary.recipe?.digest !== supportTuple.recipe?.digest
+  canary.recipe?.digest !== supportTuple.recipe?.digest ||
+  canary.recipe?.verifierImage !== supportTuple.container?.verifierImage
 ) {
   throw new Error(
-    "artifact, support tuple, and canary identities do not match",
+    "artifact, support tuple, verifier image, and canary identities do not match",
   );
 }
 const qualification = mill.contractSchemas.publicAlphaQualification.parse({
