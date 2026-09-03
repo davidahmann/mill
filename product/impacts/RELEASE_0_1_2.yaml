@@ -1,0 +1,36 @@
+schemaVersion: "1"
+id: mill-v0.1.2-linux-canary-ownership
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-PRODUCT-CONTINUITY
+riskClass: high
+acceptanceIds:
+  - ACC-CONTINUITY
+affectedInvariantIds:
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: linux-release-canary-ownership
+    kind: operations
+    change: >-
+      Run dependency and verification containers as the invoking POSIX identity
+      so all bind-mounted output remains owned and removable by the runner.
+  - id: immutable-release-recovery
+    kind: operations
+    change: >-
+      Preserve both failed prepublication tags and restart the exact build,
+      qualification, publication, and readback chain under v0.1.2.
+scenarioIds:
+  - SCN-CONTINUITY
+  - SCN-READONLY-WEB-RECIPE
+commandIds:
+  - test:coverage
+  - test:package
+materialDecisions:
+  - DEC-WEB-RECIPE
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-03T13:50:21.000Z"
+  proposalDigest: sha256:cb8a99f6b0d8de5fac772c3595bcaca67024c96c92739604bd30e87cfa2f17df

@@ -1,6 +1,6 @@
 # Wave 5 public-alpha qualification
 
-Status: live canary complete; v0.1.1 release qualification pending
+Status: live canary complete; v0.1.2 release qualification pending
 
 Owner: David Ahmann
 
@@ -55,9 +55,17 @@ before artifact comparison because `actions/checkout` adds the inert local Git
 setting `gc.auto=0`. No package or GitHub Release was published. The tag remains
 immutable failure evidence and the corrected release restarts as `v0.1.1`.
 
+The `v0.1.1` candidate then passed both clean builders, exact-tag audit, and
+independent artifact comparison. Its real Linux packed-artifact canary exposed
+that the verifier container ran as root and left bind-mounted browser output the
+non-root runner could not remove. A local real-artifact rerun proved the
+correction by running greenfield, adoption, downstream independence, recovery,
+and security canaries as the invoking host user. No package or GitHub Release
+was published from `v0.1.1`; its tag also remains immutable failure evidence.
+
 The remaining release-chain results are:
 
-1. the `v0.1.1` annotated tag points to the reviewed resulting-main tree;
+1. the `v0.1.2` annotated tag points to the reviewed resulting-main tree;
 2. two clean tag builders produce equal canonical package contents;
 3. the preserved tarball passes clean install, greenfield, compatible-adoption,
    downstream-without-Mill, recovery, and security canaries;

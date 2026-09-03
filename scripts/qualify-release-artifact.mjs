@@ -103,6 +103,31 @@ function git(root, args) {
   );
 }
 
+function containerIdentityArguments() {
+  const userId = process.getuid?.();
+  const groupId = process.getgid?.();
+  if (
+    !Number.isSafeInteger(userId) ||
+    userId < 0 ||
+    !Number.isSafeInteger(groupId) ||
+    groupId < 0
+  ) {
+    throw new Error(
+      "release canary requires a POSIX host identity for bind-mount ownership",
+    );
+  }
+  return [
+    "--user",
+    `${userId}:${groupId}`,
+    "--env",
+    "HOME=/tmp",
+    "--env",
+    "npm_config_cache=/tmp/mill-npm-cache",
+    "--env",
+    "XDG_CACHE_HOME=/tmp/mill-cache",
+  ];
+}
+
 async function authorityFixture(mill, root, repositoryId) {
   const prd = "# Release canary\n\nExpose a healthy product surface.\n";
   const observedAt = new Date(Date.now() - 60_000).toISOString();
@@ -268,6 +293,7 @@ async function runNativeRepositoryCheck(root, verifierImage) {
       "--rm",
       "--pull",
       "never",
+      ...containerIdentityArguments(),
       "--workdir",
       "/workspace",
       "--mount",
@@ -295,6 +321,7 @@ async function runNativeRepositoryCheck(root, verifierImage) {
       "--rm",
       "--pull",
       "never",
+      ...containerIdentityArguments(),
       "--network",
       "none",
       "--workdir",
