@@ -113,3 +113,43 @@ the retained JSON Server observation authorize target dependency installation,
 target execution, repository mutation, a task, PR, merge, or release. They add
 no supported runtime tuple or adoption compatibility claim, and introduce no
 Mill dependency into the downstream repository.
+
+## Human-authority binding for requalification
+
+Task: `mill-brownfield-discovery-human-attestation`. The attended task records
+David Ahmann's explicit approval as attestation
+`ATT-BFD-HUMAN-AUTHORITY-20260904`, approved by `davidahmann` at
+`2026-09-04T18:45:00.000Z`, expiring at `2026-09-05T18:45:00.000Z`. Its sole
+claim binds `INV-HUMAN-AUTHORITY` to
+`sha256:7de5bf4a333908ce8584b13c479a35cbb2bc364ec535a01519831b1d3e2c1380`.
+The invariant reserves consequential ambiguity and merge approval to the
+configured human authority. Recording this claim does not approve a merge.
+
+ACC-BFD-004 and SCN-BFD-004 retain their command-evidence requirement for
+read-only discovery under `test:coverage`. The invariant's human verification
+mode requires the separate exact human attestation; passing tests or a derived
+discovery report cannot supply that approval. The lifecycle must validate the
+attestation's identity, claim digest, and validity for requalification. Missing,
+expired, or mismatched authority blocks new effects.
+
+This builder inspected clean starting commit
+`5c1a6fe2ac9d7ae857a4a8e23acf7bda73a70945`, tree
+`db5aa59f6be88ce42f78af8617d797bc3c99d81f`. All six approved context-file
+digests matched, and the extractor, regression test, and packed-package script
+retained the file digests recorded above. Only this canary record changed;
+the human attestation was already present in the task before this edit.
+
+Requalification results for ACC-BFD-001 through ACC-BFD-007 remain pending
+authoritative lifecycle validation of the exact committed candidate through
+`test:coverage`, `test:package`, and the required native gates. No test suite
+was attempted in this builder pass: the worktree lacks installed Vitest and
+Prettier binaries and `dist/cli.js`. Red-first execution is deferred for this
+documentation-only change against already frozen regression oracles. The
+historical JSON Server observation is not a fresh extractor evaluation.
+
+The approval binds only this bounded local requalification. It grants no
+delivery, push, PR, merge, deployment, or release authority and does not replace
+exact PR-plan approval, human readiness and merge decisions, or separately
+authorized release effects. Discovery remains read-only, adds no support or
+adoption compatibility claim, and leaves downstream operation independent of
+Mill. This record is not passing qualification, review, audit, or task closure.
