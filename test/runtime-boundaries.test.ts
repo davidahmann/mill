@@ -933,7 +933,7 @@ if(args[0]==="run"){
         candidateCommit: "a".repeat(40),
         config: inputs.config,
         task: inputs.task,
-        deadlineMs: Date.now() + 800,
+        deadlineMs: Date.now() + 2_000,
         maxOutputBytes: 1024,
       });
       expect(evidence.commands[0]).toMatchObject({

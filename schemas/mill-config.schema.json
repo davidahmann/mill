@@ -81,6 +81,11 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "postMergeRequiredChecks": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "reviewPolicy": {
           "type": "object",
           "properties": {

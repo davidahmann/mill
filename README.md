@@ -241,6 +241,27 @@ Or use `millctl ship --draft` twice: first to return the proposal, then with its
 exact digest and `--attended` to perform it. `millctl` never marks ready or
 merges.
 
+### Pull-request and resulting-main checks
+
+The source implementation keeps `propose.requiredChecks` as the complete gate
+for the exact pull-request head. Optional `propose.postMergeRequiredChecks`
+selects a nonempty subset of those names for resulting-main readback only;
+omitting it retains the full `requiredChecks` list for both phases. New delivery
+plans approval-bind and persist both effective lists. Missing or pending
+required checks prevent completion; skipped or failed required checks fail the
+phase that requires them.
+
+In this repository, `dependency-review` runs only for pull requests, while
+`validate` and `codeql` also run on pushes to `main`. The frozen `mill.yaml`
+still requires all three and does not configure the optional subset. A separate
+approved policy task is needed to opt into `validate` and `codeql` for
+resulting-main readback while keeping all three PR checks. This documentation
+change does not unblock an existing delivery or change the published release.
+See [repository settings](docs/repository-settings.md) and the
+[check-contract canary](docs/canaries/post-merge-check-contract.md) for the
+bounded legacy recovery path and the recorded closure blocker. Human readiness,
+merge authority, and exact candidate/tree checks remain required.
+
 ## Trust model
 
 Mill separates four principals:

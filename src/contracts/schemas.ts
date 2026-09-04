@@ -447,6 +447,7 @@ export const millConfigSchema = z
         allowedActors: z.array(z.string().min(1)).min(1),
         allowedMergerLogins: z.array(z.string().min(1)).min(1),
         requiredChecks: z.array(z.string().min(1)),
+        postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
         reviewPolicy: githubReviewPolicySchema,
         allowedMergeMethods: z
           .array(z.enum(["merge", "linear_tree_preserving"]))
@@ -508,6 +509,20 @@ export const millConfigSchema = z
         path: ["propose"],
         message:
           "propose configuration is required at the propose trust ceiling",
+      });
+    }
+    const propose = value.propose;
+    const postMergeChecks = propose?.postMergeRequiredChecks;
+    if (
+      postMergeChecks !== undefined &&
+      propose !== undefined &&
+      !postMergeChecks.every((check) => propose.requiredChecks.includes(check))
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["propose", "postMergeRequiredChecks"],
+        message:
+          "post-merge required checks must be a subset of pull-request required checks",
       });
     }
   })
@@ -821,6 +836,8 @@ export const deliveryRecordSchema = z.strictObject({
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
   requiredChecks: z.array(z.string().min(1)),
+  postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
+  legacyPostMergePolicyConfigDigest: digestSchema.optional(),
   reviewPolicy: githubReviewPolicySchema,
   allowedMergerLogins: z.array(z.string().min(1)).min(1),
   allowedMergeMethods: z

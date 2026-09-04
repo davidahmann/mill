@@ -1,0 +1,105 @@
+schemaVersion: "2"
+id: mill-post-merge-check-contract-repair
+title: Separate draft and resulting-main check contracts
+objective: >-
+  Document the frozen maintainer-prepared implementation that keeps
+  `requiredChecks` as the complete exact pull-request-head gate and introduces
+  optional `postMergeRequiredChecks` as a nonempty subset for resulting-main
+  readback. The implementation persists and approval-binds both lists for new
+  delivery records, and permits one explicit local binding for a legacy merged
+  delivery only after authoritative merge readback, when every other delivery
+  identity matches and every selected check was already required before merge.
+  Do not weaken pull-request checks, human merge authority, candidate/tree
+  identity, or fail-closed treatment of missing, pending, skipped, and failed
+  checks. The frozen `mill.yaml` remains unchanged because it is a bound runtime
+  control; a separately approved policy task may later opt Mill into `validate`
+  and `codeql` for resulting-main readback while retaining all three
+  pull-request checks. Update the README, developer and repository-settings
+  guides, and a precise canary record explaining the PR-only dependency-review
+  boundary and the observed blocked closure that motivated this repair. The
+  builder must not change runtime source, generated schemas, tests, task or
+  impact authority, configuration, workflow controls, version, or release
+  evidence. Before committing its documentation-only output, it must format all
+  changed Markdown with the repository Prettier configuration so `format:check`
+  passes.
+riskClass: high
+baseRef: HEAD
+authority:
+  productContract:
+    path: product/contract.yaml
+    digest: sha256:e5a3dcd58a9face5a6ab36ec9aab99dc2c09f48cde59ed31fd2f42f16e217fca
+  scenarioSet:
+    path: quality/scenarios.yaml
+    digest: sha256:7c431796d5d1d314ac1625ba133d4d8d095123cf85c59a94d404f0b4379a26b3
+  policy:
+    path: WORKFLOW.md
+    digest: sha256:efdaa55eaa6ec241d9a8a290d6a0d7b6413c0c7bd631def37e33d19922cbdd55
+  impactManifest:
+    path: product/impacts/POST_MERGE_CHECK_CONTRACT_REPAIR.yaml
+    digest: sha256:f7ff21296b18c93c1293d7d7b95a6309e92a05c9e037ad837491ade9f68a797b
+contextPaths:
+  - AGENTS.md
+  - WORKFLOW.md
+  - product/contract.yaml
+  - quality/scenarios.yaml
+  - product/impacts/POST_MERGE_CHECK_CONTRACT_REPAIR.yaml
+  - mill.yaml
+  - .github/workflows/ci.yml
+  - .github/workflows/codeql.yml
+  - src/contracts/schemas.ts
+  - src/runtime/delivery.ts
+  - schemas/mill-config.schema.json
+  - schemas/delivery-record.schema.json
+  - test/schemas.test.ts
+  - test/runtime-delivery.test.ts
+  - test/runtime-boundaries.test.ts
+  - docs/release.md
+allowedPaths:
+  - README.md
+  - docs/development.md
+  - docs/repository-settings.md
+  - docs/canaries/post-merge-check-contract.md
+commandIds: [test:coverage, check]
+attestations:
+  - id: ATT-POST-MERGE-CHECK-CONTRACT-REPAIR-20260904
+    approvedBy: davidahmann
+    approvedAt: "2026-09-04T20:36:38Z"
+    expiresAt: "2026-09-05T20:36:38Z"
+    claims:
+      - kind: invariant
+        id: INV-HUMAN-AUTHORITY
+        digest: sha256:5f275bad059e1ade8ff0f09df259a76b61ebcfedea97baf1a6fb4b02f369a1d0
+acceptance:
+  - id: ACC-REVIEWED-DRAFT
+    statement: >-
+      The unchanged exact candidate reaches one independently reviewed draft
+      pull request.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: check }
+  - id: ACC-TRUTHFUL-RECOVERY
+    statement: >-
+      Cancellation, ambiguity, and resume never duplicate work or invent
+      success.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: check }
+commit:
+  message: >-
+    fix: separate post-merge check requirements
+
+    Signed-off-by: David Ahmann <dilmurat.personal@gmail.com>
+  authorName: David Ahmann
+  authorEmail: dilmurat.personal@gmail.com
+budget:
+  deadlineSeconds: 7200
+  maxOutputBytes: 2000000
+  retryCount: 1
