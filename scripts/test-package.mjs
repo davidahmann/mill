@@ -90,6 +90,7 @@ try {
     "schemas/public-alpha-qualification.schema.json",
     "schemas/worker-invocation.schema.json",
     "schemas/worker-profile.schema.json",
+    "node_modules/typescript/lib/typescript.js",
     "recipes/node-typescript-next-web/recipe.yaml",
     "recipes/node-typescript-next-web/gitignore.template",
     "recipes/node-typescript-next-web/package-lock.json",
