@@ -4,7 +4,14 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+The maintainer-prepared package identity is `0.1.6`. Release qualification,
+tagging, npm publication, and GitHub Release creation remain outstanding and
+separately authorized; `0.1.5` remains the qualified public-alpha trust root.
+
 ### Added
+
+- Persist `configured` or `implicit_default` post-merge policy provenance in
+  every new delivery so historical compatibility cannot relax future records.
 
 - Explicit OCI test/package command opt-in for fixed, bounded executable fixture
   scratch outside the repository, retaining default noexec containment and
@@ -15,10 +22,22 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- Configure `validate` and `codeql` for resulting-main readback while retaining
+  `validate`, `dependency-review`, and `codeql` for the exact pull-request head.
+
 - Make native cleanup retain mounted output roots and use Vitest's native
   configuration loader with caches/reports in generated output scratch.
 
 ### Fixed
+
+- Permit one historical full-list post-merge policy binding only when the record
+  lacks provenance and a prior binding, the exact reviewed candidate proves an
+  implicit default, and authoritative merge readback establishes all other
+  delivery identities. Persist the configured nonempty subset and its
+  configuration digest as `legacy_migrated`. The
+  [migration record](docs/canaries/post-merge-default-policy-migration.md)
+  documents delivery `01801a1b-58f9-480f-8cee-54ea2bbeabb2` without claiming
+  live recovery or weakening original PR checks.
 
 - Retry npm signature verification within a fixed budget because registry
   package bytes and attestations can become visible at slightly different times,

@@ -118,7 +118,7 @@ try {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (version.status !== 0 || version.stdout.trim() !== "0.1.5") {
+  if (version.status !== 0 || version.stdout.trim() !== "0.1.6") {
     throw new Error(
       `packed millctl version smoke failed: ${version.stdout}${version.stderr}`,
     );
@@ -778,7 +778,7 @@ else process.exit(2);
         schemaVersion: "1",
         package: {
           name: "@davidahmann/mill",
-          version: "0.1.5",
+          version: "0.1.6",
           artifactDigest,
           npmIntegrity: packResult.integrity,
         },

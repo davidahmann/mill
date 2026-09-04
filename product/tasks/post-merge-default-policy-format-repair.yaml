@@ -1,0 +1,98 @@
+schemaVersion: "2"
+id: mill-post-merge-default-policy-format-repair
+title: Record the defaulted post-merge policy formatting repair
+objective: >-
+  The attending maintainer has preserved the failed candidate
+  d59697b2ac6382ac9f8730e763f2292debc085c7 and prepared an exact formatted
+  documentation base without changing its substantive migration, policy, or
+  release claims. Create one concise canary record documenting the rejected
+  formatting-only candidate, its retained evidence, the fresh-run boundary, and
+  the fact that no tag, publication, GitHub Release, merge, or support claim is
+  authorized by this task. Write only the allowed canary path. Before
+  committing, format that Markdown file with the repository Prettier
+  configuration and run its formatter check. Do not change existing
+  documentation, runtime source, schemas, tests, mill.yaml, package identity,
+  task or impact authority, workflow controls, release evidence, or
+  external-effect policy.
+riskClass: high
+baseRef: HEAD
+authority:
+  productContract:
+    path: product/contract.yaml
+    digest: sha256:e5a3dcd58a9face5a6ab36ec9aab99dc2c09f48cde59ed31fd2f42f16e217fca
+  scenarioSet:
+    path: quality/scenarios.yaml
+    digest: sha256:7c431796d5d1d314ac1625ba133d4d8d095123cf85c59a94d404f0b4379a26b3
+  policy:
+    path: WORKFLOW.md
+    digest: sha256:efdaa55eaa6ec241d9a8a290d6a0d7b6413c0c7bd631def37e33d19922cbdd55
+  impactManifest:
+    path: product/impacts/POST_MERGE_DEFAULT_POLICY_FORMAT_REPAIR.yaml
+    digest: sha256:f42791ca43b0070ac13f5af70e190e01ed4167e5725d14a292da118d323acce6
+contextPaths:
+  - AGENTS.md
+  - WORKFLOW.md
+  - product/contract.yaml
+  - quality/scenarios.yaml
+  - product/impacts/POST_MERGE_DEFAULT_POLICY_FORMAT_REPAIR.yaml
+  - product/tasks/post-merge-default-policy-migration.yaml
+  - product/impacts/POST_MERGE_DEFAULT_POLICY_MIGRATION.yaml
+  - mill.yaml
+  - package.json
+  - package-lock.json
+  - src/runtime/delivery.ts
+  - src/runtime/repository.ts
+  - src/version.ts
+  - schemas/delivery-record.schema.json
+  - CHANGELOG.md
+  - README.md
+  - docs/canaries/post-merge-default-policy-migration.md
+  - docs/development.md
+  - docs/repository-settings.md
+  - docs/release.md
+allowedPaths:
+  - docs/canaries/post-merge-default-policy-format-repair.md
+commandIds: [test:coverage, check]
+attestations:
+  - id: ATT-POST-MERGE-DEFAULT-POLICY-FORMAT-REPAIR-20260904
+    approvedBy: davidahmann
+    approvedAt: "2026-09-04T22:53:19Z"
+    expiresAt: "2026-09-05T22:53:19Z"
+    claims:
+      - kind: invariant
+        id: INV-HUMAN-AUTHORITY
+        digest: sha256:5f275bad059e1ade8ff0f09df259a76b61ebcfedea97baf1a6fb4b02f369a1d0
+acceptance:
+  - id: ACC-REVIEWED-DRAFT
+    statement: >-
+      The unchanged exact candidate reaches one independently reviewed draft
+      pull request.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: check }
+  - id: ACC-TRUTHFUL-RECOVERY
+    statement: >-
+      Cancellation, ambiguity, and resume never duplicate work or invent
+      success.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: check }
+commit:
+  message: >-
+    docs: record defaulted post-merge policy formatting repair
+
+    Signed-off-by: David Ahmann <dilmurat.personal@gmail.com>
+  authorName: David Ahmann
+  authorEmail: dilmurat.personal@gmail.com
+budget:
+  deadlineSeconds: 7200
+  maxOutputBytes: 2000000
+  retryCount: 1

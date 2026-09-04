@@ -837,6 +837,9 @@ export const deliveryRecordSchema = z.strictObject({
   candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
   requiredChecks: z.array(z.string().min(1)),
   postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
+  postMergePolicySource: z
+    .enum(["configured", "implicit_default", "legacy_migrated"])
+    .optional(),
   legacyPostMergePolicyConfigDigest: digestSchema.optional(),
   reviewPolicy: githubReviewPolicySchema,
   allowedMergerLogins: z.array(z.string().min(1)).min(1),

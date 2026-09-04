@@ -74,6 +74,10 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "postMergePolicySource": {
+      "type": "string",
+      "enum": ["configured", "implicit_default", "legacy_migrated"]
+    },
     "legacyPostMergePolicyConfigDigest": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"

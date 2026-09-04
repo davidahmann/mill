@@ -558,6 +558,7 @@ describe("exact-candidate GitHub draft delivery", () => {
       expect(planned.delivery).toMatchObject({
         requiredChecks: ["validate", "dependency-review", "codeql"],
         postMergeRequiredChecks: ["validate", "codeql"],
+        postMergePolicySource: "configured",
       });
       await openDraftPr({
         root: fixture.root,
@@ -642,8 +643,126 @@ describe("exact-candidate GitHub draft delivery", () => {
       });
       expect(finalized).toMatchObject({
         run: { status: "closed" },
-        delivery: { postMergeRequiredChecks: ["validate", "codeql"] },
+        delivery: {
+          postMergeRequiredChecks: ["validate", "codeql"],
+          postMergePolicySource: "legacy_migrated",
+        },
       });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("migrates a proven implicit-default policy exactly once after merge", async () => {
+    const { fixture, runId, candidateTree } = await reviewedFixture({
+      requiredChecks: ["validate", "dependency-review", "codeql"],
+    });
+    const adapter = new FakeGitHub();
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(planned.delivery.postMergePolicySource).toBe("implicit_default");
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      try {
+        const run = store.getRun(runId);
+        if (run.deliveryJson === undefined) {
+          throw new Error("delivery record is missing");
+        }
+        const legacy = JSON.parse(run.deliveryJson) as Record<string, unknown>;
+        delete legacy.postMergePolicySource;
+        store.setDelivery(
+          runId,
+          JSON.stringify(legacy),
+          "test.implicit_default_delivery_seeded",
+        );
+      } finally {
+        store.close();
+      }
+      await openDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        approvalDigest: planned.delivery.proposalDigest,
+        attended: true,
+        adapter,
+      });
+      adapter.checks = [
+        completedCheck("success", "validate"),
+        completedCheck("success", "dependency-review"),
+        completedCheck("success", "codeql"),
+      ];
+      await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      adapter.merge(candidateTree);
+      await configureProposeCheckPolicy(fixture, {
+        postMergeRequiredChecks: ["validate", "codeql"],
+      });
+      adapter.mergeChecks = [
+        completedCheck("success", "validate"),
+        completedCheck("skipped", "dependency-review"),
+        completedCheck("success", "codeql"),
+      ];
+      const finalized = await finalizeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(finalized).toMatchObject({
+        run: { status: "closed" },
+        delivery: {
+          postMergeRequiredChecks: ["validate", "codeql"],
+          postMergePolicySource: "legacy_migrated",
+        },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("does not migrate an explicitly configured full post-merge policy", async () => {
+    const { fixture, runId, candidateTree } = await reviewedFixture({
+      requiredChecks: ["validate", "dependency-review", "codeql"],
+      postMergeRequiredChecks: ["validate", "dependency-review", "codeql"],
+    });
+    const adapter = new FakeGitHub();
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [
+        completedCheck("success", "validate"),
+        completedCheck("success", "dependency-review"),
+        completedCheck("success", "codeql"),
+      ];
+      await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      adapter.merge(candidateTree);
+      await configureProposeCheckPolicy(fixture, {
+        postMergeRequiredChecks: ["validate", "codeql"],
+      });
+      await expect(
+        finalizeDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "DELIVERY_AUTHORITY_DRIFT" });
     } finally {
       await fixture.cleanup();
     }

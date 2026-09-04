@@ -50,9 +50,11 @@ resulting-main finalization. The optional `propose.postMergeRequiredChecks`
 field accepts a nonempty list whose names must already occur in
 `propose.requiredChecks`. Without it, the effective post-merge list is the
 complete PR list. Both effective lists enter new proposal digests and persisted
-delivery records; continuity checks reject later policy drift. Keep the full PR
-gate, independent exact-candidate review, separately approved draft delivery,
-and human readiness/merge boundaries intact.
+delivery records. New records also persist `postMergePolicySource` as
+`configured` when the optional field is present or `implicit_default` when it is
+omitted; continuity checks reject later policy drift. Keep the full PR gate,
+independent exact-candidate review, separately approved draft delivery, and
+human readiness/merge boundaries intact.
 
 Legacy delivery records may lack `postMergeRequiredChecks`. Only finalization
 can bind an explicitly configured subset once, and only after GitHub proves the
@@ -61,12 +63,25 @@ allowed method, with the exact reviewed candidate tree. The task, candidate
 commit/tree, repository, remote, base, actor, original PR checks, review policy,
 and merger/method bindings must still match. Each selected name must have been
 required before merge. The implementation persists the subset and
-`legacyPostMergePolicyConfigDigest` and emits
-`delivery.legacy_post_merge_policy_bound`; subsequent readback must match that
-bound configuration digest and list. It does not rewrite the original delivery
-approval, relax pre-merge checks, grant another push, or permit repeated policy
-rebinding. An unmerged PR returns `HUMAN_MERGE_PENDING` without persisting the
-legacy binding.
+`postMergePolicySource: legacy_migrated` and `legacyPostMergePolicyConfigDigest`
+and emits `delivery.legacy_post_merge_policy_bound`; subsequent readback must
+match that bound configuration digest and list. It does not rewrite the original
+delivery approval, relax pre-merge checks, grant another push, or permit
+repeated policy rebinding. An unmerged PR returns `HUMAN_MERGE_PENDING` without
+persisting the legacy binding.
+
+The prepared compatibility extension also admits a historical record whose
+`postMergeRequiredChecks` exactly equals its original `requiredChecks` list,
+including order, but whose `postMergePolicySource` and prior legacy binding are
+absent. It reads `mill.yaml` from the recorded `candidateCommit`, validates it
+as a Mill configuration, and requires omission of
+`propose.postMergeRequiredChecks`. An unreadable source produces
+`LEGACY_POST_MERGE_POLICY_SOURCE_UNAVAILABLE`; invalid YAML or configuration
+produces `LEGACY_POST_MERGE_POLICY_SOURCE_INVALID`. An explicitly configured
+full list cannot be treated as an implicit default. New records carrying either
+`configured` or `implicit_default` cannot enter this historical extension. The
+same merge and continuity checks above must pass before the one-time local
+binding is persisted; later configuration drift cannot rebind it.
 
 `checkDecision` treats absent checks and incomplete results as pending. Every
 matching completed result for a required name must conclude `success`; skipped
@@ -85,11 +100,15 @@ contract. These are existing oracles for lifecycle validation, not evidence that
 this documentation task has run or passed them. Use the declared native
 `npm run check` gate for authoritative validation.
 
-Mill's bound `mill.yaml` remains unchanged and omits the optional field. The
-[repository-settings guide](repository-settings.md) describes a future policy
-choice; the [canary record](canaries/post-merge-check-contract.md) preserves the
-motivating blocked closure. Any policy opt-in needs separate approval and
-qualification. Downstream native commands and GitHub checks continue to operate
+Mill's maintainer-prepared `mill.yaml` now selects `[validate, codeql]` for
+resulting-main checks and retains `[validate, dependency-review, codeql]` for
+exact PR-head checks. The frozen delivery tests also contain a seeded historical
+implicit-default migration and rejection of an explicitly configured full-list
+change. These fake-adapter fixtures are not live recovery receipts. The
+[migration record](canaries/post-merge-default-policy-migration.md) describes
+the required evidence for the named historical delivery. The
+[earlier canary](canaries/post-merge-check-contract.md) preserves the preceding
+blocked policy. Downstream native commands and GitHub checks continue to operate
 without Mill.
 
 ## Brownfield discovery development

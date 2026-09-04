@@ -1,0 +1,34 @@
+schemaVersion: "1"
+id: mill-post-merge-default-policy-format-repair
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: post-merge-policy-documentation
+    kind: operations
+    change: >-
+      Preserve a formatted, reviewable operator record of the one-time defaulted
+      post-merge policy migration and the configured resulting-main check set.
+  - id: documentation-format-regression
+    kind: operations
+    change: >-
+      Record the rejected unformatted documentation candidate and prove that the
+      repaired documentation remains within its bounded writable path and passes
+      the complete native gate.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage, check]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T22:53:19Z"
+  proposalDigest: sha256:3945bde0eb51be3042beeafaed26eb823d255c5e3c2a72a289c66bb90ee77edb

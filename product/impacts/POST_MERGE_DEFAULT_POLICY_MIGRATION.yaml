@@ -1,0 +1,49 @@
+schemaVersion: "1"
+id: mill-post-merge-default-policy-migration
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: defaulted-post-merge-policy-migration
+    kind: operations
+    change: >-
+      Close only a historical delivery whose record lacks post-merge policy
+      provenance and whose reviewed candidate proves that its full
+      resulting-main list was an implicit configuration default; bind the
+      configured subset once after authoritative merge readback without
+      weakening pull-request checks.
+  - id: delivery-policy-provenance
+    kind: operations
+    change: >-
+      Record whether every new delivery plan received its resulting-main check
+      list from explicit configuration or the implicit default, so no future
+      record can use the historical compatibility path.
+  - id: resulting-main-check-policy
+    kind: operations
+    change: >-
+      Configure validate and codeql as the exact resulting-main checks while
+      retaining validate, dependency-review, and codeql for every pull-request
+      head.
+  - id: patch-distribution
+    kind: operations
+    change: >-
+      Advance the package version to 0.1.6 for a new immutable release candidate
+      after the source and lifecycle remediation pass all native and release
+      qualification gates.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage, check]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T22:32:09Z"
+  proposalDigest: sha256:474a52e96a9e7c23441126743d4075f38fc28d6d7533bcccb8ee8627c0a6c2fa

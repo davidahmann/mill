@@ -1,0 +1,108 @@
+schemaVersion: "2"
+id: mill-post-merge-default-policy-migration
+title: Migrate the proven defaulted post-merge policy and prepare 0.1.6
+objective: >-
+  Document the frozen maintainer-prepared migration that closes delivery
+  01801a1b-58f9-480f-8cee-54ea2bbeabb2 only when its exact reviewed candidate
+  proves that its full resulting-main check list was an implicit default, its
+  record lacks policy provenance, the now-configured list is a nonempty subset
+  of the original pull-request requirements, and authoritative merge readback
+  has already established every other delivery identity. Persist the one-time
+  binding and mark every new delivery as configured or implicit-default so this
+  compatibility path cannot relax a future delivery. Configure validate and
+  codeql as the resulting-main policy while retaining validate,
+  dependency-review, and codeql for exact pull-request-head evidence. The
+  prepared package identity is 0.1.6; do not publish, tag, create a GitHub
+  Release, merge a pull request, or claim release qualification. The builder may
+  only complete documentation and changelog records; it must not alter the
+  prepared runtime source, schemas, tests, mill.yaml, package identity, task or
+  impact authority, workflows, release evidence, or external-effect policy.
+riskClass: high
+baseRef: HEAD
+authority:
+  productContract:
+    path: product/contract.yaml
+    digest: sha256:e5a3dcd58a9face5a6ab36ec9aab99dc2c09f48cde59ed31fd2f42f16e217fca
+  scenarioSet:
+    path: quality/scenarios.yaml
+    digest: sha256:7c431796d5d1d314ac1625ba133d4d8d095123cf85c59a94d404f0b4379a26b3
+  policy:
+    path: WORKFLOW.md
+    digest: sha256:efdaa55eaa6ec241d9a8a290d6a0d7b6413c0c7bd631def37e33d19922cbdd55
+  impactManifest:
+    path: product/impacts/POST_MERGE_DEFAULT_POLICY_MIGRATION.yaml
+    digest: sha256:cb39948e13294611613b61750e133a9ff2d83beaf7b449aaeae7a014ce104b5d
+contextPaths:
+  - AGENTS.md
+  - WORKFLOW.md
+  - product/contract.yaml
+  - quality/scenarios.yaml
+  - product/impacts/POST_MERGE_DEFAULT_POLICY_MIGRATION.yaml
+  - mill.yaml
+  - package.json
+  - package-lock.json
+  - .github/workflows/ci.yml
+  - .github/workflows/codeql.yml
+  - .github/workflows/release.yml
+  - src/contracts/schemas.ts
+  - src/runtime/delivery.ts
+  - src/runtime/repository.ts
+  - src/version.ts
+  - schemas/delivery-record.schema.json
+  - scripts/test-package.mjs
+  - test/cli.test.ts
+  - test/lock.test.ts
+  - test/recipe-integration.test.ts
+  - test/runtime-delivery.test.ts
+  - test/schemas.test.ts
+  - docs/release.md
+allowedPaths:
+  - CHANGELOG.md
+  - README.md
+  - docs/development.md
+  - docs/repository-settings.md
+  - docs/canaries/post-merge-default-policy-migration.md
+commandIds: [test:coverage, check]
+attestations:
+  - id: ATT-POST-MERGE-DEFAULT-POLICY-MIGRATION-20260904
+    approvedBy: davidahmann
+    approvedAt: "2026-09-04T22:32:09Z"
+    expiresAt: "2026-09-05T22:32:09Z"
+    claims:
+      - kind: invariant
+        id: INV-HUMAN-AUTHORITY
+        digest: sha256:5f275bad059e1ade8ff0f09df259a76b61ebcfedea97baf1a6fb4b02f369a1d0
+acceptance:
+  - id: ACC-REVIEWED-DRAFT
+    statement: >-
+      The unchanged exact candidate reaches one independently reviewed draft
+      pull request.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: check }
+  - id: ACC-TRUTHFUL-RECOVERY
+    statement: >-
+      Cancellation, ambiguity, and resume never duplicate work or invent
+      success.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: check }
+commit:
+  message: >-
+    fix: migrate defaulted post-merge policy and prepare 0.1.6
+
+    Signed-off-by: David Ahmann <dilmurat.personal@gmail.com>
+  authorName: David Ahmann
+  authorEmail: dilmurat.personal@gmail.com
+budget:
+  deadlineSeconds: 7200
+  maxOutputBytes: 2000000
+  retryCount: 1
