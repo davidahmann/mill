@@ -325,6 +325,17 @@ function target(
   };
 }
 
+function postMergeRequiredChecks(config: ProposeConfig): string[] {
+  return config.postMergeRequiredChecks ?? config.requiredChecks;
+}
+
+function isCheckSubset(
+  candidate: readonly string[],
+  required: readonly string[],
+): boolean {
+  return candidate.every((check) => required.includes(check));
+}
+
 function proposalDigest(input: {
   run: RunRecord;
   candidate: { commit: string; tree: string };
@@ -344,6 +355,7 @@ function proposalDigest(input: {
     branchName: input.branchName,
     approvalExpiresAt: input.approvalExpiresAt,
     requiredChecks: input.config.requiredChecks,
+    postMergeRequiredChecks: postMergeRequiredChecks(input.config),
     reviewPolicy: input.config.reviewPolicy,
     allowedMergeMethods: input.config.allowedMergeMethods,
     allowedMergerLogins: input.config.allowedMergerLogins,
@@ -464,11 +476,27 @@ function assertDeliveryContinuity(input: {
   config: ProposeConfig;
   delivery: DeliveryRecord;
   binding: GitHubBinding;
-}): void {
+  allowLegacyPostMergePolicy?: boolean;
+}): { bindLegacyPostMergePolicy: boolean } {
   const { run, inputs, config, delivery, binding } = input;
+  const configuredPostMergeChecks = postMergeRequiredChecks(config);
+  const bindLegacyPostMergePolicy =
+    input.allowLegacyPostMergePolicy === true &&
+    delivery.postMergeRequiredChecks === undefined &&
+    delivery.legacyPostMergePolicyConfigDigest === undefined &&
+    config.postMergeRequiredChecks !== undefined &&
+    isCheckSubset(config.postMergeRequiredChecks, delivery.requiredChecks);
+  const hasBoundLegacyPostMergePolicy =
+    input.allowLegacyPostMergePolicy === true &&
+    delivery.postMergeRequiredChecks !== undefined &&
+    delivery.legacyPostMergePolicyConfigDigest === inputs.configDigest;
+  const configDigestMatches =
+    bindLegacyPostMergePolicy ||
+    hasBoundLegacyPostMergePolicy ||
+    run.configDigest === inputs.configDigest;
   if (
     run.taskDigest !== inputs.taskDigest ||
-    run.configDigest !== inputs.configDigest ||
+    !configDigestMatches ||
     delivery.runId !== run.id ||
     delivery.candidateCommit !== run.candidateCommit ||
     delivery.candidateTree !== run.candidateTree ||
@@ -483,6 +511,11 @@ function assertDeliveryContinuity(input: {
     delivery.target.cloneUrl !== binding.cloneUrl ||
     JSON.stringify(delivery.requiredChecks) !==
       JSON.stringify(config.requiredChecks) ||
+    (delivery.postMergeRequiredChecks !== undefined &&
+      JSON.stringify(delivery.postMergeRequiredChecks) !==
+        JSON.stringify(configuredPostMergeChecks)) ||
+    (delivery.legacyPostMergePolicyConfigDigest !== undefined &&
+      !hasBoundLegacyPostMergePolicy) ||
     JSON.stringify(delivery.reviewPolicy) !==
       JSON.stringify(config.reviewPolicy) ||
     JSON.stringify(delivery.allowedMergerLogins) !==
@@ -496,6 +529,7 @@ function assertDeliveryContinuity(input: {
       ExitCode.configuration,
     );
   }
+  return { bindLegacyPostMergePolicy };
 }
 
 function checkDecision(
@@ -681,6 +715,7 @@ export async function planDraftPr(input: {
       candidateCommit: candidate.commit,
       candidateTree: candidate.tree,
       requiredChecks: config.requiredChecks,
+      postMergeRequiredChecks: postMergeRequiredChecks(config),
       reviewPolicy: config.reviewPolicy,
       allowedMergerLogins: config.allowedMergerLogins,
       allowedMergeMethods: config.allowedMergeMethods,
@@ -1394,6 +1429,7 @@ export async function observeDraftPr(input: {
         ExitCode.configuration,
       );
     }
+    const pullRequest = delivery.pullRequest;
     const adapter = input.adapter ?? createGitHubAdapter(input.root);
     const deadlineMs = operationDeadline(config);
     const binding = await adapter.inspect({
@@ -1405,7 +1441,7 @@ export async function observeDraftPr(input: {
     assertDeliveryContinuity({ run, inputs, config, delivery, binding });
     const observation = await adapter.observe({
       config,
-      pullRequestNumber: delivery.pullRequest.number,
+      pullRequestNumber: pullRequest.number,
       deadlineMs,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
@@ -1573,6 +1609,7 @@ export async function finalizeDraftPr(input: {
         ExitCode.configuration,
       );
     }
+    const pullRequest = delivery.pullRequest;
     const adapter = input.adapter ?? createGitHubAdapter(input.root);
     const deadlineMs = operationDeadline(config);
     const binding = await adapter.inspect({
@@ -1581,10 +1618,17 @@ export async function finalizeDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
-    assertDeliveryContinuity({ run, inputs, config, delivery, binding });
+    const continuity = assertDeliveryContinuity({
+      run,
+      inputs,
+      config,
+      delivery,
+      binding,
+      allowLegacyPostMergePolicy: true,
+    });
     const observation = await adapter.observe({
       config,
-      pullRequestNumber: delivery.pullRequest.number,
+      pullRequestNumber: pullRequest.number,
       deadlineMs,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
@@ -1647,6 +1691,19 @@ export async function finalizeDraftPr(input: {
         ExitCode.configuration,
       );
     }
+    if (continuity.bindLegacyPostMergePolicy) {
+      delivery = persistDelivery(
+        store,
+        run.id,
+        {
+          ...delivery,
+          postMergeRequiredChecks: postMergeRequiredChecks(config),
+          legacyPostMergePolicyConfigDigest: inputs.configDigest,
+        },
+        "delivery.legacy_post_merge_policy_bound",
+        { checks: postMergeRequiredChecks(config).length },
+      );
+    }
     delivery = persistDelivery(
       store,
       run.id,
@@ -1674,7 +1731,7 @@ export async function finalizeDraftPr(input: {
       run = store.transition(run.id, "merged", "delivery.merged");
     }
     const checks = checkDecision(
-      delivery.requiredChecks,
+      delivery.postMergeRequiredChecks ?? delivery.requiredChecks,
       observation.mergeChecks,
     );
     if (checks.status === "pending") {

@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -31,6 +33,9 @@ import {
   startLocalRun,
   verifyRun,
 } from "../src/runtime/lifecycle.js";
+import { loadRuntimeInputs } from "../src/runtime/inputs.js";
+import { commonGitDirectory } from "../src/runtime/repository.js";
+import { StateStore } from "../src/runtime/state.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 
 const original = {
@@ -38,6 +43,7 @@ const original = {
   codex: process.env.MILL_CODEX_PATH,
   docker: process.env.MILL_DOCKER_PATH,
 };
+const execFileAsync = promisify(execFile);
 
 afterEach(() => {
   if (original.state === undefined) delete process.env.MILL_STATE_HOME;
@@ -242,9 +248,109 @@ class FakeGitHub implements GitHubAdapter {
   }
 }
 
+async function configureProposeCheckPolicy(
+  fixture: Awaited<ReturnType<typeof runtimeFixture>>,
+  input: {
+    requiredChecks?: readonly string[];
+    postMergeRequiredChecks?: readonly string[];
+  },
+): Promise<void> {
+  const configPath = path.join(fixture.root, "mill.yaml");
+  let source = await readFile(configPath, "utf8");
+  source = source.replace(/^ {2}postMergeRequiredChecks: \[[^\n]*\]\n/mu, "");
+  if (input.requiredChecks !== undefined) {
+    source = source.replace(
+      /^ {2}requiredChecks: \[[^\n]*\]\n/mu,
+      `  requiredChecks: [${input.requiredChecks.join(", ")}]\n`,
+    );
+  }
+  if (input.postMergeRequiredChecks !== undefined) {
+    source = source.replace(
+      /^( {2}requiredChecks: \[[^\n]*\])\n/mu,
+      `$1\n  postMergeRequiredChecks: [${input.postMergeRequiredChecks.join(", ")}]\n`,
+    );
+  }
+  await writeFile(configPath, source, "utf8");
+  await execFileAsync(
+    "/usr/bin/git",
+    [
+      "-c",
+      "user.name=Mill Test",
+      "-c",
+      "user.email=mill-test@example.invalid",
+      "add",
+      "mill.yaml",
+    ],
+    { cwd: fixture.root },
+  );
+  await execFileAsync(
+    "/usr/bin/git",
+    [
+      "-c",
+      "user.name=Mill Test",
+      "-c",
+      "user.email=mill-test@example.invalid",
+      "commit",
+      "--no-gpg-sign",
+      "-m",
+      "test: configure fixture checks",
+    ],
+    { cwd: fixture.root },
+  );
+}
+
+async function fixtureDelivery(
+  fixture: Awaited<ReturnType<typeof runtimeFixture>>,
+  runId: string,
+): Promise<Record<string, unknown>> {
+  const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+  const store = await StateStore.open(
+    inputs.config.repositoryId,
+    await commonGitDirectory(fixture.root),
+  );
+  try {
+    const run = store.getRun(runId);
+    if (run.deliveryJson === undefined) {
+      throw new Error("delivery record is missing");
+    }
+    return JSON.parse(run.deliveryJson) as Record<string, unknown>;
+  } finally {
+    store.close();
+  }
+}
+
+async function seedLegacyPostMergeDelivery(
+  fixture: Awaited<ReturnType<typeof runtimeFixture>>,
+  runId: string,
+): Promise<void> {
+  const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+  const store = await StateStore.open(
+    inputs.config.repositoryId,
+    await commonGitDirectory(fixture.root),
+  );
+  try {
+    const run = store.getRun(runId);
+    if (run.deliveryJson === undefined) {
+      throw new Error("delivery record is missing");
+    }
+    const delivery = JSON.parse(run.deliveryJson) as Record<string, unknown>;
+    delete delivery.postMergeRequiredChecks;
+    delete delivery.legacyPostMergePolicyConfigDigest;
+    store.setDelivery(
+      runId,
+      JSON.stringify(delivery),
+      "test.legacy_delivery_seeded",
+    );
+  } finally {
+    store.close();
+  }
+}
+
 async function reviewedFixture(
   options: {
     githubReviewer?: string;
+    requiredChecks?: readonly string[];
+    postMergeRequiredChecks?: readonly string[];
   } = {},
 ): Promise<{
   fixture: Awaited<ReturnType<typeof runtimeFixture>>;
@@ -258,6 +364,19 @@ async function reviewedFixture(
       ? {}
       : { githubReviewer: options.githubReviewer }),
   });
+  if (
+    options.requiredChecks !== undefined ||
+    options.postMergeRequiredChecks !== undefined
+  ) {
+    await configureProposeCheckPolicy(fixture, {
+      ...(options.requiredChecks === undefined
+        ? {}
+        : { requiredChecks: options.requiredChecks }),
+      ...(options.postMergeRequiredChecks === undefined
+        ? {}
+        : { postMergeRequiredChecks: options.postMergeRequiredChecks }),
+    });
+  }
   activate(fixture);
   const qualification = await qualifyBaseline({
     root: fixture.root,
@@ -417,6 +536,113 @@ describe("exact-candidate GitHub draft delivery", () => {
           mergedByLogin: "operator",
           tree: candidateTree,
         },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("binds distinct resulting-main checks into a new delivery proposal", async () => {
+    const { fixture, runId, candidateTree } = await reviewedFixture({
+      requiredChecks: ["validate", "dependency-review", "codeql"],
+      postMergeRequiredChecks: ["validate", "codeql"],
+    });
+    const adapter = new FakeGitHub();
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(planned.delivery).toMatchObject({
+        requiredChecks: ["validate", "dependency-review", "codeql"],
+        postMergeRequiredChecks: ["validate", "codeql"],
+      });
+      await openDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        approvalDigest: planned.delivery.proposalDigest,
+        attended: true,
+        adapter,
+      });
+      adapter.checks = [
+        completedCheck("success", "validate"),
+        completedCheck("success", "dependency-review"),
+        completedCheck("success", "codeql"),
+      ];
+      await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      adapter.merge(candidateTree);
+      adapter.mergeChecks = [
+        completedCheck("success", "validate"),
+        completedCheck("success", "codeql"),
+      ];
+      const finalized = await finalizeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(finalized.run.status).toBe("closed");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("binds a subset-safe post-merge policy for a legacy merged delivery", async () => {
+    const { fixture, runId, candidateTree } = await reviewedFixture({
+      requiredChecks: ["validate", "dependency-review", "codeql"],
+    });
+    const adapter = new FakeGitHub();
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      await seedLegacyPostMergeDelivery(fixture, runId);
+      adapter.checks = [
+        completedCheck("success", "validate"),
+        completedCheck("success", "dependency-review"),
+        completedCheck("success", "codeql"),
+      ];
+      await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      await configureProposeCheckPolicy(fixture, {
+        postMergeRequiredChecks: ["validate", "codeql"],
+      });
+      await expect(
+        finalizeDraftPr({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+        }),
+      ).rejects.toMatchObject({ code: "HUMAN_MERGE_PENDING" });
+      expect(await fixtureDelivery(fixture, runId)).not.toHaveProperty(
+        "postMergeRequiredChecks",
+      );
+      adapter.merge(candidateTree);
+      adapter.mergeChecks = [
+        completedCheck("success", "validate"),
+        completedCheck("skipped", "dependency-review"),
+        completedCheck("success", "codeql"),
+      ];
+      const finalized = await finalizeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(finalized).toMatchObject({
+        run: { status: "closed" },
+        delivery: { postMergeRequiredChecks: ["validate", "codeql"] },
       });
     } finally {
       await fixture.cleanup();

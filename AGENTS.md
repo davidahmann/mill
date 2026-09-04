@@ -113,6 +113,13 @@ two-step plan/apply wrapper, never as implicit push authority.
   one systemic repair generation; do not churn one PR per comment.
 - The shipper may push only the unchanged verified candidate to its configured
   branch and may open only a draft PR in the bound repository.
+- `requiredChecks` are exact pull-request-head requirements. When configured,
+  `postMergeRequiredChecks` is a nonempty subset used only for resulting-main
+  readback; do not list a pull-request-only job there. A skipped check blocks
+  the phase that requires it. New delivery records bind both lists. A legacy
+  record without the second list may bind the configured subset during readback
+  only when every other delivery binding still matches and the subset was
+  already required before merge; it never relaxes pre-merge evidence.
 - Mill never marks ready, auto-merges, deploys, provisions a repository, or
   changes branch protection.
 

@@ -1,0 +1,42 @@
+schemaVersion: "1"
+id: mill-post-merge-check-contract-repair
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: draft-delivery-policy
+    kind: operations
+    change: >-
+      Bind exact pull-request checks separately from the subset that must run on
+      the resulting default-branch commit, without weakening pre-merge evidence
+      or human merge authority.
+  - id: legacy-delivery-readback
+    kind: operations
+    change: >-
+      Permit a bounded, persisted post-merge check-policy binding for an
+      already-merged legacy delivery record only when its configured list is a
+      subset of the original pre-merge requirements and all other bindings
+      match.
+  - id: verifier-timeout-cleanup-test
+    kind: operations
+    change: >-
+      Give the existing daemon-owned OCI cleanup test enough bounded time for
+      its image-inspection preflight under coverage-parallel host scheduling,
+      while preserving the required client-timeout and forced-cleanup outcome.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage, check]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T21:07:00Z"
+  proposalDigest: sha256:8f0dfe558de1b6a6fc7ab5b6c9136f2a3b9862c45c12b79353e1e7b7b574be7e

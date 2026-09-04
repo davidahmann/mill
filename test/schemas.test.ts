@@ -886,6 +886,32 @@ describe("compact schemas", () => {
     expect(contractSchemas.millConfig.safeParse(localReview).success).toBe(
       true,
     );
+    const splitCheckPolicy = {
+      ...localReview,
+      propose: {
+        ...localReview.propose,
+        requiredChecks: ["validate", "dependency-review", "codeql"],
+        postMergeRequiredChecks: ["validate", "codeql"],
+      },
+    } as const;
+    expect(validate(splitCheckPolicy)).toBe(true);
+    expect(contractSchemas.millConfig.safeParse(splitCheckPolicy).success).toBe(
+      true,
+    );
+    const postMergeCheckOutsidePullRequestGate = {
+      ...splitCheckPolicy,
+      propose: {
+        ...splitCheckPolicy.propose,
+        postMergeRequiredChecks: ["deploy"],
+      },
+    } as const;
+    // JSON Schema captures the public shape; the subset relationship is a
+    // cross-field policy enforced by the canonical Zod contract.
+    expect(validate(postMergeCheckOutsidePullRequestGate)).toBe(true);
+    expect(
+      contractSchemas.millConfig.safeParse(postMergeCheckOutsidePullRequestGate)
+        .success,
+    ).toBe(false);
     const emptyRequiredReview = {
       ...localReview,
       propose: {
@@ -919,6 +945,16 @@ describe("compact schemas", () => {
     expect(
       contractSchemas.deliveryRecord.safeParse(invalidDeliveryReview).success,
     ).toBe(false);
+    const deliveryWithPostMergeChecks = {
+      ...samples.deliveryRecord,
+      requiredChecks: ["validate", "dependency-review", "codeql"],
+      postMergeRequiredChecks: ["validate", "codeql"],
+    } as const;
+    expect(deliveryValidate(deliveryWithPostMergeChecks)).toBe(true);
+    expect(
+      contractSchemas.deliveryRecord.safeParse(deliveryWithPostMergeChecks)
+        .success,
+    ).toBe(true);
   });
 
   it("rejects option-like and whitespace-bearing Git base references", async () => {
