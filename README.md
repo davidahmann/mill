@@ -130,9 +130,11 @@ node dist/cli.js adopt --scan-only
 Static discovery is a separate read-only operation. It requires a clean Git
 repository root and rejects sensitive paths, symbolic links, unsafe Git
 configuration, and incomplete source traversal. It parses local TypeScript and
-JavaScript imports from regular files represented in the bound `HEAD` tree,
-reports source locations, inventories test files, and gives conservative
-importer leads for named paths. It never installs dependencies, runs the
+JavaScript imports only after each regular file's physical bytes match its blob
+in the captured `HEAD` tree. The same check protects parsed package metadata.
+It reports source locations, inventories test files, and gives conservative
+importer leads for named paths. Nonliteral module loads and option-bearing test
+commands remain explicit unknowns. It never installs dependencies, runs the
 target's code, or claims executed coverage or delivery authority.
 
 ```sh

@@ -45,13 +45,16 @@ reap orphaned test children without changing the default command process setup.
 
 `src/repository/intelligence.ts` is a deterministic static extractor. Keep it
 read-only: use the safe-path reader for source bytes, maintain fixed traversal
-and byte budgets, bind source paths to the clean `HEAD` tree, preserve explicit
-unresolved/external classifications, and do not add dependency installation,
-target execution, model calls, watches, or a write-side graph store. The
-TypeScript compiler API is an exact runtime dependency because the installed
-package parses the target source itself. It is bundled into Mill's packed
-artifact so the offline packed-package canary can exercise discovery without an
-unqualified registry fetch.
+and byte budgets, and verify every parsed source file and package manifest
+against its blob in the captured clean `HEAD` tree. Preserve explicit
+unresolved/external classifications, including nonliteral module loads, and
+treat option-bearing test commands as unknown rather than partially
+interpreting their arguments. Do not add dependency installation, target
+execution, model calls, watches, or a write-side graph store. The TypeScript
+compiler API is an exact runtime dependency because the installed package
+parses the target source itself. It is bundled into Mill's packed artifact so
+the offline packed-package canary can exercise discovery without an unqualified
+registry fetch.
 
 The evaluator in `test/repository-intelligence.test.ts` owns repeatability,
 freshness, source-path containment, unresolved-import, no-execution, and

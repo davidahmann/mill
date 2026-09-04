@@ -14,7 +14,7 @@ import { scanRepository } from "./scan.js";
 const execFileAsync = promisify(execFile);
 
 const extractorId = "mill.repository-intelligence";
-const extractorVersion = "1";
+const extractorVersion = "2";
 const sourceExtensions = new Set([
   ".cjs",
   ".cts",
@@ -124,6 +124,10 @@ interface GitIdentity {
   tree: string;
 }
 
+interface CommittedBlob {
+  oid: string;
+}
+
 interface WalkState {
   entries: number;
   files: string[];
@@ -136,6 +140,14 @@ function posixPath(value: string): string {
 
 function textDigest(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function gitBlobOid(value: string): string {
+  const bytes = Buffer.from(value, "utf8");
+  return createHash("sha1")
+    .update(`blob ${bytes.byteLength}\0`, "utf8")
+    .update(bytes)
+    .digest("hex");
 }
 
 function sourceFileKind(file: string): ts.ScriptKind {
@@ -202,7 +214,7 @@ function assertSafeChangedPath(root: string, value: string): string {
 
 async function listSourceFiles(
   root: string,
-  committed: ReadonlySet<string>,
+  committed: ReadonlyMap<string, CommittedBlob>,
 ): Promise<{
   files: readonly string[];
   truncatedDirectories: readonly string[];
@@ -306,16 +318,23 @@ async function gitRead(root: string, args: readonly string[]): Promise<string> {
   return (await gitReadRaw(root, args)).trim();
 }
 
-async function committedPaths(root: string): Promise<ReadonlySet<string>> {
+async function committedBlobs(
+  root: string,
+  tree: string,
+): Promise<ReadonlyMap<string, CommittedBlob>> {
   const output = await gitReadRaw(root, [
     "ls-tree",
     "-r",
     "-z",
-    "--name-only",
-    "HEAD",
+    "--full-tree",
+    tree,
   ]);
-  const paths = output.length === 0 ? [] : output.split("\0").slice(0, -1);
-  for (const candidate of paths) {
+  const entries = output.length === 0 ? [] : output.split("\0").slice(0, -1);
+  const blobs = new Map<string, CommittedBlob>();
+  for (const entry of entries) {
+    const match = /^(100644|100755) blob ([a-f0-9]{40})\t(.+)$/u.exec(entry);
+    if (match === null) continue;
+    const candidate = match[3] ?? "";
     if (
       candidate.length === 0 ||
       path.posix.isAbsolute(candidate) ||
@@ -328,16 +347,43 @@ async function committedPaths(root: string): Promise<ReadonlySet<string>> {
         { path: candidate },
       );
     }
+    blobs.set(candidate, { oid: match[2] ?? "" });
   }
-  return new Set(paths);
+  return blobs;
+}
+
+async function readCapturedSource(
+  root: string,
+  sourcePath: string,
+  committed: ReadonlyMap<string, CommittedBlob>,
+): Promise<string> {
+  const blob = committed.get(sourcePath);
+  if (blob === undefined) {
+    throw new MillError(
+      "DISCOVERY_COMMITTED_SOURCE_MISSING",
+      "Discovery refuses source paths that are absent from the captured committed tree.",
+      ExitCode.data,
+      { path: sourcePath },
+    );
+  }
+  const source = await safeReadText(root, sourcePath, maximumSourceBytes);
+  if (gitBlobOid(source) !== blob.oid) {
+    throw new MillError(
+      "DISCOVERY_COMMITTED_SOURCE_MISMATCH",
+      "Discovery refuses physical source bytes that do not match the captured committed tree.",
+      ExitCode.data,
+      { path: sourcePath },
+    );
+  }
+  return source;
 }
 
 async function readGitIdentity(root: string): Promise<GitIdentity> {
-  const [topLevel, status, commit, tree] = await Promise.all([
+  const commit = await gitRead(root, ["rev-parse", "HEAD"]);
+  const [topLevel, status, tree] = await Promise.all([
     gitRead(root, ["rev-parse", "--show-toplevel"]),
     gitRead(root, ["status", "--porcelain=v1", "--untracked-files=all"]),
-    gitRead(root, ["rev-parse", "HEAD"]),
-    gitRead(root, ["rev-parse", "HEAD^{tree}"]),
+    gitRead(root, ["rev-parse", `${commit}^{tree}`]),
   ]);
   const canonicalTopLevel = await realpath(topLevel);
   if (canonicalTopLevel !== root) {
@@ -483,7 +529,14 @@ function inspectModule(
   function visit(node: ts.Node): void {
     const kind = scriptKindForImport(node);
     const specifier = kind === undefined ? undefined : moduleSpecifier(node);
-    if (kind !== undefined && specifier !== undefined) {
+    if (kind !== undefined && specifier === undefined) {
+      imports.push({
+        kind,
+        specifier: "nonliteral_specifier",
+        location: sourceLocation(parsed, node.getStart(parsed), sourcePath),
+        resolution: "unresolved",
+      });
+    } else if (kind !== undefined && specifier !== undefined) {
       const targetPath = resolveLocalSpecifier(
         sourcePath,
         specifier.text,
@@ -579,7 +632,7 @@ function declaredTestSelections(
     }
     const selectors =
       command.match(/[A-Za-z0-9_./*-]+\.(?:test|spec)\.[cm]?[jt]sx?/gu) ?? [];
-    if (selectors.length === 0) {
+    if (/(?:^|\s)--?[A-Za-z]/u.test(command) || selectors.length === 0) {
       selections.push({
         script,
         command,
@@ -711,7 +764,8 @@ export async function discoverRepository(
     );
   }
   const identity = await readGitIdentity(root);
-  const listed = await listSourceFiles(root, await committedPaths(root));
+  const committed = await committedBlobs(root, identity.tree);
+  const listed = await listSourceFiles(root, committed);
   if (listed.truncatedDirectories.length > 0) {
     throw new MillError(
       "DISCOVERY_INCOMPLETE_SOURCE",
@@ -726,7 +780,7 @@ export async function discoverRepository(
     sourceFiles.map(async (file) =>
       inspectModule(
         file,
-        await safeReadText(root, file, maximumSourceBytes),
+        await readCapturedSource(root, file, committed),
         sourceSet,
       ),
     ),
@@ -735,15 +789,9 @@ export async function discoverRepository(
     .filter(isTestPath)
     .map((file) => ({ path: file, source: "filename" as const }));
   let packageSource: string | undefined;
-  try {
-    packageSource = await safeReadText(
-      root,
-      "package.json",
-      maximumSourceBytes,
-    );
-  } catch (error) {
-    if (!(error instanceof MillError) || error.code !== "FILE_NOT_FOUND")
-      throw error;
+  const packageBlob = committed.get("package.json");
+  if (packageBlob !== undefined) {
+    packageSource = await readCapturedSource(root, "package.json", committed);
   }
   const changedPaths = [
     ...new Set(
@@ -757,6 +805,13 @@ export async function discoverRepository(
     version: extractorVersion,
     digest: canonicalDigest({ id: extractorId, version: extractorVersion }),
   } as const;
+  if ((await gitRead(root, ["rev-parse", "HEAD"])) !== identity.commit) {
+    throw new MillError(
+      "DISCOVERY_SOURCE_IDENTITY_CHANGED",
+      "Discovery source identity changed while committed inputs were being captured.",
+      ExitCode.data,
+    );
+  }
   const data = {
     schemaVersion: "1" as const,
     extractor,
