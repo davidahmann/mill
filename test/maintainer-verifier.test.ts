@@ -222,6 +222,8 @@ describe("maintainer native environment", () => {
         .map((line) => JSON.parse(line) as string[]);
       const runs = calls.filter((args) => args[0] === "run");
       expect(runs).toHaveLength(2);
+      expect(runs[0]).not.toContain("--init");
+      expect(runs[1]).toContain("--init");
       expect(runs[0]).not.toContain(
         "/mill-fixtures:rw,exec,nosuid,nodev,size=256m",
       );

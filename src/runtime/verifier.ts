@@ -655,7 +655,11 @@ export async function verifyDeclaredCommands(input: {
             "--tmpfs",
             "/dev/shm:rw,nosuid,nodev,size=256m",
             ...(command.executableFixtureScratch === true
-              ? ["--tmpfs", "/mill-fixtures:rw,exec,nosuid,nodev,size=256m"]
+              ? [
+                  "--init",
+                  "--tmpfs",
+                  "/mill-fixtures:rw,exec,nosuid,nodev,size=256m",
+                ]
               : []),
             ...workspace.mounts,
             ...dependencyMounts,

@@ -152,11 +152,13 @@ OCI test/package commands may explicitly grant `executableFixtureScratch: true`.
 Only that grant adds the fixed `/mill-fixtures` tmpfs outside the repository:
 256 MiB, executable, nosuid and nodev, with the same non-root container
 identity, network denial, resource bounds and unconditional lifecycle cleanup.
-It grants no host bind, source/dependency write or arbitrary mount path. Default
-commands receive no such mount; their existing noexec scratch posture is
-unchanged. The command configuration is part of baseline/context authority, so
-adding the grant invalidates prior approvals. Temporary repositories must stay
-outside the source checkout to avoid inheriting its Git and package context.
+The opted-in container uses Docker's init process to reap orphaned fixture
+children; default commands retain their existing process setup. It grants no
+host bind, source/dependency write or arbitrary mount path. Default commands
+receive no such mount; their existing noexec scratch posture is unchanged. The
+command configuration is part of baseline/context authority, so adding the grant
+invalidates prior approvals. Temporary repositories must stay outside the source
+checkout to avoid inheriting its Git and package context.
 
 The founder commands are coordinators, not new state machines. `run next`
 resolves exactly one ready outcome and calls the existing run boundary. `start`

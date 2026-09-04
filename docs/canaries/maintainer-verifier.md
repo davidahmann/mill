@@ -62,7 +62,17 @@ repair adds only the explicit `executableFixtureScratch: true` grant for OCI
 test/package commands. It provides fixed `/mill-fixtures` exec/nosuid/nodev
 tmpfs at 256 MiB with no source/dependency writes, host binds, network or
 privileges. Other scratch remains noexec; default commands are unchanged. The
-runner now places temporary fixtures there, outside the repository.
+runner now places temporary fixtures there, outside the repository. The opted-in
+container also uses Docker's init process to reap orphaned fixture children. The
+first A1 candidate, `60601d6333c2bbef9cf1e5acce53a905fe903f5d`, passed the host
+gate and 188 of 189 real-OCI tests, but the unchanged daemon cleanup test
+detected an unreaped orphan. That failed run lasted 51,614 ms and bound output
+digest
+`sha256:ffe99923aca04876c68a70d0d108ff9e1c2298cde0915f8b602b6edb89f6c6cf`.
+Actual mount probes confirmed executable fixture scratch, noexec ordinary
+scratch, read-only source/dependencies, non-root identity and network denial.
+The init adjustment repairs process cleanup without changing that test or its
+timeout; this earlier failed run is not qualification evidence for the repair.
 
 The npm seed at `/opt/npm-cache` stays read-only. Before a native command, the
 runner copies it into a unique scratch child, sets an offline writable cache and

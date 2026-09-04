@@ -38,7 +38,8 @@ authority change that requires requalification, not a workaround that a builder
 may add to its own command controls. All source/dependency mounts remain
 read-only and verification remains offline. The maintainer runner keeps its
 writable npm cache separate and places temporary repositories outside
-`/workspace`.
+`/workspace`. The explicit fixture grant also enables Docker's init process to
+reap orphaned test children without changing the default command process setup.
 
 ## Testing matrix
 
