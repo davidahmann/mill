@@ -1,7 +1,25 @@
 schemaVersion: "1"
 repositoryId: 889e67bd-0768-4f73-9e18-286f2fb8b5f3
-trustCeiling: build
+trustCeiling: propose
 sensitivePaths: [".env", ".npmrc", ".mill/**"]
+propose:
+  forge: github
+  host: github.com
+  owner: davidahmann
+  repository: mill
+  repositoryNodeId: R_kgDOUJyEZw
+  remoteName: origin
+  baseBranch: main
+  branchPrefix: mill/
+  allowedActors: [davidahmann]
+  allowedMergerLogins: [davidahmann]
+  requiredChecks: [validate, dependency-review, codeql]
+  reviewPolicy:
+    mode: local_only
+    requiredReviewerLogins: []
+  allowedMergeMethods: [linear_tree_preserving]
+  approvalTtlSeconds: 900
+  pollTimeoutSeconds: 600
 verifier:
   image: local/mill-maintainer-bootstrap@sha256:cb36daaac8d15771dafbbe32dacbc9e630c7f5a72cb7f690dc9e08254af9cb51
   network: none

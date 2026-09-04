@@ -142,3 +142,30 @@ scenarios:
       - executing a task approved for another outcome
       - spending registry or model budget before PRD and task authority passes
       - granting merge authority to the coordinator
+  - id: SCN-DRAFT-DELIVERY
+    kind: adversarial
+    given:
+      - an independently reviewed exact candidate
+      - an exact GitHub repository, branch, actor, and bounded delivery policy
+    when:
+      - the attended operator approves an unexpired exact delivery proposal
+    then:
+      - only the unchanged candidate may be pushed to the configured repository
+      - exactly one draft pull request may be created against the configured
+        base
+      - cancellation, ambiguity, and resume reconcile provider state without
+        duplicating effects
+      - no builder, reviewer, or coordinator receives merge authority
+    oracleOwner: repository
+    acceptanceRefs: [ACC-REVIEWED-DRAFT, ACC-TRUTHFUL-RECOVERY]
+    invariantRefs:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    coverage: both
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      - pushing a changed or unverified candidate
+      - creating a ready-for-review pull request or merging it
+      - retrying an unknown remote effect without authoritative readback
