@@ -411,6 +411,98 @@ describe("repository intelligence", () => {
     }
   });
 
+  it("refuses source bytes hidden from Git status by assume-unchanged", async () => {
+    const fixture = await repositoryFixture();
+    try {
+      await git(fixture.path, [
+        "update-index",
+        "--assume-unchanged",
+        "src/math.ts",
+      ]);
+      await writeFile(
+        path.join(fixture.path, "src", "math.ts"),
+        "export const add = () => 0;\n",
+      );
+      await expect(
+        discoverRepository({ root: fixture.path }),
+      ).rejects.toMatchObject({
+        code: "DISCOVERY_COMMITTED_SOURCE_MISMATCH",
+      } satisfies Partial<MillError>);
+    } finally {
+      await git(fixture.path, [
+        "update-index",
+        "--no-assume-unchanged",
+        "src/math.ts",
+      ]);
+      await fixture.cleanup();
+    }
+  });
+
+  it("preserves nonliteral module loads and option-bearing test commands as explicit uncertainty", async () => {
+    const fixture = await repositoryFixture();
+    try {
+      await writeFile(
+        path.join(fixture.path, "src", "nonliteral.ts"),
+        [
+          'const imported = "./math.js";',
+          "void import(imported);",
+          'const required = "./types.js";',
+          "void require(required);",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        path.join(fixture.path, "package.json"),
+        JSON.stringify({
+          scripts: {
+            test: "vitest run --exclude src/service.test.ts src/*.test.ts",
+          },
+        }),
+      );
+      await git(fixture.path, ["add", "."]);
+      await git(fixture.path, [
+        "-c",
+        "user.name=Mill fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "nonliteral fixture",
+      ]);
+
+      const report = await discoverRepository({ root: fixture.path });
+      expect(
+        report.modules.find((module) => module.path === "src/nonliteral.ts")
+          ?.imports,
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "dynamic",
+            specifier: "nonliteral_specifier",
+            resolution: "unresolved",
+          }),
+          expect.objectContaining({
+            kind: "require",
+            specifier: "nonliteral_specifier",
+            resolution: "unresolved",
+          }),
+        ]),
+      );
+      expect(report.tests.declaredSelection).toEqual([
+        {
+          script: "test",
+          command: "vitest run --exclude src/service.test.ts src/*.test.ts",
+          selector: "static_selection_unknown",
+          matchedInventory: [],
+          status: "unknown",
+        },
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("records dynamic and require edges, static-selector uncertainty, syntax errors, and Git-root boundaries", async () => {
     const fixture = await repositoryFixture();
     const nonRepository = await temporaryDirectory("mill-intelligence-no-git-");
