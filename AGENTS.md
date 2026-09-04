@@ -6,6 +6,16 @@ Status: normative
 
 Scope: this repository and coding agents operating its delivery workflow
 
+## Approved architecture follow-through
+
+The owner approved `product/architecture-follow-through.md` on 2026-09-04. For
+that bounded maintainer increment, its native implementation and complete PR
+review path governs changes to Mill's own command controls and tests. Its
+explicit human-approved merge capability supersedes browser-only/draft-only
+restrictions solely for the approved attended merge workflow. Builder and
+reviewer forge exclusions remain in force. Historical bootstrap exceptions
+remain closed. All release effects require their own verified identities.
+
 ## Operating Mill
 
 Mill turns approved repository-native product intent into a bounded, tested,
