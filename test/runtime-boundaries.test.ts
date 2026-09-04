@@ -520,6 +520,51 @@ describe("runtime authority and repository boundaries", () => {
     }
   });
 
+  it("ignores Codex turn-diff checkpoints but detects ordinary ref drift", async () => {
+    const fixture = await runtimeFixture();
+    const worktree = path.join(
+      fixture.stateHome,
+      "repositories",
+      "fixture-codex-turn-diff",
+      "worktrees",
+      "candidate",
+    );
+    try {
+      const qualified = await qualifyRepositoryForBuild(fixture.root, "HEAD");
+      await createCandidateWorktree(
+        fixture.root,
+        worktree,
+        qualified.baseCommit,
+        "fixture",
+        "12345678-1234-4234-8234-123456789012",
+      );
+      const snapshot = await captureGitControlState(worktree);
+      await git(worktree, [
+        "update-ref",
+        "refs/codex/turn-diffs/checkpoints/example",
+        qualified.baseCommit,
+      ]);
+      await expect(assertGitControlState(worktree, snapshot)).resolves.toBe(
+        undefined,
+      );
+      await git(worktree, [
+        "update-ref",
+        "refs/heads/unrelated-control-drift",
+        qualified.baseCommit,
+      ]);
+      await expect(
+        assertGitControlState(worktree, snapshot),
+      ).rejects.toMatchObject({ code: "GIT_CONTROL_DRIFT" });
+    } finally {
+      try {
+        await removeCandidateWorktree(fixture.root, worktree);
+      } catch {
+        // Worktree creation may have failed before registration.
+      }
+      await fixture.cleanup();
+    }
+  });
+
   it("blocks failed, host-only, and unsafe-directory validation commands", async () => {
     const fixture = await runtimeFixture();
     process.env.MILL_DOCKER_PATH = fixture.dockerPath;

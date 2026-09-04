@@ -1,0 +1,33 @@
+schemaVersion: "1"
+id: mill-brownfield-git-control-repair
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: git-control-snapshot
+    kind: system
+    change: >-
+      Preserve Git control-state drift detection while excluding only Codex
+      Desktop's non-delivery turn-diff checkpoint refs from its ref digest.
+  - id: draft-delivery-canary
+    kind: interface
+    change: >-
+      Record the narrowly scoped diagnostic-ref exclusion and retained branch,
+      tag, remote, configuration, and candidate identity checks.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T19:54:53Z"
+  proposalDigest: sha256:788d027e4ec370415e70684f70b2deea8d68e300d9d1467948c0849553c939ff

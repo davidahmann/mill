@@ -80,7 +80,12 @@ export async function captureGitControlState(
     await git(worktree, ["for-each-ref", "--format=%(refname)%09%(objectname)"])
   )
     .split("\n")
-    .filter((line) => line.length > 0 && !line.startsWith(`${currentRef}\t`))
+    .filter(
+      (line) =>
+        line.length > 0 &&
+        !line.startsWith(`${currentRef}\t`) &&
+        !line.startsWith("refs/codex/turn-diffs/"),
+    )
     .sort()
     .join("\n");
   return {
