@@ -7,5 +7,5 @@ coverage/
 !.env.example
 *.log
 .mill/
+.mill-scratch/
 TEMP_MILL_GREENFIELD_WORK_PLAN_*.md
-

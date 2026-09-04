@@ -1,0 +1,99 @@
+schemaVersion: "1"
+repositoryId: 889e67bd-0768-4f73-9e18-286f2fb8b5f3
+trustCeiling: propose
+sensitivePaths: [".env", ".npmrc", ".mill/**"]
+propose:
+  forge: github
+  host: github.com
+  owner: davidahmann
+  repository: mill
+  repositoryNodeId: R_kgDOUJyEZw
+  remoteName: origin
+  baseBranch: main
+  branchPrefix: mill/
+  allowedActors: [davidahmann]
+  allowedMergerLogins: [davidahmann]
+  requiredChecks: [validate, dependency-review, codeql]
+  reviewPolicy:
+    mode: local_only
+    requiredReviewerLogins: []
+  allowedMergeMethods: [linear_tree_preserving]
+  approvalTtlSeconds: 900
+  pollTimeoutSeconds: 600
+verifier:
+  image: local/mill-maintainer-bootstrap@sha256:cb36daaac8d15771dafbbe32dacbc9e630c7f5a72cb7f690dc9e08254af9cb51
+  network: none
+  dependencies:
+    manager: npm
+    registry: https://registry.npmjs.org
+    targetPath: node_modules
+    lockPaths: [package.json, package-lock.json]
+commands:
+  check:
+    executableFixtureScratch: true
+    argv:
+      [/usr/local/bin/node, scripts/maintainer-verifier/run-native.mjs, check]
+    cwd: .
+    controlPaths:
+      [
+        package.json,
+        package-lock.json,
+        scripts/**,
+        test/**,
+        vitest.config.ts,
+        tsconfig.json,
+        tsconfig.build.json,
+        eslint.config.js,
+        .prettierignore,
+        .prettierrc.json,
+      ]
+    capability: test
+    required: true
+    timeoutSeconds: 1200
+    execution: oci
+    writablePaths: [dist, coverage, .mill-scratch]
+  test:coverage:
+    executableFixtureScratch: true
+    argv:
+      [
+        /usr/local/bin/node,
+        scripts/maintainer-verifier/run-native.mjs,
+        test:coverage,
+      ]
+    cwd: .
+    controlPaths:
+      [
+        package.json,
+        package-lock.json,
+        scripts/maintainer-verifier/**,
+        test/**,
+        vitest.config.ts,
+        tsconfig.json,
+      ]
+    capability: test
+    required: true
+    timeoutSeconds: 600
+    execution: oci
+    writablePaths: [dist, coverage, .mill-scratch]
+  test:package:
+    executableFixtureScratch: true
+    argv:
+      [
+        /usr/local/bin/node,
+        scripts/maintainer-verifier/run-native.mjs,
+        test:package,
+      ]
+    cwd: .
+    controlPaths:
+      [
+        package.json,
+        package-lock.json,
+        scripts/**,
+        tsconfig.build.json,
+        tsconfig.json,
+      ]
+    capability: package
+    required: true
+    timeoutSeconds: 600
+    execution: oci
+    writablePaths: [dist, coverage, .mill-scratch]

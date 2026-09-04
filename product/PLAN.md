@@ -4,6 +4,14 @@ Status: public-alpha scope complete
 
 Owner: David Ahmann
 
+Brownfield discovery is the next approved bounded increment. It adds only
+read-only TypeScript source evidence and conservative change leads; it does not
+expand the public-alpha adoption recipe or delivery authority. Its contract,
+impact, and local fixture evaluation are recorded in
+`product/brownfield-discovery.md`, `product/impacts/BROWNFIELD_DISCOVERY.yaml`,
+`product/brownfield-contract.yaml`, `quality/brownfield-scenarios.yaml`, and
+`docs/canaries/brownfield-discovery.md`.
+
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
 2. **Local delivery:** durable state, disposable worktree, bounded Codex build,

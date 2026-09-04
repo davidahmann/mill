@@ -1,0 +1,29 @@
+schemaVersion: "1"
+id: mill-brownfield-draft-delivery-format-repair
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: draft-delivery-canary-format
+    kind: interface
+    change: >-
+      Normalize only the committed brownfield draft-delivery canary formatting
+      so the required native formatter preserves its delivery and recovery
+      assertions exactly.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage]
+materialDecisions: []
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T19:38:24Z"
+  proposalDigest: sha256:93e9e774e7267e2e28aa06d3bfb29b7695fdfbcf13cc8592463ea99210d3bb7a

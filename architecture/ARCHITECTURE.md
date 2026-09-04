@@ -9,6 +9,30 @@ CLI and stable JSON result envelopes. Operational state uses Node's SQLite API;
 durable product truth remains in Git. V1 runs one attended control-plane process
 and exits to resumable state for long waits—there is no daemon.
 
+## Brownfield repository intelligence
+
+`discover` is a deterministic, derived-evidence boundary beside—not inside—the
+delivery lifecycle. It first rejects a dirty Git tree, sensitive path, symbolic
+link, truncated traversal, unsafe Git configuration, or unsafe changed path. It
+then captures the `HEAD` commit/tree and its regular-file blob identities. It
+reads bounded TypeScript/JavaScript files and package metadata through the
+existing safe-path reader and derives evidence only when the physical bytes
+match the captured blobs. A final `HEAD` check rejects a concurrent identity
+change. The report binds extractor identity and the Git commit/tree, preserves
+import source locations, marks external, unresolved, and nonliteral
+relationships, separates static test inventory and literal selector matches from
+unknown executed coverage, and traverses reverse local imports for conservative
+direct/transitive change leads. Recursive glob selectors and option-bearing test
+commands remain unknown unless a future extractor explicitly supports them.
+
+The command uses Git only for read-only identity/status queries after static
+configuration screening; it does not invoke a package manager, model, target
+command, hook, watcher, graph service, or write path. A report is stale when its
+source or extractor identity differs, and its `derived_read_only` authority
+cannot approve a task, skip a native gate, or cause a PR, merge, release, or
+other effect. The output is an orientation and review artifact, not arbitrary
+stack support or proof of runtime behavior.
+
 ## Boundaries
 
 The implemented Wave 3 boundary is:
@@ -147,6 +171,18 @@ and exposes only declared comma-free top-level scratch directories as bounded
 tmpfs. This preserves a read-only candidate while supporting framework and
 browser outputs. Nested scratch paths, occupied mount targets, symbolic links,
 unsupported entries, and ambiguous comma-bearing entry names fail closed.
+
+OCI test/package commands may explicitly grant `executableFixtureScratch: true`.
+Only that grant adds the fixed `/mill-fixtures` tmpfs outside the repository:
+256 MiB, executable, nosuid and nodev, with the same non-root container
+identity, network denial, resource bounds and unconditional lifecycle cleanup.
+The opted-in container uses Docker's init process to reap orphaned fixture
+children; default commands retain their existing process setup. It grants no
+host bind, source/dependency write or arbitrary mount path. Default commands
+receive no such mount; their existing noexec scratch posture is unchanged. The
+command configuration is part of baseline/context authority, so adding the grant
+invalidates prior approvals. Temporary repositories must stay outside the source
+checkout to avoid inheriting its Git and package context.
 
 The founder commands are coordinators, not new state machines. `run next`
 resolves exactly one ready outcome and calls the existing run boundary. `start`

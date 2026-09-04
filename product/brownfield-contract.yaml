@@ -1,0 +1,134 @@
+schemaVersion: "1"
+id: mill-brownfield-discovery
+title: Mill brownfield discovery
+primaryUser: Founder-maintainer reviewing a clean existing TypeScript repository
+jobToBeDone:
+  Derive conservative, source-linked static context before assigning a bounded
+  delivery task.
+outcomes:
+  - id: OUT-BROWNFIELD-DISCOVERY
+    statement:
+      A maintainer can derive conservative static context from one clean
+      TypeScript repository.
+    acceptanceIds:
+      - ACC-BFD-001
+      - ACC-BFD-002
+      - ACC-BFD-003
+      - ACC-BFD-004
+      - ACC-BFD-005
+      - ACC-BFD-006
+      - ACC-BFD-007
+      - ACC-BFD-008
+nonGoals:
+  - Graph database, graph service, watcher, or retrieval index
+  - Model-generated domain map or arbitrary-stack adapter
+  - Target dependency installation, code execution, source mutation, or delivery
+    authority
+assumptions:
+  - The selected source repository is a clean exact Git worktree.
+  - A TypeScript/JavaScript static map is useful orientation evidence but not
+    runtime proof.
+unknowns:
+  - Generalized retrofit behavior remains unqualified.
+  - Static mapping does not establish behavioral coverage or operational
+    ownership.
+sourceRefs: [SRC-BROWNFIELD-INTENT]
+acceptance:
+  - id: ACC-BFD-001
+    kind: functional
+    statement:
+      Identical clean source, extractor identity, and input paths produce
+      identical canonical source-linked repository evidence.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-002
+    kind: quality
+    statement:
+      A source commit/tree or extractor identity change makes prior repository
+      evidence stale.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-003
+    kind: operational
+    statement:
+      Discovery fails closed for unsafe source inputs and reports unresolved
+      static relationships explicitly.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-004
+    kind: operational
+    statement:
+      Discovery is read-only and grants no task, delivery, merge, or release
+      authority.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-005
+    kind: functional
+    statement:
+      Change results preserve direct and transitive importer leads while never
+      proving unaffectedness from absence.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-006
+    kind: quality
+    statement:
+      Static test inventory and declared selection remain distinct from unknown
+      executed coverage.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-007
+    kind: quality
+    statement:
+      The installed package exposes the same bounded discovery command and
+      schema.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+  - id: ACC-BFD-008
+    kind: operational
+    statement:
+      The pinned JSON Server fixture is inspected only at its exact clean
+      commit/tree without a support claim.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+invariants:
+  - id: INV-HUMAN-AUTHORITY
+    statement:
+      Only the configured human authority approves consequential ambiguity and
+      merge.
+    owner: maintainer
+    criticality: critical
+    surfaceRefs: [planning, github-delivery]
+    verification:
+      mode: human
+      ref: exact-approval-and-merge-readback
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+    unknowns: []
+  - id: INV-EXACT-EVIDENCE
+    statement:
+      Required evidence binds the approved inputs and exact candidate or
+      resulting main commit.
+    owner: mill-runtime
+    criticality: critical
+    surfaceRefs: [planning, validation, review, delivery]
+    verification:
+      mode: command
+      ref: test:coverage
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+    unknowns: []
+  - id: INV-DOWNSTREAM-INDEPENDENT
+    statement: A generated or adopted repository remains operable without Mill.
+    owner: downstream-maintainer
+    criticality: high
+    surfaceRefs: [repository-pack]
+    verification:
+      mode: command
+      ref: test:package
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+    unknowns: []
+decisions:
+  - id: DEC-BROWNFIELD-INSPECT
+    kind: architecture
+    question:
+      What brownfield capability is sufficient for the first supported
+      increment?
+    decision:
+      Use a deterministic, read-only TypeScript compiler-API extractor that
+      returns source-revision-bound evidence and conservative importer leads.
+    rationale:
+      It improves repository orientation and change review without adding a
+      database, watcher, model, execution, or authority surface.
+    sourceRefs: [SRC-BROWNFIELD-INTENT]
+    status: approved
+    costlyToReverse: false

@@ -1,0 +1,28 @@
+schemaVersion: "1"
+id: mill-brownfield-git-control-final-format-repair
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: git-control-final-format-repair
+    kind: operations
+    change: >-
+      Requalify the Markdown-formatted Git-control delivery record before a
+      fresh exact draft-delivery proposal.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage, check]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T20:11:12Z"
+  proposalDigest: sha256:dfebfe8ae40cccb594f60abc51761d94352d11e6ca10b00d2119ae1c458cd0e5

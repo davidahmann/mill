@@ -23,6 +23,46 @@ The repository enforces these native gates:
 Do not replace native commands with a Mill- or Factory-only runner. CI invokes
 the same definitions.
 
+The maintainer-only `mill.yaml` delegates to those same scripts in the exact
+offline OCI image. Read `docs/canaries/maintainer-verifier.md` for its bootstrap
+status, separate dependency preparation, source/dependency immutability and
+scratch limits. It is not a new supported downstream stack. Cleanup retains
+generated output roots so they can be mounted scratch directories; Vitest's
+native config loader and cache/report locations avoid writing into dependencies.
+
+The optional command field `executableFixtureScratch: true` is permitted only
+for OCI `test` and `package` commands. It provides fixed `/mill-fixtures`
+scratch (256 MiB, exec/nosuid/nodev); set temporary fixture paths there
+explicitly. Omitting the field preserves default noexec containment. It is an
+authority change that requires requalification, not a workaround that a builder
+may add to its own command controls. All source/dependency mounts remain
+read-only and verification remains offline. The maintainer runner keeps its
+writable npm cache separate and places temporary repositories outside
+`/workspace`. The explicit fixture grant also enables Docker's init process to
+reap orphaned test children without changing the default command process setup.
+
+## Brownfield discovery development
+
+`src/repository/intelligence.ts` is a deterministic static extractor. Keep it
+read-only: use the safe-path reader for source bytes, maintain fixed traversal
+and byte budgets, and verify every parsed source file and package manifest
+against its blob in the captured clean `HEAD` tree. Preserve explicit
+unresolved/external classifications, including nonliteral module loads, and
+treat option-bearing test commands as unknown rather than partially interpreting
+their arguments. Do not add dependency installation, target execution, model
+calls, watches, or a write-side graph store. The TypeScript compiler API is an
+exact runtime dependency because the installed package parses the target source
+itself. It is bundled into Mill's packed artifact so the offline packed-package
+canary can exercise discovery without an unqualified registry fetch.
+
+The evaluator in `test/repository-intelligence.test.ts` owns repeatability,
+freshness, source-path containment, unresolved-import, no-execution, and
+importer-lead cases. `scripts/test-package.mjs` installs the packed tarball and
+exercises the public command against a clean disposable Git repository. The
+attended JSON Server check is external fixture evidence in
+`docs/canaries/brownfield-discovery.md`; do not vendor or execute that source
+without a new approved scope.
+
 ## Testing matrix
 
 Only applicable tiers are active. A skipped required lane blocks promotion.

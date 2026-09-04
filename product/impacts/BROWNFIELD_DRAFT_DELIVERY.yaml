@@ -1,0 +1,33 @@
+schemaVersion: "1"
+id: mill-brownfield-draft-delivery
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: github-delivery-policy
+    kind: operations
+    change: >-
+      Bind the attended draft-only delivery path to the exact Mill repository,
+      main branch, current operator, protected checks, and short-lived approval.
+  - id: draft-delivery-scenario
+    kind: system
+    change: >-
+      Add the repository-owned scenario that makes unchanged-candidate delivery,
+      recovery, and worker least authority explicit.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T19:28:47Z"
+  proposalDigest: sha256:71d8c0667ecfa6169ab473ce0afd830ea2daaa6167e9a541731ab7b446b6a0ae

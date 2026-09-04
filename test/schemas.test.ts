@@ -439,6 +439,48 @@ const samples = {
     networkDisclosure: ["HTTPS package installation"],
     baseline: "unverified",
   },
+  repositoryIntelligence: {
+    schemaVersion: "1",
+    extractor: {
+      id: "mill.repository-intelligence",
+      version: "1",
+      digest,
+    },
+    source: { commit: "a".repeat(40), tree: "b".repeat(40), root: "." },
+    scanDigest: digest,
+    sourceFiles: ["src/index.ts"],
+    modules: [
+      {
+        path: "src/index.ts",
+        digest,
+        imports: [
+          {
+            kind: "static",
+            specifier: "./value.js",
+            location: { path: "src/index.ts", line: 1, column: 1 },
+            resolution: "resolved_local",
+            targetPath: "src/value.ts",
+          },
+        ],
+        parseDiagnostics: [],
+      },
+    ],
+    tests: {
+      inventory: [],
+      declaredSelection: [],
+      executedCoverage: "unknown",
+    },
+    changeImpact: [
+      {
+        changedPath: "src/value.ts",
+        leads: [{ path: "src/value.ts", relationship: "changed" }],
+        unknowns: [],
+      },
+    ],
+    unknowns: ["runtime_behavior_not_executed"],
+    digest,
+    authority: "derived_read_only",
+  },
   auditReport: {
     schemaVersion: "1",
     candidate: { commit: "a".repeat(40), tree: "b".repeat(40) },
@@ -554,6 +596,7 @@ const schemaFiles = {
   productContract: "product-contract.schema.json",
   publicAlphaQualification: "public-alpha-qualification.schema.json",
   recipeManifest: "recipe-manifest.schema.json",
+  repositoryIntelligence: "repository-intelligence.schema.json",
   releaseEvidence: "release-evidence.schema.json",
   repositoryIntegrationPlan: "repository-integration-plan.schema.json",
   specificationProposal: "specification-proposal.schema.json",

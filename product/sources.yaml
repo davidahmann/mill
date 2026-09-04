@@ -20,6 +20,16 @@ providers:
       HTTPS search and reads of the disclosed Node.js, Next.js, and React
       official documentation on 2026-09-02; no package installation or
       repository command execution occurred during research.
+  - id: owner-approved-brownfield-intent
+    name: Owner-approved brownfield delivery intent
+    queries:
+      - id: Q-BROWNFIELD-BOUNDARY
+        text:
+          bounded deterministic repository intelligence for brownfield codebases
+        purpose: freeze the requested first increment and its non-goals
+    networkDisclosure: >-
+      No network access. The owner supplied and approved the repository-native
+      intent record on 2026-09-04.
 sources:
   - id: SRC-PRD
     class: user_evidence
@@ -69,3 +79,15 @@ sources:
     authority: evidence
     claims:
       - React 19.2 is the current documented stable family.
+  - id: SRC-BROWNFIELD-INTENT
+    class: user_evidence
+    uri: product/brownfield-discovery.md
+    revision: sha256:a5be997af4b8259e4e8a72e6a936e5c374c313cde6ebcf1a71fe316be7d09721
+    observedAt: "2026-09-04T13:10:00.000Z"
+    freshness: current
+    authority: approved_decision
+    claims:
+      - The owner approved one deterministic, read-only brownfield intelligence
+        increment.
+      - Derived repository evidence cannot grant delivery, merge, or release
+        authority.

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1",
+  "id": "mill-maintainer-verifier-bootstrap",
+  "productContractDigest": "sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea",
+  "outcomeId": "OUT-PRODUCT-CONTINUITY",
+  "riskClass": "high",
+  "acceptanceIds": ["ACC-CONTINUITY", "ACC-TRUTHFUL-RECOVERY"],
+  "affectedInvariantIds":
+    [
+      "INV-HUMAN-AUTHORITY",
+      "INV-EXACT-EVIDENCE",
+      "INV-WORKER-LEAST-AUTHORITY",
+      "INV-DOWNSTREAM-INDEPENDENT",
+    ],
+  "uncertainInvariantIds": [],
+  "surfaces":
+    [
+      {
+        "id": "maintainer-verifier",
+        "kind": "operations",
+        "change":
+          "Introduce an exact local maintainer-only image and bounded offline
+          cache/scratch preparation; do not widen downstream support.",
+      },
+      {
+        "id": "native-command-controls",
+        "kind": "system",
+        "change":
+          "Adapt native config loading, generated output paths and cleanup for
+          read-only verification while preserving existing assertions and
+          thresholds.",
+      },
+      {
+        "id": "executable-fixture-scratch",
+        "kind": "system",
+        "change":
+          "MB-001-A1 authorizes an additive explicit OCI test/package command
+          grant for one fixed 256 MiB executable tmpfs outside the repository;
+          preserve default containment, source/dependency immutability, offline
+          verification and all prior test oracles.",
+      },
+      {
+        "id": "bootstrap-authority",
+        "kind": "operations",
+        "change":
+          "Use the separately approved MB-001 native bootstrap exception once,
+          then restore normal version-2 runtime admission and exact baseline
+          approvals.",
+      },
+    ],
+  "scenarioIds":
+    [
+      "SCN-CONTINUITY",
+      "SCN-TRUNCATED-WORKER",
+      "SCN-ADOPTION-CONFLICT",
+      "SCN-READONLY-WEB-RECIPE",
+      "SCN-FOUNDER-RESUME",
+    ],
+  "commandIds": ["test:coverage", "test:package"],
+  "materialDecisions": [],
+  "unresolved": [],
+  "exceptions": [],
+  "approval":
+    {
+      "approvedBy": "davidahmann",
+      "approvedAt": "2026-09-03T23:54:25.000Z",
+      "proposalDigest": "sha256:d18e45d43963f955c7aee05a871aa4f7fb8f98db926fda56a21e45d8e3d8440b",
+    },
+}

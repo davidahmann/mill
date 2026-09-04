@@ -24,6 +24,10 @@ const definitions = {
     "PublicAlphaQualification",
   ],
   recipeManifest: ["recipe-manifest.schema.json", "RecipeManifest"],
+  repositoryIntelligence: [
+    "repository-intelligence.schema.json",
+    "RepositoryIntelligence",
+  ],
   releaseEvidence: ["release-evidence.schema.json", "ReleaseEvidence"],
   repositoryIntegrationPlan: [
     "repository-integration-plan.schema.json",

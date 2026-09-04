@@ -1,0 +1,28 @@
+schemaVersion: "1"
+id: mill-brownfield-git-control-requalification
+productContractDigest: sha256:248dcec81cbe616a0899b246ea9d768f3bc5ae270484ff451fe01fbf9d36e3ea
+outcomeId: OUT-REVIEWED-DRAFT
+riskClass: high
+acceptanceIds:
+  - ACC-REVIEWED-DRAFT
+  - ACC-TRUTHFUL-RECOVERY
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+uncertainInvariantIds: []
+surfaces:
+  - id: git-control-delivery-requalification
+    kind: operations
+    change: >-
+      Requalify the formatted Git-control recovery record with full native
+      verification before a fresh exact draft-delivery proposal.
+scenarioIds: [SCN-DRAFT-DELIVERY]
+commandIds: [test:coverage, check]
+materialDecisions: [DEC-OPERATOR-SESSIONS]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T20:02:49Z"
+  proposalDigest: sha256:f26487cb363ee228da5ee4a6e63af256fd6526553dfaa55534b7a446c26227d0

@@ -5,7 +5,11 @@ export {
   canonicalJson,
   type JsonValue,
 } from "./contracts/canonical.js";
-export { contractSchemas, type ContractKind } from "./contracts/schemas.js";
+export {
+  contractSchemas,
+  repositoryIntelligenceSchema,
+  type ContractKind,
+} from "./contracts/schemas.js";
 export {
   doctor,
   doctorReady,
@@ -54,6 +58,20 @@ export {
   type RepositoryIntegrationPlan,
 } from "./repository/integration.js";
 export { scanRepository, type RepositoryScan } from "./repository/scan.js";
+export {
+  assessDiscoveryFreshness,
+  discoverRepository,
+  type ChangeImpact,
+  type ChangeLead,
+  type DiscoverRepositoryInput,
+  type DiscoveryFreshness,
+  type ImportObservation,
+  type ModuleObservation,
+  type RepositoryIntelligence,
+  type SourceLocation,
+  type TestInventoryEntry,
+  type TestSelection,
+} from "./repository/intelligence.js";
 export {
   dependencySnapshotDirectory,
   prepareDependencySnapshot,

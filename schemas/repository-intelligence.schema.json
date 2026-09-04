@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "extractor": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "const": "mill.repository-intelligence" },
+        "version": { "type": "string", "const": "1" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "required": ["id", "version", "digest"],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "root": { "type": "string", "const": "." }
+      },
+      "required": ["commit", "tree", "root"],
+      "additionalProperties": false
+    },
+    "scanDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "sourceFiles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "imports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["dynamic", "require", "static", "type"]
+                },
+                "specifier": { "type": "string", "minLength": 1 },
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string", "minLength": 1 },
+                    "line": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "column": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["path", "line", "column"],
+                  "additionalProperties": false
+                },
+                "resolution": {
+                  "type": "string",
+                  "enum": ["external", "resolved_local", "unresolved"]
+                },
+                "targetPath": { "type": "string", "minLength": 1 }
+              },
+              "required": ["kind", "specifier", "location", "resolution"],
+              "additionalProperties": false
+            }
+          },
+          "parseDiagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "line": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "column": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["path", "line", "column"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["path", "digest", "imports", "parseDiagnostics"],
+        "additionalProperties": false
+      }
+    },
+    "tests": {
+      "type": "object",
+      "properties": {
+        "inventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "const": "filename" }
+            },
+            "required": ["path", "source"],
+            "additionalProperties": false
+          }
+        },
+        "declaredSelection": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "script": { "type": "string", "minLength": 1 },
+              "command": { "type": "string", "minLength": 1 },
+              "selector": { "type": "string", "minLength": 1 },
+              "matchedInventory": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "status": { "type": "string", "enum": ["observed", "unknown"] }
+            },
+            "required": [
+              "script",
+              "command",
+              "selector",
+              "matchedInventory",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "executedCoverage": { "type": "string", "const": "unknown" }
+      },
+      "required": ["inventory", "declaredSelection", "executedCoverage"],
+      "additionalProperties": false
+    },
+    "changeImpact": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "changedPath": { "type": "string", "minLength": 1 },
+          "leads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "relationship": {
+                  "type": "string",
+                  "enum": ["changed", "direct_importer", "transitive_importer"]
+                },
+                "via": { "type": "string", "minLength": 1 }
+              },
+              "required": ["path", "relationship"],
+              "additionalProperties": false
+            }
+          },
+          "unknowns": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "required": ["changedPath", "leads", "unknowns"],
+        "additionalProperties": false
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "authority": { "type": "string", "const": "derived_read_only" }
+  },
+  "required": [
+    "schemaVersion",
+    "extractor",
+    "source",
+    "scanDigest",
+    "sourceFiles",
+    "modules",
+    "tests",
+    "changeImpact",
+    "unknowns",
+    "digest",
+    "authority"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/repository-intelligence.schema.json",
+  "title": "RepositoryIntelligence"
+}
