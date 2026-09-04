@@ -1,0 +1,46 @@
+schemaVersion: "1"
+id: mill-brownfield-discovery-acceptance
+productContractDigest: sha256:c34129bb84eba63026d0c698a69db19145d667e09a21990470a62137b8679248
+outcomeId: OUT-BROWNFIELD-DISCOVERY
+riskClass: high
+acceptanceIds:
+  - ACC-BFD-001
+  - ACC-BFD-002
+  - ACC-BFD-003
+  - ACC-BFD-004
+  - ACC-BFD-005
+  - ACC-BFD-006
+  - ACC-BFD-007
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: frozen-discovery-regression-oracles
+    kind: system
+    change: >-
+      Freeze independent regression coverage for hidden physical source-byte
+      drift, nonliteral module loads, and option-bearing test commands before
+      requalifying the repaired source boundary.
+  - id: brownfield-regression-canary
+    kind: interface
+    change: >-
+      Record a maintainer-facing local canary that explains the bounded
+      regression evidence without expanding support or delivery authority.
+scenarioIds:
+  - SCN-BFD-001
+  - SCN-BFD-002
+  - SCN-BFD-003
+  - SCN-BFD-004
+  - SCN-BFD-005
+  - SCN-BFD-006
+  - SCN-BFD-007
+commandIds: [test:coverage, test:package]
+materialDecisions: [DEC-BROWNFIELD-INSPECT]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T18:51:53.628Z"
+  proposalDigest: sha256:a3d182a6e5fea7f54d4fb88d385f90032734ebf73aad1e75be043e837bf9fa70
