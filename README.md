@@ -12,7 +12,9 @@ attended shipper can use your GitHub identity, and it stops at a draft PR.
 
 Mill `0.1.5` is the first qualified public alpha. It is available from npm and
 as a GitHub prerelease with provenance, an SBOM, exact-artifact qualification,
-and registry and GitHub readback evidence.
+and registry and GitHub readback evidence. The source package identity is now
+prepared as `0.1.6`; this task does not establish release qualification or
+publication for that version.
 
 ## Why Mill
 
@@ -252,15 +254,20 @@ required checks prevent completion; skipped or failed required checks fail the
 phase that requires them.
 
 In this repository, `dependency-review` runs only for pull requests, while
-`validate` and `codeql` also run on pushes to `main`. The frozen `mill.yaml`
-still requires all three and does not configure the optional subset. A separate
-approved policy task is needed to opt into `validate` and `codeql` for
-resulting-main readback while keeping all three PR checks. This documentation
-change does not unblock an existing delivery or change the published release.
-See [repository settings](docs/repository-settings.md) and the
-[check-contract canary](docs/canaries/post-merge-check-contract.md) for the
-bounded legacy recovery path and the recorded closure blocker. Human readiness,
-merge authority, and exact candidate/tree checks remain required.
+`validate` and `codeql` also run on pushes to `main`. The maintainer-prepared
+`mill.yaml` requires all three at the exact PR head and explicitly selects
+`[validate, codeql]` for resulting-main readback.
+
+New delivery records identify the policy source as `configured` or
+`implicit_default`. A historical record with a full defaulted list and no
+provenance can bind the configured subset once only if its exact reviewed
+candidate proves omission of the optional policy and authoritative merge
+readback establishes every other delivery identity. That compatibility path
+cannot relax a new delivery. See [repository settings](docs/repository-settings.md)
+and the [migration record](docs/canaries/post-merge-default-policy-migration.md)
+for the conditions and outstanding live evidence for delivery
+`01801a1b-58f9-480f-8cee-54ea2bbeabb2`. Human readiness, merge authority, and
+exact candidate/tree checks remain required.
 
 ## Trust model
 

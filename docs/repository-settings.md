@@ -37,31 +37,33 @@ dependency-review requirement.
 
 The source implementation supports optional `propose.postMergeRequiredChecks`
 for the resulting-main phase. It must be nonempty and a subset of
-`requiredChecks`; omitting it requires the full PR list after merge too. A
-future, separately approved policy change for this repository could set:
+`requiredChecks`; omitting it requires the full PR list after merge too. The
+maintainer-prepared [mill.yaml](../mill.yaml) now configures:
 
 ```yaml
-# Proposed fields under propose; not the current frozen mill.yaml policy.
+# Fields under propose in the frozen configuration.
 requiredChecks: [validate, dependency-review, codeql]
 postMergeRequiredChecks: [validate, codeql]
 ```
 
-The current [mill.yaml](../mill.yaml) remains a frozen runtime control and has
-no `postMergeRequiredChecks` field. Do not apply the example during an approved
-builder run or remove `dependency-review` from branch protection to bypass
-closure. New delivery plans bind both effective lists to exact approval and
-persist them. A skipped required check fails its phase; missing and pending
-checks prevent completion.
+New delivery plans bind both effective lists to exact approval and persist the
+policy source as `configured` or `implicit_default`. A skipped required check
+fails its phase; missing and pending checks prevent completion. Keep all three
+PR requirements in branch protection. This resulting-main policy changes no
+workflow event or branch-protection setting.
 
-A legacy merged delivery without the second list has only the bounded local
-binding described in the
-[development guide](development.md#delivery-check-contract). It requires
-authoritative merge, identity and tree readback, unchanged original PR
-requirements, and a subset drawn from those original requirements. It grants no
-remote mutation or human merge authority. The
-[canary record](canaries/post-merge-check-contract.md) explains why the current
-policy still blocks closure and distinguishes regression fixtures from live
-recovery evidence.
+Historical merged deliveries have the bounded local binding described in the
+[development guide](development.md#delivery-check-contract). The prepared
+migration additionally covers a full defaulted list without policy provenance,
+only when the exact reviewed candidate proves the optional field was omitted.
+It requires authoritative merge, identity and tree readback, unchanged original
+PR requirements, and a nonempty subset drawn from those requirements. It grants
+no remote mutation or human merge authority. The
+[migration record](canaries/post-merge-default-policy-migration.md) documents
+the conditions for delivery `01801a1b-58f9-480f-8cee-54ea2bbeabb2`; it does not
+claim live closure. The earlier
+[check-contract canary](canaries/post-merge-check-contract.md) retains the
+historical configuration and blocker as evidence of the preceding task.
 
 ## Publication settings
 
