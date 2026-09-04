@@ -31,6 +31,44 @@ attended shipper must verify the actual actor, repository, remote, branch,
 candidate, and current policy when planning and applying delivery. The trust
 ceiling permits an exact scoped proposal; it does not itself approve a push.
 
+## Bounded Codex turn-diff ref handling
+
+The documentation task
+[`mill-brownfield-git-control-repair`](../../product/tasks/brownfield-git-control-repair.yaml)
+records behavior already present in the frozen
+[source](../../src/runtime/repository.ts) and
+[regression oracle](../../test/runtime-boundaries.test.ts). Its starting commit
+is `645cc8dc62f152843fc076cf67902411106d8195`; all eight supplied context-file
+digests matched at builder inspection. This record does not alter that source,
+oracle, or the delivery policy above.
+
+`captureGitControlState` excludes refs beneath the exact
+`refs/codex/turn-diffs/` prefix from its `otherRefs` digest. These Codex Desktop
+turn-diff checkpoints are non-delivery diagnostic refs. The exclusion is not a
+blanket exemption for `refs/codex/` or arbitrary Git metadata. The existing
+exclusion of the current branch's ref entry remains separate: the snapshot
+still records its symbolic branch identity, and exact candidate commit/tree
+checks remain required.
+
+Other branch refs, tags, remote-tracking refs, and refs outside that prefix
+remain in the unrelated-ref digest. Common Git configuration, worktree
+configuration, and `info/attributes` remain separately digested; changes to
+those controls or the recorded branch identity still produce
+`GIT_CONTROL_DRIFT`. Repository safety checks, remote and destination checks,
+frozen authority, and exact candidate validation and review are unchanged.
+Checkpoint tolerance grants no builder permission to mutate Git controls and
+does not authorize accepting a changed candidate or bypassing reconciliation.
+
+The pre-existing regression named “ignores Codex turn-diff checkpoints but
+detects ordinary ref drift” creates
+`refs/codex/turn-diffs/checkpoints/example` and expects the snapshot assertion
+to succeed, then creates `refs/heads/unrelated-control-drift` and expects
+`GIT_CONTROL_DRIFT`. The adjacent control-plane regression expects local Git
+configuration mutation to fail. These are descriptions of frozen assertions,
+not a claim that this documentation task has executed them or proved live
+recovery. Authoritative validation and independent exact-candidate review
+remain lifecycle responsibilities; both acceptance items below remain pending.
+
 ## Acceptance and human authority
 
 The frozen [task](../../product/tasks/brownfield-draft-delivery.yaml) binds
