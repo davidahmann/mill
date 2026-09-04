@@ -36,3 +36,80 @@ This evidence confirms extraction behavior under a real clean TypeScript
 repository. It does not claim that JSON Server is compatible with Mill's
 adoption recipe, that its tests pass, or that a static graph proves runtime
 behavior or delivery safety.
+
+## Frozen regression requalification
+
+Task: `mill-brownfield-discovery-acceptance`. This documentation-only builder
+pass records the frozen regression boundary; authoritative execution results
+remain pending lifecycle validation. The JSON Server observation above is
+retained historical evidence, not a rerun against the repaired extractor.
+
+The inspected clean starting commit was
+`36bcb9f63fb71f28b7e819cfce3dd028ab803b96`, tree
+`4f3fa17c1351a6f4d70e09b5a0ae7d40067448fd`. The extractor
+`src/repository/intelligence.ts` is byte-for-byte unchanged from repair commit
+`d03247d63b5588e6145a6da8de1a6b3f5d4744da`. Regression commit
+`cf4f11e626fd2da979f4f88d31fb31dc389e286e` added the independent assertions
+before this task's starting commit. Observed SHA-256 file digests are:
+
+- `src/repository/intelligence.ts`:
+  `5754a389ad346378300bd7352b746cc37dcc48d23d8b870659dc7a7d3625a3ec`
+- `test/repository-intelligence.test.ts`:
+  `5ab6d8448522b8f423b52dce02ab1c4b221ce61a674c9126ce30ad30147b3f07`
+- `scripts/test-package.mjs`:
+  `f3a6d3ffd72eca43b2e5927c235fc2be2fed887539c2fba34dd472c70828728a`
+
+These identities establish preservation, not passing test results. The builder
+changed no source, test oracle, task, impact, or command definition.
+
+### Regression expectations
+
+The frozen repository-intelligence tests require discovery to reject modified
+physical source bytes hidden by Git's `assume-unchanged` flag with
+`DISCOVERY_COMMITTED_SOURCE_MISMATCH`. A clean-looking status alone cannot
+attribute those bytes to the captured commit/tree.
+
+They also require nonliteral `import(imported)` and `require(required)` loads
+to remain `unresolved`, with `nonliteral_specifier`, rather than guessing their
+targets. The option-bearing command
+`vitest run --exclude src/service.test.ts src/*.test.ts` must yield
+`static_selection_unknown`, an empty matched inventory, and status `unknown`.
+That empty selection does not prove that no tests run.
+
+The acceptance-to-command mapping remains:
+
+- ACC-BFD-001 and ACC-BFD-002: `test:coverage` checks repeatable source-linked
+  evidence and stale source/extractor identities.
+- ACC-BFD-003 and ACC-BFD-004: `test:coverage` checks unsafe-source rejection,
+  explicit unresolved relationships, and derived read-only reporting.
+- ACC-BFD-005 and ACC-BFD-006: `test:coverage` checks direct/transitive importer
+  leads, unknown unobserved paths, and the separation of test inventory,
+  declared selection, and unknown executed coverage.
+- ACC-BFD-007: `test:package` exercises the installed CLI's discovery envelope,
+  changed-path reporting, read-only authority, and unknown executed coverage,
+  alongside package export checks.
+
+All seven acceptance results remain pending authoritative command evidence for
+the lifecycle-owned candidate. Reading assertions does not close acceptance.
+
+### Builder checks and limits
+
+Read-only checks confirmed the six approved context-file digests, a clean
+starting worktree, and no extractor diff from the preserved repair. Node.js
+24.20.0 was located through `asdf which node`, but this builder worktree has
+neither `node_modules/.bin/vitest` nor `dist/cli.js`. No test suite, package
+build, dependency installation, or external fixture discovery was attempted.
+Red-first execution is deferred because this task changes only this record and
+the regression oracles were already frozen before builder admission.
+
+The lifecycle must run the declared `test:coverage` and `test:package` commands
+and required native validation against its exact committed candidate. This
+record supplies no baseline approval digest, passing qualification, review,
+audit, or delivery approval. Missing or failed required evidence still blocks
+promotion.
+
+Discovery remains static orientation evidence. Neither these regressions nor
+the retained JSON Server observation authorize target dependency installation,
+target execution, repository mutation, a task, PR, merge, or release. They add
+no supported runtime tuple or adoption compatibility claim, and introduce no
+Mill dependency into the downstream repository.
