@@ -1,0 +1,45 @@
+schemaVersion: "1"
+id: mill-brownfield-discovery-identity-repair
+productContractDigest: sha256:c34129bb84eba63026d0c698a69db19145d667e09a21990470a62137b8679248
+outcomeId: OUT-BROWNFIELD-DISCOVERY
+riskClass: high
+acceptanceIds:
+  - ACC-BFD-001
+  - ACC-BFD-002
+  - ACC-BFD-003
+  - ACC-BFD-004
+  - ACC-BFD-005
+  - ACC-BFD-006
+  - ACC-BFD-007
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: committed-source-bytes
+    kind: system
+    change:
+      Verify the physical bytes of every parsed source and package manifest
+      against the captured HEAD tree blob before deriving evidence.
+  - id: static-uncertainty-reporting
+    kind: interface
+    change:
+      Preserve nonliteral module loads and option-bearing test invocations as
+      explicit unresolved or unknown static evidence.
+scenarioIds:
+  - SCN-BFD-001
+  - SCN-BFD-002
+  - SCN-BFD-003
+  - SCN-BFD-004
+  - SCN-BFD-005
+  - SCN-BFD-006
+  - SCN-BFD-007
+commandIds: [test:coverage, test:package]
+materialDecisions: [DEC-BROWNFIELD-INSPECT]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T18:21:38.000Z"
+  proposalDigest: sha256:27432f14624fedd76ca14637d09fcb27095ce208e04ce172842de4cfa73ac669
