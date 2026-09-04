@@ -264,6 +264,98 @@ describe("repository intelligence", () => {
     }
   });
 
+  it("keeps missing or malformed package metadata unknown and bounds literal script selectors", async () => {
+    const fixture = await repositoryFixture();
+    try {
+      await git(fixture.path, ["rm", "package.json"]);
+      await git(fixture.path, [
+        "-c",
+        "user.name=Mill fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "remove package metadata",
+      ]);
+      expect(
+        (await discoverRepository({ root: fixture.path })).tests
+          .declaredSelection,
+      ).toEqual([]);
+
+      await writeFile(path.join(fixture.path, "package.json"), "not json\n");
+      await git(fixture.path, ["add", "package.json"]);
+      await git(fixture.path, [
+        "-c",
+        "user.name=Mill fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "malformed package metadata",
+      ]);
+      expect(
+        (await discoverRepository({ root: fixture.path })).tests
+          .declaredSelection,
+      ).toEqual([]);
+
+      const command =
+        "vitest run src/service.test.ts src/service.test.ts src/nested/*.test.ts";
+      await writeFile(
+        path.join(fixture.path, "package.json"),
+        JSON.stringify({ scripts: { test: command, ignored: "echo no-op" } }),
+      );
+      await git(fixture.path, ["add", "package.json"]);
+      await git(fixture.path, [
+        "-c",
+        "user.name=Mill fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "literal test selectors",
+      ]);
+      const report = await discoverRepository({
+        root: fixture.path,
+        changedPaths: ["src/math.ts", "src/math.ts"],
+      });
+      expect(report.tests.declaredSelection).toEqual([
+        {
+          script: "test",
+          command,
+          selector: "src/nested/*.test.ts",
+          matchedInventory: ["src/nested/adapter.test.ts"],
+          status: "observed",
+        },
+        {
+          script: "test",
+          command,
+          selector: "src/service.test.ts",
+          matchedInventory: ["src/service.test.ts"],
+          status: "observed",
+        },
+      ]);
+      expect(report.changeImpact).toHaveLength(1);
+      await expect(
+        discoverRepository({ root: fixture.path, changedPaths: ["."] }),
+      ).rejects.toMatchObject({
+        code: "INVALID_CHANGED_PATH",
+      } satisfies Partial<MillError>);
+      await expect(
+        discoverRepository({
+          root: fixture.path,
+          changedPaths: [path.join(fixture.path, "src", "math.ts")],
+        }),
+      ).rejects.toMatchObject({
+        code: "INVALID_CHANGED_PATH",
+      } satisfies Partial<MillError>);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("records dynamic and require edges, static-selector uncertainty, syntax errors, and Git-root boundaries", async () => {
     const fixture = await repositoryFixture();
     const nonRepository = await temporaryDirectory("mill-intelligence-no-git-");
