@@ -26,8 +26,8 @@ The exact configured bounds are:
 - Allowed merge method classification: `linear_tree_preserving`.
 - Delivery approval TTL: 900 seconds; polling timeout: 600 seconds.
 
-These are configured identities and requirements, not live GitHub readback.
-The attended shipper must verify the actual actor, repository, remote, branch,
+These are configured identities and requirements, not live GitHub readback. The
+attended shipper must verify the actual actor, repository, remote, branch,
 candidate, and current policy when planning and applying delivery. The trust
 ceiling permits an exact scoped proposal; it does not itself approve a push.
 
@@ -36,8 +36,8 @@ ceiling permits an exact scoped proposal; it does not itself approve a push.
 The frozen [task](../../product/tasks/brownfield-draft-delivery.yaml) binds
 [impact](../../product/impacts/BROWNFIELD_DRAFT_DELIVERY.yaml)
 `mill-brownfield-draft-delivery` to `OUT-REVIEWED-DRAFT` and
-`SCN-DRAFT-DELIVERY` in the [scenario set](../../quality/scenarios.yaml).
-The impact records approval by `davidahmann` at `2026-09-04T19:28:47Z`, with
+`SCN-DRAFT-DELIVERY` in the [scenario set](../../quality/scenarios.yaml). The
+impact records approval by `davidahmann` at `2026-09-04T19:28:47Z`, with
 proposal digest
 `sha256:71d8c0667ecfa6169ab473ce0afd830ea2daaa6167e9a541731ab7b446b6a0ae`.
 
@@ -51,17 +51,17 @@ new behavior and preservation:
 
 The scenario binds `INV-HUMAN-AUTHORITY`, `INV-EXACT-EVIDENCE`, and
 `INV-WORKER-LEAST-AUTHORITY`. It requires unchanged-candidate delivery to the
-configured repository and base, exactly one draft PR, provider reconciliation
-on recovery, and no merge authority for builder, reviewer, or coordinator.
-Changed or unverified candidates, ready-for-review creation, merge, and blind
-retry of an unknown remote effect are forbidden.
+configured repository and base, exactly one draft PR, provider reconciliation on
+recovery, and no merge authority for builder, reviewer, or coordinator. Changed
+or unverified candidates, ready-for-review creation, merge, and blind retry of
+an unknown remote effect are forbidden.
 
 The task separately records human attestation
 `ATT-BROWNFIELD-DRAFT-HUMAN-AUTHORITY-20260904`, approved by `davidahmann` at
 `2026-09-04T19:28:47Z` and expiring at `2026-09-05T19:28:47Z`. Its sole claim
 binds `INV-HUMAN-AUTHORITY` to
-`sha256:5f275bad059e1ade8ff0f09df259a76b61ebcfedea97baf1a6fb4b02f369a1d0`.
-The lifecycle must check its validity. Neither this attestation nor the impact
+`sha256:5f275bad059e1ade8ff0f09df259a76b61ebcfedea97baf1a6fb4b02f369a1d0`. The
+lifecycle must check its validity. Neither this attestation nor the impact
 approval replaces the separate, unexpired exact delivery-plan approval. Their
 timestamps do not extend the 900-second delivery approval window.
 
@@ -79,16 +79,16 @@ Observe the same PR and required checks against its exact head with
 `pr observe`. Record the run identity, candidate commit/tree, validation and
 review evidence, exact plan digest and approval receipt, PR number/node
 identity, draft state, branch/base/head, and provider check results in lifecycle
-evidence. Do not insert credentials, raw worker output, or command logs into
-the candidate. A deterministic test result cannot stand in for live delivery
+evidence. Do not insert credentials, raw worker output, or command logs into the
+candidate. A deterministic test result cannot stand in for live delivery
 readback.
 
 On interruption, inspect `status --run <run-id>` before advancing the existing
 run. `cancel` records intent; only the foreground controller may signal its own
 child. Cancellation during a remote mutation does not prove that nothing
-happened. A possibly started push or PR operation remains `effect_unknown`
-until `pr reconcile` classifies it through authoritative readback. Do not
-start another run or recreate the PR to bypass that uncertainty.
+happened. A possibly started push or PR operation remains `effect_unknown` until
+`pr reconcile` classifies it through authoritative readback. Do not start
+another run or recreate the PR to bypass that uncertainty.
 
 `resume --attended` must respect existing ownership, the original budget, and
 the bounded repair policy. Reconciliation itself performs no mutation. Proven
@@ -97,8 +97,8 @@ state blocks, and expired authority permits readback but no new effect. Preserve
 the same delivery identity and PR across recovery. A repaired candidate needs
 fresh validation, review, and exact delivery approval.
 
-Human readiness and merge remain separate decisions. The configured merger
-and merge-method policy do not authorize Mill to merge. Finalization requires
+Human readiness and merge remain separate decisions. The configured merger and
+merge-method policy do not authorize Mill to merge. Finalization requires
 provider-authoritative merge and resulting-main evidence, including the exact
 tree and required checks; a draft PR or a passing local gate is not closure.
 
@@ -113,8 +113,8 @@ Red-first testing is not meaningful for this documentation-only record against
 pre-existing oracles. Both acceptance items remain pending authoritative
 lifecycle execution of `test:coverage`, required native validation, and the
 separate exact-candidate review and delivery gates. This record does not supply
-a baseline digest, passing audit, live recovery result, or task closure.
-Missing or failed required evidence blocks promotion.
+a baseline digest, passing audit, live recovery result, or task closure. Missing
+or failed required evidence blocks promotion.
 
 The canary adds no runtime dependency, supported stack, or adoption claim.
 Downstream repositories retain their native build and test commands and remain
