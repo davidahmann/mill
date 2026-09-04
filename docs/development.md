@@ -41,6 +41,57 @@ writable npm cache separate and places temporary repositories outside
 `/workspace`. The explicit fixture grant also enables Docker's init process to
 reap orphaned test children without changing the default command process setup.
 
+## Delivery check contract
+
+The frozen implementation in
+[`src/runtime/delivery.ts`](../src/runtime/delivery.ts) uses `requiredChecks`
+for exact pull-request-head observation and `postMergeRequiredChecks` for
+resulting-main finalization. The optional `propose.postMergeRequiredChecks`
+field accepts a nonempty list whose names must already occur in
+`propose.requiredChecks`. Without it, the effective post-merge list is the
+complete PR list. Both effective lists enter new proposal digests and persisted
+delivery records; continuity checks reject later policy drift. Keep the full PR
+gate, independent exact-candidate review, separately approved draft delivery,
+and human readiness/merge boundaries intact.
+
+Legacy delivery records may lack `postMergeRequiredChecks`. Only finalization
+can bind an explicitly configured subset once, and only after GitHub proves the
+recorded PR was merged onto the default branch by an allowed merger using an
+allowed method, with the exact reviewed candidate tree. The task, candidate
+commit/tree, repository, remote, base, actor, original PR checks, review policy,
+and merger/method bindings must still match. Each selected name must have been
+required before merge. The implementation persists the subset and
+`legacyPostMergePolicyConfigDigest` and emits
+`delivery.legacy_post_merge_policy_bound`; subsequent readback must match that
+bound configuration digest and list. It does not rewrite the original delivery
+approval, relax pre-merge checks, grant another push, or permit repeated policy
+rebinding. An unmerged PR returns `HUMAN_MERGE_PENDING` without persisting the
+legacy binding.
+
+`checkDecision` treats absent checks and incomplete results as pending. Every
+matching completed result for a required name must conclude `success`; skipped
+and failed results cannot satisfy either phase. Finalization retains `merged`
+while checks are pending and records `POST_MERGE_CHECKS_FAILED` for failed
+required resulting-main checks. Only passing authoritative evidence permits
+`post_merge_verified` and closure. Tree mismatch still requires fresh exact-tree
+validation; changing the check list cannot bypass it.
+
+Frozen regressions in
+[`test/runtime-delivery.test.ts`](../test/runtime-delivery.test.ts) cover
+distinct lists in a new proposal and a legacy subset binding that is not
+persisted before human merge. Schema checks in
+[`test/schemas.test.ts`](../test/schemas.test.ts) cover the configuration
+contract. These are existing oracles for lifecycle validation, not evidence that
+this documentation task has run or passed them. Use the declared native
+`npm run check` gate for authoritative validation.
+
+Mill's bound `mill.yaml` remains unchanged and omits the optional field. The
+[repository-settings guide](repository-settings.md) describes a future policy
+choice; the [canary record](canaries/post-merge-check-contract.md) preserves the
+motivating blocked closure. Any policy opt-in needs separate approval and
+qualification. Downstream native commands and GitHub checks continue to operate
+without Mill.
+
 ## Brownfield discovery development
 
 `src/repository/intelligence.ts` is a deterministic static extractor. Keep it

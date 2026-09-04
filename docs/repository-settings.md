@@ -22,6 +22,49 @@ After the Wave 1 checks have run at least once, configure:
 Codex review is optional repository policy in v1; frozen local review and
 required machine checks are portable and mandatory.
 
+## Check names and workflow events
+
+Keep all three exact contexts in branch protection and `propose.requiredChecks`:
+`validate`, `dependency-review`, and `codeql`. The frozen
+[CI workflow](../.github/workflows/ci.yml) runs on pull requests and pushes to
+`main`, but its `dependency-review` job is conditional on
+`github.event_name == 'pull_request'`. That job reviews the PR dependency
+change; it is skipped on a main push. `validate` runs in both phases, including
+the production dependency audit. The
+[CodeQL workflow](../.github/workflows/codeql.yml) also runs `codeql` on pull
+requests and main pushes. Neither main-branch audit nor CodeQL removes the PR
+dependency-review requirement.
+
+The source implementation supports optional `propose.postMergeRequiredChecks`
+for the resulting-main phase. It must be nonempty and a subset of
+`requiredChecks`; omitting it requires the full PR list after merge too. A
+future, separately approved policy change for this repository could set:
+
+```yaml
+# Proposed fields under propose; not the current frozen mill.yaml policy.
+requiredChecks: [validate, dependency-review, codeql]
+postMergeRequiredChecks: [validate, codeql]
+```
+
+The current [mill.yaml](../mill.yaml) remains a frozen runtime control and has
+no `postMergeRequiredChecks` field. Do not apply the example during an approved
+builder run or remove `dependency-review` from branch protection to bypass
+closure. New delivery plans bind both effective lists to exact approval and
+persist them. A skipped required check fails its phase; missing and pending
+checks prevent completion.
+
+A legacy merged delivery without the second list has only the bounded local
+binding described in the
+[development guide](development.md#delivery-check-contract). It requires
+authoritative merge, identity and tree readback, unchanged original PR
+requirements, and a subset drawn from those original requirements. It grants no
+remote mutation or human merge authority. The
+[canary record](canaries/post-merge-check-contract.md) explains why the current
+policy still blocks closure and distinguishes regression fixtures from live
+recovery evidence.
+
+## Publication settings
+
 The genesis publication boundary is configured as follows:
 
 - the protected GitHub environment `npm` requires David's approval and permits
