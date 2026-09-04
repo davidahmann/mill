@@ -1,0 +1,52 @@
+schemaVersion: "1"
+id: mill-brownfield-discovery
+productContractDigest: sha256:c34129bb84eba63026d0c698a69db19145d667e09a21990470a62137b8679248
+outcomeId: OUT-BROWNFIELD-DISCOVERY
+riskClass: high
+acceptanceIds:
+  - ACC-BFD-001
+  - ACC-BFD-002
+  - ACC-BFD-003
+  - ACC-BFD-004
+  - ACC-BFD-005
+  - ACC-BFD-006
+  - ACC-BFD-007
+  - ACC-BFD-008
+affectedInvariantIds:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+uncertainInvariantIds: []
+surfaces:
+  - id: repository-intelligence
+    kind: system
+    change:
+      Add bounded read-only TypeScript source evidence, module relations, and
+      conservative change leads.
+  - id: discovery-cli-and-schema
+    kind: interface
+    change:
+      Expose canonical JSON and installed-package discovery behavior without an
+      authority effect.
+  - id: parser-runtime
+    kind: operations
+    change:
+      Promote the exact TypeScript compiler API dependency into Mill's installed
+      runtime package.
+scenarioIds:
+  - SCN-BFD-001
+  - SCN-BFD-002
+  - SCN-BFD-003
+  - SCN-BFD-004
+  - SCN-BFD-005
+  - SCN-BFD-006
+  - SCN-BFD-007
+  - SCN-BFD-008
+commandIds: [test:coverage, test:package]
+materialDecisions: [DEC-BROWNFIELD-INSPECT]
+unresolved: []
+exceptions: []
+approval:
+  approvedBy: davidahmann
+  approvedAt: "2026-09-04T13:10:00.000Z"
+  proposalDigest: sha256:156fff571fb274f3839549c7169065460b9f38ab30f2cadccf079a51520de6a8

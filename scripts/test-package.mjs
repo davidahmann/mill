@@ -80,6 +80,7 @@ try {
     "schemas/recipe-manifest.schema.json",
     "schemas/release-evidence.schema.json",
     "schemas/repository-integration-plan.schema.json",
+    "schemas/repository-intelligence.schema.json",
     "schemas/review-result.schema.json",
     "schemas/source-manifest.schema.json",
     "schemas/support-tuple.schema.json",
@@ -200,6 +201,7 @@ try {
   }
   for (const command of [
     "audit",
+    "discover",
     "new",
     "adopt",
     "auth",
@@ -459,6 +461,31 @@ commands:
     ],
     consumer,
   );
+
+  const discovery = JSON.parse(
+    command(
+      bin,
+      [
+        "--json",
+        "--cwd",
+        consumer,
+        "discover",
+        ".",
+        "--changed",
+        "src/value.js",
+      ],
+      temporary,
+    ),
+  );
+  if (
+    discovery.command !== "discover" ||
+    discovery.ok !== true ||
+    discovery.data?.authority !== "derived_read_only" ||
+    discovery.data?.tests?.executedCoverage !== "unknown" ||
+    discovery.data?.changeImpact?.[0]?.changedPath !== "src/value.js"
+  ) {
+    throw new Error("installed package discovery contract failed");
+  }
 
   const tools = path.join(temporary, "tools");
   const state = path.join(temporary, "state");

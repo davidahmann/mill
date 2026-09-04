@@ -63,6 +63,8 @@ For its one qualified shape, Mill can:
    support bundle through explicit commands;
 9. audit the exact repository candidate and validate a public-alpha
    qualification record.
+10. derive bounded, source-revision-bound TypeScript repository evidence from a
+    clean Git root without executing its code.
 
 Mill does not autonomously research the web or invent a product specification in
 this alpha. The operator supplies the structured proposal that Mill assesses and
@@ -122,6 +124,25 @@ node dist/cli.js doctor --mode inspect
 node dist/cli.js inspect --prd product/PRD.md
 node dist/cli.js adopt --scan-only
 ```
+
+### Discover a TypeScript repository
+
+Static discovery is a separate read-only operation. It requires a clean Git
+repository root and rejects sensitive paths, symbolic links, unsafe Git
+configuration, and incomplete source traversal. It parses local TypeScript and
+JavaScript imports, reports source locations, inventories test files, and gives
+conservative importer leads for named paths. It never installs dependencies,
+runs the target's code, or claims executed coverage or delivery authority.
+
+```sh
+millctl --json discover /absolute/path/to/repository --changed src/service.ts
+```
+
+The first increment is a deterministic TypeScript extractor, not arbitrary-stack
+support, a graph database, a watcher, or an AI-generated knowledge graph. Read
+[`product/brownfield-discovery.md`](product/brownfield-discovery.md) and
+[`docs/canaries/brownfield-discovery.md`](docs/canaries/brownfield-discovery.md)
+for the exact boundary and real-fixture evidence.
 
 For a source-backed specification, supply the PRD, source manifest, and
 structured proposal:

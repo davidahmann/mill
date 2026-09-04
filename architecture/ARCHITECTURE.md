@@ -9,6 +9,26 @@ CLI and stable JSON result envelopes. Operational state uses Node's SQLite API;
 durable product truth remains in Git. V1 runs one attended control-plane process
 and exits to resumable state for long waits—there is no daemon.
 
+## Brownfield repository intelligence
+
+`discover` is a deterministic, derived-evidence boundary beside—not inside—the
+delivery lifecycle. It first rejects a dirty Git tree, sensitive path, symbolic
+link, truncated traversal, unsafe Git configuration, or unsafe changed path. It
+then reads bounded regular TypeScript/JavaScript files through the existing
+safe-path reader and parses imports with the installed TypeScript compiler API.
+The report binds extractor identity and the Git commit/tree, preserves import
+source locations, marks external/unresolved relationships, separates static test
+inventory and literal selector matches from unknown executed coverage, and
+traverses reverse local imports for conservative direct/transitive change leads.
+
+The command uses Git only for read-only identity/status queries after static
+configuration screening; it does not invoke a package manager, model, target
+command, hook, watcher, graph service, or write path. A report is stale when its
+source or extractor identity differs, and its `derived_read_only` authority
+cannot approve a task, skip a native gate, or cause a PR, merge, release, or
+other effect. The output is an orientation and review artifact, not arbitrary
+stack support or proof of runtime behavior.
+
 ## Boundaries
 
 The implemented Wave 3 boundary is:

@@ -41,6 +41,23 @@ writable npm cache separate and places temporary repositories outside
 `/workspace`. The explicit fixture grant also enables Docker's init process to
 reap orphaned test children without changing the default command process setup.
 
+## Brownfield discovery development
+
+`src/repository/intelligence.ts` is a deterministic static extractor. Keep it
+read-only: use the safe-path reader for source bytes, maintain fixed traversal
+and byte budgets, preserve explicit unresolved/external classifications, and do
+not add dependency installation, target execution, model calls, watches, or a
+write-side graph store. The TypeScript compiler API is a runtime dependency
+because the installed package parses the target source itself.
+
+The evaluator in `test/repository-intelligence.test.ts` owns repeatability,
+freshness, source-path containment, unresolved-import, no-execution, and
+importer-lead cases. `scripts/test-package.mjs` installs the packed tarball and
+exercises the public command against a clean disposable Git repository. The
+attended JSON Server check is external fixture evidence in
+`docs/canaries/brownfield-discovery.md`; do not vendor or execute that source
+without a new approved scope.
+
 ## Testing matrix
 
 Only applicable tiers are active. A skipped required lane blocks promotion.

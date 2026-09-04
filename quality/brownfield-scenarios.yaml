@@ -1,0 +1,139 @@
+schemaVersion: "1"
+productContractDigest: sha256:c34129bb84eba63026d0c698a69db19145d667e09a21990470a62137b8679248
+scenarios:
+  - id: SCN-BFD-001
+    kind: normal
+    given:
+      [one clean exact TypeScript repository source and fixed discovery inputs]
+    when: [discovery runs twice without executing repository code]
+    then: [canonical evidence and source locations are byte-for-byte equivalent]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-001]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: new_behavior
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      [treating a map digest as execution, delivery, or approval evidence]
+  - id: SCN-BFD-002
+    kind: adversarial
+    given: [a prior discovery report and a changed source or extractor identity]
+    when: [freshness is assessed]
+    then: [the earlier report is marked stale with a specific reason]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-002]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: new_behavior
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden: [reusing stale evidence as fresh evidence]
+  - id: SCN-BFD-003
+    kind: adversarial
+    given:
+      [
+        a dirty,
+        sensitive,
+        symlinked,
+        unsafe-configured,
+        truncated,
+        or path-escaping source input,
+      ]
+    when: [discovery attempts static inspection]
+    then:
+      [inspection fails closed or reports an explicit unresolved relationship]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-003]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: new_behavior
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden:
+      [
+        dereferencing an untrusted symbolic link,
+        treating an unresolved import as resolved,
+      ]
+  - id: SCN-BFD-004
+    kind: adversarial
+    given: [a repository whose declared script would leave an execution marker]
+    when: [discovery runs]
+    then:
+      [the marker is absent and the report declares derived read-only authority]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-004]
+    invariantRefs: [INV-EXACT-EVIDENCE, INV-HUMAN-AUTHORITY]
+    coverage: both
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden: [executing repository code or granting delivery authority]
+  - id: SCN-BFD-005
+    kind: normal
+    given: [a changed observed module and its static importer graph]
+    when: [discovery derives change impact]
+    then:
+      [
+        direct and transitive importers name provenance while absent paths
+        remain unknown,
+      ]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-005]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: new_behavior
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden: [claiming a non-observed path is unaffected]
+  - id: SCN-BFD-006
+    kind: normal
+    given: [root and nested test files plus one literal root-only test selector]
+    when: [discovery derives static test evidence]
+    then:
+      [
+        inventory,
+        selector matches,
+        and unknown executed coverage remain distinct,
+      ]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-006]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: new_behavior
+    visibility: reviewer_owned
+    executionRef: test:coverage
+    forbidden: [claiming static selection is executed coverage]
+  - id: SCN-BFD-007
+    kind: normal
+    given: [the packed Mill tarball installed with lifecycle scripts disabled]
+    when: [its public discovery command inspects a clean disposable repository]
+    then: [the package exposes the derived read-only report and schema]
+    oracleOwner: repository
+    acceptanceRefs: [ACC-BFD-007]
+    invariantRefs: [INV-DOWNSTREAM-INDEPENDENT]
+    coverage: new_behavior
+    visibility: reviewer_owned
+    executionRef: test:package
+    forbidden: [relying on Mill source or tests inside the installed package]
+  - id: SCN-BFD-008
+    kind: normal
+    given:
+      [
+        typicode/json-server at commit 89a34a44b7a6a5311dc84f3b8a1b8b45c0905aea
+        and tree d305d02f13ab51efaa9af089c65881f276a5e97f,
+      ]
+    when:
+      [
+        an attended maintainer runs discovery without dependency installation or
+        repository execution,
+      ]
+    then:
+      [
+        the report binds the fixture identity and exposes root-only static test
+        selection and unresolved nested imports without a support claim,
+      ]
+    oracleOwner: external
+    acceptanceRefs: [ACC-BFD-008]
+    invariantRefs: [INV-EXACT-EVIDENCE]
+    coverage: new_behavior
+    visibility: human_acceptance
+    forbidden:
+      [
+        accepting a dirty or mismatched fixture,
+        claiming JSON Server runtime support,
+      ]

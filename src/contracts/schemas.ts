@@ -187,6 +187,82 @@ export const scenarioSetSchema = z.strictObject({
   scenarios: z.array(scenarioSchema).min(1),
 });
 
+const sourceLocationSchema = z.strictObject({
+  path: z.string().min(1),
+  line: z.number().int().positive(),
+  column: z.number().int().positive(),
+});
+
+export const repositoryIntelligenceSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  extractor: z.strictObject({
+    id: z.literal("mill.repository-intelligence"),
+    version: z.literal("1"),
+    digest: digestSchema,
+  }),
+  source: z.strictObject({
+    commit: z.string().regex(/^[a-f0-9]{40}$/u),
+    tree: z.string().regex(/^[a-f0-9]{40}$/u),
+    root: z.literal("."),
+  }),
+  scanDigest: digestSchema,
+  sourceFiles: z.array(z.string().min(1)),
+  modules: z.array(
+    z.strictObject({
+      path: z.string().min(1),
+      digest: digestSchema,
+      imports: z.array(
+        z.strictObject({
+          kind: z.enum(["dynamic", "require", "static", "type"]),
+          specifier: z.string().min(1),
+          location: sourceLocationSchema,
+          resolution: z.enum(["external", "resolved_local", "unresolved"]),
+          targetPath: z.string().min(1).optional(),
+        }),
+      ),
+      parseDiagnostics: z.array(sourceLocationSchema),
+    }),
+  ),
+  tests: z.strictObject({
+    inventory: z.array(
+      z.strictObject({
+        path: z.string().min(1),
+        source: z.literal("filename"),
+      }),
+    ),
+    declaredSelection: z.array(
+      z.strictObject({
+        script: z.string().min(1),
+        command: z.string().min(1),
+        selector: z.string().min(1),
+        matchedInventory: z.array(z.string().min(1)),
+        status: z.enum(["observed", "unknown"]),
+      }),
+    ),
+    executedCoverage: z.literal("unknown"),
+  }),
+  changeImpact: z.array(
+    z.strictObject({
+      changedPath: z.string().min(1),
+      leads: z.array(
+        z.strictObject({
+          path: z.string().min(1),
+          relationship: z.enum([
+            "changed",
+            "direct_importer",
+            "transitive_importer",
+          ]),
+          via: z.string().min(1).optional(),
+        }),
+      ),
+      unknowns: z.array(z.string().min(1)),
+    }),
+  ),
+  unknowns: z.array(z.string().min(1)),
+  digest: digestSchema,
+  authority: z.literal("derived_read_only"),
+});
+
 export const outcomeSchema = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -1107,6 +1183,7 @@ export const contractSchemas = {
   productContract: productContractSchema,
   recipeManifest: recipeManifestSchema,
   releaseEvidence: releaseEvidenceSchema,
+  repositoryIntelligence: repositoryIntelligenceSchema,
   repositoryIntegrationPlan: repositoryIntegrationPlanSchema,
   reviewResult: reviewResultSchema,
   scenarioSet: scenarioSetSchema,

@@ -9,6 +9,9 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Explicit OCI test/package command opt-in for fixed, bounded executable fixture
   scratch outside the repository, retaining default noexec containment and
   read-only source/dependencies.
+- A deterministic `millctl discover` command and public schema for bounded,
+  source-revision-bound TypeScript repository evidence, conservative importer
+  leads, static test-selection reporting, and stale-map detection.
 
 ### Changed
 

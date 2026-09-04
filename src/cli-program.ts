@@ -10,6 +10,7 @@ import { doctor, doctorReady, type DoctorMode } from "./doctor.js";
 import { asMillError, ExitCode, MillError } from "./errors.js";
 import { inspectPrd } from "./intake/prd.js";
 import { scanRepository } from "./repository/scan.js";
+import { discoverRepository } from "./repository/intelligence.js";
 import {
   applyAdoptionIntegration,
   applyGreenfieldIntegration,
@@ -214,6 +215,30 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         io,
         global.json === true,
         commandResult({ command: "inspect", ok: true, data: inspection }),
+      );
+    });
+
+  program
+    .command("discover <repository>")
+    .description(
+      "derive bounded, read-only TypeScript repository evidence without executing repository code",
+    )
+    .option(
+      "--changed <path...>",
+      "relative source paths whose importer leads should be reported",
+    )
+    .action(async (repository: string, options: { changed?: string[] }) => {
+      const global = globals(program);
+      const report = await discoverRepository({
+        root: path.resolve(global.cwd, repository),
+        ...(options.changed === undefined
+          ? {}
+          : { changedPaths: options.changed }),
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "discover", ok: true, data: report }),
       );
     });
 
