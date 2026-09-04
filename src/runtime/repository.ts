@@ -209,6 +209,35 @@ export async function readCandidateIdentity(
   return { commit, tree };
 }
 
+/**
+ * Reads one bounded, regular-file blob from an exact committed tree. Callers
+ * must still interpret the returned bytes through their own schema; this
+ * helper only keeps the Git read free of worktree, filter, and replacement
+ * ambiguity.
+ */
+export async function readCommittedFile(
+  root: string,
+  commit: string,
+  file: string,
+  maxOutputBytes = 2 * 1024 * 1024,
+): Promise<string> {
+  if (!/^[a-f0-9]{40}$/u.test(commit)) {
+    throw new MillError(
+      "INVALID_GIT_IDENTITY",
+      "A committed-file read requires a full immutable commit identity.",
+      ExitCode.configuration,
+    );
+  }
+  if (!/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/u.test(file)) {
+    throw new MillError(
+      "INVALID_GIT_PATH",
+      "A committed-file read requires one repository-relative safe path.",
+      ExitCode.configuration,
+    );
+  }
+  return git(root, ["cat-file", "blob", `${commit}:${file}`], maxOutputBytes);
+}
+
 export async function assertRepositoryWorktreeClean(
   root: string,
 ): Promise<void> {

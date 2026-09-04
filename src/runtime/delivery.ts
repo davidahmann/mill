@@ -1,8 +1,10 @@
 import type { z } from "zod";
+import { parse as parseYaml } from "yaml";
 
 import { canonicalDigest } from "../contracts/canonical.js";
 import {
   deliveryRecordSchema,
+  millConfigSchema,
   reviewResultSchema,
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
@@ -19,7 +21,11 @@ import {
 } from "./github.js";
 import { loadRuntimeInputs, type RuntimeInputs } from "./inputs.js";
 import { assertRunBindings } from "./lifecycle.js";
-import { commonGitDirectory, repositoryRemoteUrl } from "./repository.js";
+import {
+  commonGitDirectory,
+  readCommittedFile,
+  repositoryRemoteUrl,
+} from "./repository.js";
 import {
   acquireWriterLease,
   publicRunRecord,
@@ -329,6 +335,14 @@ function postMergeRequiredChecks(config: ProposeConfig): string[] {
   return config.postMergeRequiredChecks ?? config.requiredChecks;
 }
 
+function postMergePolicySource(
+  config: ProposeConfig,
+): NonNullable<DeliveryRecord["postMergePolicySource"]> {
+  return config.postMergeRequiredChecks === undefined
+    ? "implicit_default"
+    : "configured";
+}
+
 function isCheckSubset(
   candidate: readonly string[],
   required: readonly string[],
@@ -470,25 +484,79 @@ function assertPushBoundaryPullRequest(
   }
 }
 
-function assertDeliveryContinuity(input: {
+async function candidateUsedImplicitPostMergePolicy(
+  root: string,
+  delivery: DeliveryRecord,
+): Promise<boolean> {
+  let source: string;
+  try {
+    source = await readCommittedFile(
+      root,
+      delivery.candidateCommit,
+      "mill.yaml",
+    );
+  } catch (error) {
+    throw new MillError(
+      "LEGACY_POST_MERGE_POLICY_SOURCE_UNAVAILABLE",
+      "The reviewed candidate's mill.yaml cannot be read to prove an implicit post-merge policy.",
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
+  }
+  let raw: unknown;
+  try {
+    raw = parseYaml(source);
+  } catch (error) {
+    throw new MillError(
+      "LEGACY_POST_MERGE_POLICY_SOURCE_INVALID",
+      "The reviewed candidate's mill.yaml is not valid YAML.",
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
+  }
+  const parsed = millConfigSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new MillError(
+      "LEGACY_POST_MERGE_POLICY_SOURCE_INVALID",
+      "The reviewed candidate's mill.yaml does not satisfy the Mill configuration contract.",
+      ExitCode.configuration,
+    );
+  }
+  return parsed.data.propose?.postMergeRequiredChecks === undefined;
+}
+
+async function assertDeliveryContinuity(input: {
+  root: string;
   run: RunRecord;
   inputs: RuntimeInputs;
   config: ProposeConfig;
   delivery: DeliveryRecord;
   binding: GitHubBinding;
   allowLegacyPostMergePolicy?: boolean;
-}): { bindLegacyPostMergePolicy: boolean } {
+}): Promise<{ bindLegacyPostMergePolicy: boolean }> {
   const { run, inputs, config, delivery, binding } = input;
   const configuredPostMergeChecks = postMergeRequiredChecks(config);
+  const configuredLegacyPolicy =
+    input.allowLegacyPostMergePolicy === true &&
+    delivery.postMergePolicySource === undefined &&
+    delivery.postMergeRequiredChecks !== undefined &&
+    delivery.legacyPostMergePolicyConfigDigest === undefined &&
+    config.postMergeRequiredChecks !== undefined &&
+    isCheckSubset(config.postMergeRequiredChecks, delivery.requiredChecks) &&
+    JSON.stringify(delivery.postMergeRequiredChecks) ===
+      JSON.stringify(delivery.requiredChecks) &&
+    (await candidateUsedImplicitPostMergePolicy(input.root, delivery));
   const bindLegacyPostMergePolicy =
     input.allowLegacyPostMergePolicy === true &&
-    delivery.postMergeRequiredChecks === undefined &&
+    (delivery.postMergeRequiredChecks === undefined ||
+      configuredLegacyPolicy) &&
     delivery.legacyPostMergePolicyConfigDigest === undefined &&
     config.postMergeRequiredChecks !== undefined &&
     isCheckSubset(config.postMergeRequiredChecks, delivery.requiredChecks);
   const hasBoundLegacyPostMergePolicy =
     input.allowLegacyPostMergePolicy === true &&
     delivery.postMergeRequiredChecks !== undefined &&
+    delivery.postMergePolicySource === "legacy_migrated" &&
     delivery.legacyPostMergePolicyConfigDigest === inputs.configDigest;
   const configDigestMatches =
     bindLegacyPostMergePolicy ||
@@ -512,6 +580,8 @@ function assertDeliveryContinuity(input: {
     JSON.stringify(delivery.requiredChecks) !==
       JSON.stringify(config.requiredChecks) ||
     (delivery.postMergeRequiredChecks !== undefined &&
+      !bindLegacyPostMergePolicy &&
+      !hasBoundLegacyPostMergePolicy &&
       JSON.stringify(delivery.postMergeRequiredChecks) !==
         JSON.stringify(configuredPostMergeChecks)) ||
     (delivery.legacyPostMergePolicyConfigDigest !== undefined &&
@@ -716,6 +786,7 @@ export async function planDraftPr(input: {
       candidateTree: candidate.tree,
       requiredChecks: config.requiredChecks,
       postMergeRequiredChecks: postMergeRequiredChecks(config),
+      postMergePolicySource: postMergePolicySource(config),
       reviewPolicy: config.reviewPolicy,
       allowedMergerLogins: config.allowedMergerLogins,
       allowedMergeMethods: config.allowedMergeMethods,
@@ -1235,7 +1306,14 @@ export async function reconcileDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
-    assertDeliveryContinuity({ run, inputs, config, delivery, binding });
+    await assertDeliveryContinuity({
+      root: input.root,
+      run,
+      inputs,
+      config,
+      delivery,
+      binding,
+    });
     const readback = await reconcileReadback({
       adapter,
       config,
@@ -1438,7 +1516,14 @@ export async function observeDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
-    assertDeliveryContinuity({ run, inputs, config, delivery, binding });
+    await assertDeliveryContinuity({
+      root: input.root,
+      run,
+      inputs,
+      config,
+      delivery,
+      binding,
+    });
     const observation = await adapter.observe({
       config,
       pullRequestNumber: pullRequest.number,
@@ -1618,7 +1703,8 @@ export async function finalizeDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
-    const continuity = assertDeliveryContinuity({
+    const continuity = await assertDeliveryContinuity({
+      root: input.root,
       run,
       inputs,
       config,
@@ -1698,6 +1784,7 @@ export async function finalizeDraftPr(input: {
         {
           ...delivery,
           postMergeRequiredChecks: postMergeRequiredChecks(config),
+          postMergePolicySource: "legacy_migrated",
           legacyPostMergePolicyConfigDigest: inputs.configDigest,
         },
         "delivery.legacy_post_merge_policy_bound",

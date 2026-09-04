@@ -949,12 +949,25 @@ describe("compact schemas", () => {
       ...samples.deliveryRecord,
       requiredChecks: ["validate", "dependency-review", "codeql"],
       postMergeRequiredChecks: ["validate", "codeql"],
+      postMergePolicySource: "configured",
     } as const;
     expect(deliveryValidate(deliveryWithPostMergeChecks)).toBe(true);
     expect(
       contractSchemas.deliveryRecord.safeParse(deliveryWithPostMergeChecks)
         .success,
     ).toBe(true);
+    const deliveryWithUnknownPostMergePolicySource = {
+      ...deliveryWithPostMergeChecks,
+      postMergePolicySource: "unbounded",
+    } as const;
+    expect(deliveryValidate(deliveryWithUnknownPostMergePolicySource)).toBe(
+      false,
+    );
+    expect(
+      contractSchemas.deliveryRecord.safeParse(
+        deliveryWithUnknownPostMergePolicySource,
+      ).success,
+    ).toBe(false);
   });
 
   it("rejects option-like and whitespace-bearing Git base references", async () => {
