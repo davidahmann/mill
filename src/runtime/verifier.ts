@@ -557,6 +557,18 @@ export async function verifyDeclaredCommands(input: {
           ExitCode.configuration,
         );
       }
+      if (
+        command.executableFixtureScratch === true &&
+        (command.execution !== "oci" ||
+          !["test", "package"].includes(command.capability))
+      ) {
+        throw new MillError(
+          "VERIFIER_FIXTURE_SCRATCH_FORBIDDEN",
+          "Executable fixture scratch requires an explicit OCI test/package command grant.",
+          ExitCode.configuration,
+          { commandId },
+        );
+      }
       if (command.execution !== "oci") {
         evidence.push({
           commandId,
@@ -642,6 +654,9 @@ export async function verifyDeclaredCommands(input: {
             "/tmp:rw,noexec,nosuid,nodev,size=256m",
             "--tmpfs",
             "/dev/shm:rw,nosuid,nodev,size=256m",
+            ...(command.executableFixtureScratch === true
+              ? ["--tmpfs", "/mill-fixtures:rw,exec,nosuid,nodev,size=256m"]
+              : []),
             ...workspace.mounts,
             ...dependencyMounts,
             ...writableMounts,

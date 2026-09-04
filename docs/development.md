@@ -30,6 +30,16 @@ scratch limits. It is not a new supported downstream stack. Cleanup retains
 generated output roots so they can be mounted scratch directories; Vitest's
 native config loader and cache/report locations avoid writing into dependencies.
 
+The optional command field `executableFixtureScratch: true` is permitted only
+for OCI `test` and `package` commands. It provides fixed `/mill-fixtures`
+scratch (256 MiB, exec/nosuid/nodev); set temporary fixture paths there
+explicitly. Omitting the field preserves default noexec containment. It is an
+authority change that requires requalification, not a workaround that a builder
+may add to its own command controls. All source/dependency mounts remain
+read-only and verification remains offline. The maintainer runner keeps its
+writable npm cache separate and places temporary repositories outside
+`/workspace`.
+
 ## Testing matrix
 
 Only applicable tiers are active. A skipped required lane blocks promotion.

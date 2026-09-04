@@ -381,19 +381,51 @@ export const millConfigSchema = z
       .optional(),
     commands: z.record(
       z.string().min(1),
-      z.strictObject({
-        argv: z.array(z.string().min(1)).min(1),
-        cwd: z.string().min(1),
-        controlPaths: z.array(repositoryPathPatternSchema).min(1),
-        capability: z.enum(["read", "build", "test", "package"]),
-        required: z.boolean().default(true),
-        timeoutSeconds: z.number().int().min(1).max(3600).default(600),
-        execution: z.enum(["oci", "host"]).default("oci"),
-        writablePaths: z.array(repositoryMountDirectorySchema).optional(),
-      }),
+      z
+        .strictObject({
+          argv: z.array(z.string().min(1)).min(1),
+          cwd: z.string().min(1),
+          controlPaths: z.array(repositoryPathPatternSchema).min(1),
+          capability: z.enum(["read", "build", "test", "package"]),
+          required: z.boolean().default(true),
+          timeoutSeconds: z.number().int().min(1).max(3600).default(600),
+          execution: z.enum(["oci", "host"]).default("oci"),
+          writablePaths: z.array(repositoryMountDirectorySchema).optional(),
+          executableFixtureScratch: z.literal(true).optional(),
+        })
+        .meta({
+          allOf: [
+            {
+              if: {
+                properties: { executableFixtureScratch: { const: true } },
+                required: ["executableFixtureScratch"],
+              },
+              then: {
+                properties: {
+                  execution: { const: "oci" },
+                  capability: { enum: ["test", "package"] },
+                },
+              },
+            },
+          ],
+        }),
     ),
   })
   .superRefine((value, context) => {
+    for (const [commandId, command] of Object.entries(value.commands)) {
+      if (
+        command.executableFixtureScratch === true &&
+        (command.execution !== "oci" ||
+          !["test", "package"].includes(command.capability))
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["commands", commandId, "executableFixtureScratch"],
+          message:
+            "Executable fixture scratch requires an OCI test/package command",
+        });
+      }
+    }
     if (value.trustCeiling === "propose" && value.propose === undefined) {
       context.addIssue({
         code: "custom",

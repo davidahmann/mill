@@ -4,6 +4,17 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Explicit OCI test/package command opt-in for fixed, bounded executable fixture
+  scratch outside the repository, retaining default noexec containment and
+  read-only source/dependencies.
+
+### Changed
+
+- Make native cleanup retain mounted output roots and use Vitest's native
+  configuration loader with caches/reports in generated output scratch.
+
 ### Fixed
 
 - Retry npm signature verification within a fixed budget because registry

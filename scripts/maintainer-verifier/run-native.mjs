@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { cp, lstat, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { cp, lstat, mkdtemp, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 
 // Environment preparation only: the native package scripts remain the oracle.
@@ -30,11 +30,20 @@ if (
 ) {
   throw new Error("Maintainer scratch must be the declared real directory");
 }
+const fixtureRoot = "/mill-fixtures";
+const fixtureInformation = await lstat(fixtureRoot);
+if (
+  !fixtureInformation.isDirectory() ||
+  fixtureInformation.isSymbolicLink() ||
+  (await realpath(fixtureRoot)) !== fixtureRoot
+) {
+  throw new Error("Explicit executable fixture scratch is required");
+}
 const temporary = await mkdtemp(path.join(scratch, "native-"));
+let tmp;
 try {
   const cache = path.join(temporary, "npm-cache");
-  const tmp = path.join(temporary, "tmp");
-  await mkdir(tmp, { mode: 0o700 });
+  tmp = await mkdtemp(path.join(fixtureRoot, "native-"));
   // npm mutates cache indexes even offline. Never make the seed writable.
   await cp("/opt/npm-cache", cache, {
     recursive: true,
@@ -64,4 +73,5 @@ try {
 } finally {
   // This exact child directory was created by this process in bounded scratch.
   await rm(temporary, { recursive: true, force: true });
+  if (tmp !== undefined) await rm(tmp, { recursive: true, force: true });
 }

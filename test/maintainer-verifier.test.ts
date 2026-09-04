@@ -10,9 +10,16 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
+import { Ajv2020 } from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
+import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
+import { millConfigSchema } from "../src/contracts/schemas.js";
+import { loadRuntimeInputs } from "../src/runtime/inputs.js";
+import { verifyDeclaredCommands } from "../src/runtime/verifier.js";
+
 import { temporaryDirectory } from "./helpers.js";
+import { runtimeFixture } from "./runtime-fixture.js";
 
 async function cleanupFixture(): Promise<
   Awaited<ReturnType<typeof temporaryDirectory>>
@@ -119,6 +126,140 @@ describe("maintainer native environment", () => {
       }
     } finally {
       await temporary.cleanup();
+    }
+  });
+
+  it("binds executable fixture scratch to an explicit OCI test/package grant", async () => {
+    const fixture = await runtimeFixture();
+    try {
+      const { config } = await loadRuntimeInputs(
+        fixture.root,
+        fixture.taskPath,
+      );
+      const command = config.commands.test;
+      const schema: unknown = JSON.parse(
+        await readFile("schemas/mill-config.schema.json", "utf8"),
+      );
+      const ajv = new Ajv2020({ strict: true });
+      ajv.addFormat("uuid", /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iu);
+      const validate = ajv.compile(schema as object);
+      const configured = (changes: Record<string, unknown>) => ({
+        ...config,
+        commands: { test: { ...command, ...changes } },
+      });
+      for (const capability of ["test", "package"]) {
+        const approved = millConfigSchema.parse(
+          configured({ capability, executableFixtureScratch: true }),
+        );
+        expect(canonicalDigest(approved as JsonValue)).not.toBe(
+          canonicalDigest(config as JsonValue),
+        );
+        expect(validate(approved), JSON.stringify(validate.errors)).toBe(true);
+      }
+      for (const changes of [
+        { executableFixtureScratch: false },
+        { executableFixtureScratch: "/workspace" },
+        { executableFixtureScratch: true, capability: "read" },
+        { executableFixtureScratch: true, capability: "build" },
+        { executableFixtureScratch: true, execution: "host" },
+      ]) {
+        expect(millConfigSchema.safeParse(configured(changes)).success).toBe(
+          false,
+        );
+        expect(validate(configured(changes))).toBe(false);
+      }
+      expect(millConfigSchema.parse(config).commands.test).not.toHaveProperty(
+        "executableFixtureScratch",
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("adds only a fixed bounded executable tmpfs when granted and retains default denial", async () => {
+    const fixture = await runtimeFixture();
+    const tools = await temporaryDirectory("mill-fixture-mount-tools-");
+    const previous = process.env.MILL_DOCKER_PATH;
+    try {
+      const executable = path.join(tools.path, "docker.cjs");
+      const log = path.join(tools.path, "calls.jsonl");
+      await writeFile(
+        executable,
+        `#!${process.execPath}\nrequire("node:fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2))+"\\n");\n`,
+        { mode: 0o755 },
+      );
+      process.env.MILL_DOCKER_PATH = executable;
+      const { config, task } = await loadRuntimeInputs(
+        fixture.root,
+        fixture.taskPath,
+      );
+      const testCommand = config.commands.test;
+      if (testCommand === undefined)
+        throw new Error("Fixture test command missing");
+      for (const enabled of [false, true]) {
+        const configured = millConfigSchema.parse({
+          ...config,
+          commands: {
+            test: {
+              ...config.commands.test,
+              ...(enabled ? { executableFixtureScratch: true } : {}),
+            },
+          },
+        });
+        const evidence = await verifyDeclaredCommands({
+          root: fixture.root,
+          config: configured,
+          task,
+          candidateCommit: "a".repeat(40),
+          deadlineMs: Date.now() + 30_000,
+          maxOutputBytes: 1024 * 1024,
+        });
+        expect(evidence.passed).toBe(true);
+      }
+      const calls = (await readFile(log, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[]);
+      const runs = calls.filter((args) => args[0] === "run");
+      expect(runs).toHaveLength(2);
+      expect(runs[0]).not.toContain(
+        "/mill-fixtures:rw,exec,nosuid,nodev,size=256m",
+      );
+      expect(runs[1]).toContain(
+        "/mill-fixtures:rw,exec,nosuid,nodev,size=256m",
+      );
+      for (const args of runs) {
+        expect(args).toContain("/tmp:rw,noexec,nosuid,nodev,size=256m");
+        expect(args).toContain("--read-only");
+        expect(args[args.indexOf("--network") + 1]).toBe("none");
+        expect(args).toContain("no-new-privileges");
+        expect(args).not.toContain("--privileged");
+      }
+      expect(calls.filter((args) => args[0] === "rm")).toHaveLength(2);
+      await expect(
+        verifyDeclaredCommands({
+          root: fixture.root,
+          config: {
+            ...config,
+            commands: {
+              test: {
+                ...testCommand,
+                capability: "read",
+                executableFixtureScratch: true,
+              },
+            },
+          },
+          task,
+          candidateCommit: "a".repeat(40),
+          deadlineMs: Date.now() + 30_000,
+          maxOutputBytes: 1024 * 1024,
+        }),
+      ).rejects.toMatchObject({ code: "VERIFIER_FIXTURE_SCRATCH_FORBIDDEN" });
+    } finally {
+      if (previous === undefined) delete process.env.MILL_DOCKER_PATH;
+      else process.env.MILL_DOCKER_PATH = previous;
+      await tools.cleanup();
+      await fixture.cleanup();
     }
   });
 });

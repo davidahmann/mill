@@ -1,10 +1,11 @@
 # Maintainer verifier bootstrap
 
-Status: blocked under the approved one-time MB-001 exception. The real verifier
-ran the full native command against candidate
-`5d3e0f210a270c10d042322182860c4071929426` and returned failure. This bootstrap
-is not complete. This is not a downstream recipe support claim, a runtime task
-approval, a release qualification, or permission to publish.
+Status: MB-001-A1 repair in qualification after the owner expanded the scope on
+2026-09-03T23:54:25.000Z. The prior real verifier ran the full native command
+against candidate `5d3e0f210a270c10d042322182860c4071929426` and returned
+failure. This bootstrap is not complete. This is not a downstream recipe support
+claim, a runtime task approval, a release qualification, or permission to
+publish.
 
 ## Identity and authority
 
@@ -55,17 +56,22 @@ no capabilities, no-new-privileges, no network, 256 PIDs, two CPUs and 1 GiB
 RAM. Each declared output (`dist`, `coverage`, `.mill-scratch`) is a separate
 bounded 256 MiB tmpfs. Direct mount inspection proved that `/tmp`, `/dev/shm`
 and the declared top-level tmpfs mounts are all **noexec**, including mounts
-whose Docker options do not spell out that default. There is currently no
-qualified writable location for executable fake-provider fixtures. No runtime
-sandbox policy has been changed.
+whose Docker options do not spell out that default. That prior policy had no
+qualified writable location for executable fake-provider fixtures. The MB-001-A1
+repair adds only the explicit `executableFixtureScratch: true` grant for OCI
+test/package commands. It provides fixed `/mill-fixtures` exec/nosuid/nodev
+tmpfs at 256 MiB with no source/dependency writes, host binds, network or
+privileges. Other scratch remains noexec; default commands are unchanged. The
+runner now places temporary fixtures there, outside the repository.
 
 The npm seed at `/opt/npm-cache` stays read-only. Before a native command, the
 runner copies it into a unique scratch child, sets an offline writable cache and
-`TMPDIR`, and removes only that child when the command returns. npm needs
-writable cache indexes even for some offline reads. A cache miss fails closed;
-there is no online fallback. The real verifier removes its container on failure,
-cancellation, timeout or output exhaustion. Do not retry an uncertain process
-until its exact container has been inspected and removed through that lifecycle.
+`TMPDIR` in a separate unique `/mill-fixtures` child, and removes only its own
+children when the command returns. npm needs writable cache indexes even for
+some offline reads. A cache miss fails closed; there is no online fallback. The
+real verifier removes its container on failure, cancellation, timeout or output
+exhaustion. Do not retry an uncertain process until its exact container has been
+inspected and removed through that lifecycle.
 
 The native Vitest loader avoids writing a bundled config into read-only
 `node_modules`. Its cache and reports live under `coverage`. Native cleanup
@@ -127,10 +133,11 @@ Two setup problems are evidenced, without changing the tests:
 The narrow next design would provide an explicitly approved, bounded executable
 fixture scratch outside `/workspace`, while keeping source/dependencies
 read-only, all other scratch noexec, and networking disabled. That requires a
-runtime verifier-policy change; MB-001 explicitly excludes it. No remount,
-privilege escalation, interpreter bypass, assertion change, timeout increase,
-test exclusion or host-only substitution was used to manufacture a passing gate.
-Do not promote this candidate or begin brownfield execution from it.
+runtime verifier-policy change, now authorized narrowly by MB-001-A1. No
+remount, privilege escalation, interpreter bypass, assertion change, timeout
+increase, test exclusion or host-only substitution was used to manufacture a
+passing gate. Do not promote this candidate or begin brownfield execution from
+it.
 
 After qualification and attended closure, freeze this verifier and its command
 controls as the next task's base. Normal version-2 task admission and exact

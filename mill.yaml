@@ -12,6 +12,7 @@ verifier:
     lockPaths: [package.json, package-lock.json]
 commands:
   check:
+    executableFixtureScratch: true
     argv:
       [/usr/local/bin/node, scripts/maintainer-verifier/run-native.mjs, check]
     cwd: .
@@ -34,6 +35,7 @@ commands:
     execution: oci
     writablePaths: [dist, coverage, .mill-scratch]
   test:coverage:
+    executableFixtureScratch: true
     argv:
       [
         /usr/local/bin/node,
@@ -56,6 +58,7 @@ commands:
     execution: oci
     writablePaths: [dist, coverage, .mill-scratch]
   test:package:
+    executableFixtureScratch: true
     argv:
       [
         /usr/local/bin/node,

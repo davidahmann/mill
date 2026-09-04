@@ -336,3 +336,39 @@ human readiness and merge, authoritative resulting-main checks, and separately
 authorized tag/npm/release effects remain required. This amendment does not
 authorize direct main writes, force pushes, merge, publication, or a support
 claim.
+
+### MB-001-A1: approved executable-fixture scratch repair
+
+On 2026-09-03T23:54:25.000Z David Ahmann approved continuing and shipping after
+the reported MB-001 blocker, including the explicitly requested narrow
+verifier-policy expansion. This addendum authorizes that expansion only; the
+original approval receipt, expiry and execution deadline above are unchanged.
+Repair starts from exact local candidate
+`879522e1de68500a9970ddc66558772bc504ed05`.
+
+The command contract may add an explicit, optional executable-fixture-scratch
+grant for OCI test/package commands. With that grant only, the verifier may add
+one fixed `/mill-fixtures` tmpfs outside `/workspace`, bounded to 256 MiB,
+`exec,nosuid,nodev`, and owned by the same disposable container lifecycle. No
+arbitrary mount path, extra host bind, privilege, network, source write or
+dependency write is authorized. Existing commands without this grant keep their
+exact default containment. All other scratch remains noexec. The native
+maintainer runner must place temporary fixtures outside the repository and keep
+the offline cache copy in its existing declared scratch.
+
+Additional builder paths are `src/runtime/verifier.ts`,
+`src/contracts/schemas.ts`, `schemas/mill-config.schema.json`,
+`architecture/ARCHITECTURE.md`, and `CHANGELOG.md`, solely for this additive
+contract, enforcement, generated schema and matching documentation. Regression
+tests may be added to `test/maintainer-verifier.test.ts`; all pre-existing test
+file bytes, assertions, exclusions, timeouts and thresholds remain frozen. The
+active task and impact may be updated in the attended authority-preparation
+phase to record this owner decision and are frozen again before implementation.
+
+The independent baseline remains the preserved ceaf76a test suite. The repair
+must prove default denial, explicit bounded opt-in, unchanged source/dependency
+immutability and network denial, cleanup, the full host and real OCI native
+gate, fresh exact-candidate read-only review and audit. Old failed evidence is
+retained. The prior review's known noexec finding is the design input to this
+one repair, not a waived finding. Unrelated product behavior, recipe support,
+dependencies, release policy and human readiness/merge boundaries are unchanged.

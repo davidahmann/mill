@@ -31,6 +31,15 @@
           thresholds.",
       },
       {
+        "id": "executable-fixture-scratch",
+        "kind": "system",
+        "change":
+          "MB-001-A1 authorizes an additive explicit OCI test/package command
+          grant for one fixed 256 MiB executable tmpfs outside the repository;
+          preserve default containment, source/dependency immutability, offline
+          verification and all prior test oracles.",
+      },
+      {
         "id": "bootstrap-authority",
         "kind": "operations",
         "change":
@@ -54,7 +63,7 @@
   "approval":
     {
       "approvedBy": "davidahmann",
-      "approvedAt": "2026-09-03T23:10:55.000Z",
-      "proposalDigest": "sha256:5fad3a1dab21f2316676f065fe09e2493637ae20908caf0abdf0f6d20de91896",
+      "approvedAt": "2026-09-03T23:54:25.000Z",
+      "proposalDigest": "sha256:d18e45d43963f955c7aee05a871aa4f7fb8f98db926fda56a21e45d8e3d8440b",
     },
 }

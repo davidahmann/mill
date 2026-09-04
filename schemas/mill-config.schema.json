@@ -189,10 +189,25 @@
               "type": "string",
               "pattern": "^(?!\\.\\.?$)(?!.*[,/])[^*?[\\]\\\\]+$"
             }
-          }
+          },
+          "executableFixtureScratch": { "type": "boolean", "const": true }
         },
         "required": ["argv", "cwd", "controlPaths", "capability"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": { "executableFixtureScratch": { "const": true } },
+              "required": ["executableFixtureScratch"]
+            },
+            "then": {
+              "properties": {
+                "execution": { "const": "oci" },
+                "capability": { "enum": ["test", "package"] }
+              }
+            }
+          }
+        ]
       }
     }
   },

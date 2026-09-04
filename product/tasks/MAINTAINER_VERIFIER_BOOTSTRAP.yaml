@@ -9,6 +9,11 @@ risk_class: high
 base_commit: ceaf76a0e4b8237d2dcb0d016ed84e3c9ba5cfb8
 impact_manifest: product/impacts/MAINTAINER_VERIFIER_BOOTSTRAP.yaml
 authority_exception: MB-001
+scope_amendment:
+  id: MB-001-A1
+  approved_by: davidahmann
+  approved_at: 2026-09-03T23:54:25.000Z
+  repair_base_commit: 879522e1de68500a9970ddc66558772bc504ed05
 execution_mode: one_time_native_maintainer_bootstrap
 verifier_image: local/mill-maintainer-bootstrap@sha256:cb36daaac8d15771dafbbe32dacbc9e630c7f5a72cb7f690dc9e08254af9cb51
 source_package_digest: sha256:00c9e17baabab8915958f1b3fc41337a95c0b433296739579f67a01cf0a03eb0
@@ -24,6 +29,11 @@ allowed_paths:
   - test/maintainer-verifier.test.ts
   - docs/development.md
   - docs/canaries/maintainer-verifier.md
+  - src/runtime/verifier.ts
+  - src/contracts/schemas.ts
+  - schemas/mill-config.schema.json
+  - architecture/ARCHITECTURE.md
+  - CHANGELOG.md
 protected_authority_paths:
   - AGENTS.md
   - WORKFLOW.md
@@ -35,7 +45,8 @@ constraints:
   - preserve test exclusions, assertions, timeouts and coverage thresholds
   - never write candidate source, dependency mounts or image during verification
   - copy the immutable npm seed into bounded scratch for offline index writes
-  - no changes to runtime verification policy, product behavior or dependencies
+  - runtime policy changes only the explicit fixed bounded executable fixture
+    scratch grant approved in MB-001-A1; no other product or dependency changes
 acceptance_items:
   - MB-A1 exact Node 24.20.0, npm 11.19.0 and Git are usable without network
   - MB-A2 non-root offline package installation succeeds from a seeded cache
@@ -49,6 +60,9 @@ acceptance_items:
   - MB-A7 exact-candidate independent review and native audit pass
   - MB-A8 the completed verifier is frozen before brownfield baseline
     qualification
+  - MB-A9 executable fixture scratch is denied by default, explicitly granted
+    only to OCI test/package commands, fixed outside the workspace and bounded
+    to 256 MiB with no new host bind, network, privileges or source writes
 validation_commands:
   - npm ci --ignore-scripts
   - npm run check
@@ -65,7 +79,8 @@ supplementary_evidence:
 scope_exclusions:
   - brownfield implementation under this exception
   - existing test oracles and product/scenario authority changes
-  - runtime sandbox-policy changes or writable dependency mounts
+  - runtime sandbox-policy changes beyond MB-001-A1 or writable dependency
+    mounts
   - automatic image pulls during verification
   - remote effects, merge, tags, npm publication and release qualification
 budget:
