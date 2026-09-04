@@ -46,9 +46,9 @@ oracle, or the delivery policy above.
 `refs/codex/turn-diffs/` prefix from its `otherRefs` digest. These Codex Desktop
 turn-diff checkpoints are non-delivery diagnostic refs. The exclusion is not a
 blanket exemption for `refs/codex/` or arbitrary Git metadata. The existing
-exclusion of the current branch's ref entry remains separate: the snapshot
-still records its symbolic branch identity, and exact candidate commit/tree
-checks remain required.
+exclusion of the current branch's ref entry remains separate: the snapshot still
+records its symbolic branch identity, and exact candidate commit/tree checks
+remain required.
 
 Other branch refs, tags, remote-tracking refs, and refs outside that prefix
 remain in the unrelated-ref digest. Common Git configuration, worktree
@@ -60,14 +60,14 @@ Checkpoint tolerance grants no builder permission to mutate Git controls and
 does not authorize accepting a changed candidate or bypassing reconciliation.
 
 The pre-existing regression named “ignores Codex turn-diff checkpoints but
-detects ordinary ref drift” creates
-`refs/codex/turn-diffs/checkpoints/example` and expects the snapshot assertion
-to succeed, then creates `refs/heads/unrelated-control-drift` and expects
-`GIT_CONTROL_DRIFT`. The adjacent control-plane regression expects local Git
-configuration mutation to fail. These are descriptions of frozen assertions,
-not a claim that this documentation task has executed them or proved live
-recovery. Authoritative validation and independent exact-candidate review
-remain lifecycle responsibilities; both acceptance items below remain pending.
+detects ordinary ref drift” creates `refs/codex/turn-diffs/checkpoints/example`
+and expects the snapshot assertion to succeed, then creates
+`refs/heads/unrelated-control-drift` and expects `GIT_CONTROL_DRIFT`. The
+adjacent control-plane regression expects local Git configuration mutation to
+fail. These are descriptions of frozen assertions, not a claim that this
+documentation task has executed them or proved live recovery. Authoritative
+validation and independent exact-candidate review remain lifecycle
+responsibilities; both acceptance items below remain pending.
 
 ## Acceptance and human authority
 
