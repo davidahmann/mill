@@ -200,7 +200,10 @@ function assertSafeChangedPath(root: string, value: string): string {
   return normalized;
 }
 
-async function listSourceFiles(root: string): Promise<{
+async function listSourceFiles(
+  root: string,
+  committed: ReadonlySet<string>,
+): Promise<{
   files: readonly string[];
   truncatedDirectories: readonly string[];
 }> {
@@ -246,7 +249,8 @@ async function listSourceFiles(root: string): Promise<{
         }
       } else if (
         info.isFile() &&
-        sourceExtensions.has(path.extname(entry.name))
+        sourceExtensions.has(path.extname(entry.name)) &&
+        committed.has(posixPath(child))
       ) {
         state.files.push(posixPath(child));
       }
@@ -259,7 +263,10 @@ async function listSourceFiles(root: string): Promise<{
   };
 }
 
-async function gitRead(root: string, args: readonly string[]): Promise<string> {
+async function gitReadRaw(
+  root: string,
+  args: readonly string[],
+): Promise<string> {
   try {
     const result = await execFileAsync(
       "git",
@@ -284,7 +291,7 @@ async function gitRead(root: string, args: readonly string[]): Promise<string> {
         maxBuffer: 1024 * 1024,
       },
     );
-    return result.stdout.trim();
+    return result.stdout;
   } catch (error) {
     throw new MillError(
       "GIT_IDENTITY_UNAVAILABLE",
@@ -293,6 +300,36 @@ async function gitRead(root: string, args: readonly string[]): Promise<string> {
       { cause: String(error) },
     );
   }
+}
+
+async function gitRead(root: string, args: readonly string[]): Promise<string> {
+  return (await gitReadRaw(root, args)).trim();
+}
+
+async function committedPaths(root: string): Promise<ReadonlySet<string>> {
+  const output = await gitReadRaw(root, [
+    "ls-tree",
+    "-r",
+    "-z",
+    "--name-only",
+    "HEAD",
+  ]);
+  const paths = output.length === 0 ? [] : output.split("\0").slice(0, -1);
+  for (const candidate of paths) {
+    if (
+      candidate.length === 0 ||
+      path.posix.isAbsolute(candidate) ||
+      candidate.split("/").includes("..")
+    ) {
+      throw new MillError(
+        "GIT_IDENTITY_UNAVAILABLE",
+        "Static discovery received an unsafe path from the committed Git tree.",
+        ExitCode.data,
+        { path: candidate },
+      );
+    }
+  }
+  return new Set(paths);
 }
 
 async function readGitIdentity(root: string): Promise<GitIdentity> {
@@ -553,6 +590,16 @@ function declaredTestSelections(
       continue;
     }
     for (const selector of [...new Set(selectors)].sort()) {
+      if (selector.includes("**")) {
+        selections.push({
+          script,
+          command,
+          selector,
+          matchedInventory: [],
+          status: "unknown",
+        });
+        continue;
+      }
       selections.push({
         script,
         command,
@@ -663,10 +710,8 @@ export async function discoverRepository(
       { paths: scan.secretReferences },
     );
   }
-  const [identity, listed] = await Promise.all([
-    readGitIdentity(root),
-    listSourceFiles(root),
-  ]);
+  const identity = await readGitIdentity(root);
+  const listed = await listSourceFiles(root, await committedPaths(root));
   if (listed.truncatedDirectories.length > 0) {
     throw new MillError(
       "DISCOVERY_INCOMPLETE_SOURCE",

@@ -356,6 +356,61 @@ describe("repository intelligence", () => {
     }
   });
 
+  it("binds source evidence to the committed tree and keeps recursive selector matches unknown", async () => {
+    const fixture = await repositoryFixture();
+    try {
+      await writeFile(path.join(fixture.path, ".gitignore"), "generated/\n");
+      await git(fixture.path, ["add", ".gitignore"]);
+      await git(fixture.path, [
+        "-c",
+        "user.name=Mill fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "ignore generated source",
+      ]);
+      await mkdir(path.join(fixture.path, "generated"));
+      await writeFile(
+        path.join(fixture.path, "generated", "local.ts"),
+        'import "../src/math.js";\n',
+      );
+      await writeFile(
+        path.join(fixture.path, "package.json"),
+        JSON.stringify({ scripts: { test: "mocha src/**/*.test.ts" } }),
+      );
+      await git(fixture.path, ["add", "package.json"]);
+      await git(fixture.path, [
+        "-c",
+        "user.name=Mill fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "recursive selector fixture",
+      ]);
+
+      const report = await discoverRepository({ root: fixture.path });
+      expect(report.sourceFiles).not.toContain("generated/local.ts");
+      expect(report.modules.map((module) => module.path)).not.toContain(
+        "generated/local.ts",
+      );
+      expect(report.tests.declaredSelection).toEqual([
+        {
+          script: "test",
+          command: "mocha src/**/*.test.ts",
+          selector: "src/**/*.test.ts",
+          matchedInventory: [],
+          status: "unknown",
+        },
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("records dynamic and require edges, static-selector uncertainty, syntax errors, and Git-root boundaries", async () => {
     const fixture = await repositoryFixture();
     const nonRepository = await temporaryDirectory("mill-intelligence-no-git-");

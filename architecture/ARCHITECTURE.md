@@ -15,11 +15,13 @@ and exits to resumable state for long waits—there is no daemon.
 delivery lifecycle. It first rejects a dirty Git tree, sensitive path, symbolic
 link, truncated traversal, unsafe Git configuration, or unsafe changed path. It
 then reads bounded regular TypeScript/JavaScript files through the existing
-safe-path reader and parses imports with the installed TypeScript compiler API.
-The report binds extractor identity and the Git commit/tree, preserves import
-source locations, marks external/unresolved relationships, separates static test
-inventory and literal selector matches from unknown executed coverage, and
-traverses reverse local imports for conservative direct/transitive change leads.
+safe-path reader only when their paths occur in the bound `HEAD` tree, and
+parses imports with the installed TypeScript compiler API. The report binds
+extractor identity and the Git commit/tree, preserves import source locations,
+marks external/unresolved relationships, separates static test inventory and
+literal selector matches from unknown executed coverage, and traverses reverse
+local imports for conservative direct/transitive change leads. Recursive glob
+selectors remain unknown unless a future extractor explicitly supports them.
 
 The command uses Git only for read-only identity/status queries after static
 configuration screening; it does not invoke a package manager, model, target
