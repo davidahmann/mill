@@ -1,5 +1,5 @@
 task_id: mill-maintainer-verifier-bootstrap
-status: approved
+status: closed
 owner: David Ahmann
 objective: >-
   Qualify Mill's unchanged native acceptance suite in a dedicated offline,
@@ -98,3 +98,11 @@ closure:
   owner: attended_maintainer_not_builder
   rule: record evidence and closure only after exact validation and review
   invalidation: any candidate-byte change requires fresh exact review and audit
+  recorded_at: 2026-09-04T00:17:38.000Z
+  qualified_implementation_commit: 2c90f3d7a6c5ae9041b997de4dcfd6fe8551741e
+  qualified_implementation_tree: a4c0589d4a4e294e2dcac71719c476e83747ae13
+  evidence: docs/canaries/maintainer-verifier.md
+  disposition:
+    implementation qualified; bootstrap authority closed; the containing closure
+    commit requires fresh exact checks, review and audit before promotion and
+    grants no subsequent execution or remote effects

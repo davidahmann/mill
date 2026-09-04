@@ -372,3 +372,22 @@ gate, fresh exact-candidate read-only review and audit. Old failed evidence is
 retained. The prior review's known noexec finding is the design input to this
 one repair, not a waived finding. Unrelated product behavior, recipe support,
 dependencies, release policy and human readiness/merge boundaries are unchanged.
+
+### MB-001 closure
+
+The attended maintainer closed MB-001 and MB-001-A1 on 2026-09-04T00:17:38.000Z
+after full native host/OCI qualification, independent read-only review with no
+actionable findings, and the native nine-category audit of implementation commit
+`2c90f3d7a6c5ae9041b997de4dcfd6fe8551741e`, tree
+`a4c0589d4a4e294e2dcac71719c476e83747ae13`. Exact results and retained failures
+are in `docs/canaries/maintainer-verifier.md`.
+
+The exception is historical authority only and may not be reused for further
+implementation. Its containing closure commit must receive fresh full native
+host/OCI checks, exact read-only review and audit before promotion; any failure
+blocks. Once those pass, freeze that final commit and the unchanged verifier
+image/command controls for the next task. Normal version-2 admission,
+independent acceptance evidence and exact baseline approval apply to brownfield
+work. Exact PR-plan approval, human readiness/merge and separately authorized
+release effects remain unchanged. Original approval timestamps and budgets are
+retained.
