@@ -1,0 +1,110 @@
+schemaVersion: "2"
+id: mill-brownfield-discovery-format-repair
+title: Normalize brownfield requalification documentation formatting
+objective: >-
+  Apply the repository formatter only to the four documentation files rejected
+  by the exact candidate's full native gate, preserving their assertions,
+  approval boundary, and bounded read-only discovery behavior.
+riskClass: high
+baseRef: HEAD
+authority:
+  productContract:
+    path: product/brownfield-contract.yaml
+    digest: sha256:f2cffb03061c0131a9ffac3819d5315776dee01378a425c7a57591c08f8f3d23
+  scenarioSet:
+    path: quality/brownfield-scenarios.yaml
+    digest: sha256:d1526f7d0214917bb9f0e11940ad797043aa13401eef26cb2e373fc1384e45b4
+  policy:
+    path: WORKFLOW.md
+    digest: sha256:efdaa55eaa6ec241d9a8a290d6a0d7b6413c0c7bd631def37e33d19922cbdd55
+  impactManifest:
+    path: product/impacts/BROWNFIELD_DISCOVERY_ACCEPTANCE.yaml
+    digest: sha256:4409656b92d2ef470c355ff997a662f3d90c590a0ec157f8115ad2a3da1e2dda
+contextPaths:
+  - WORKFLOW.md
+  - product/brownfield-contract.yaml
+  - quality/brownfield-scenarios.yaml
+  - product/impacts/BROWNFIELD_DISCOVERY_ACCEPTANCE.yaml
+allowedPaths:
+  - README.md
+  - architecture/ARCHITECTURE.md
+  - docs/canaries/brownfield-discovery.md
+  - docs/development.md
+commandIds: [test:coverage, test:package]
+attestations:
+  - id: ATT-BFD-HUMAN-AUTHORITY-20260904
+    approvedBy: davidahmann
+    approvedAt: "2026-09-04T18:45:00.000Z"
+    expiresAt: "2026-09-05T18:45:00.000Z"
+    claims:
+      - kind: invariant
+        id: INV-HUMAN-AUTHORITY
+        digest: sha256:7de5bf4a333908ce8584b13c479a35cbb2bc364ec535a01519831b1d3e2c1380
+acceptance:
+  - id: ACC-BFD-001
+    statement: >-
+      Identical clean source, extractor identity, and input paths produce
+      identical canonical source-linked repository evidence.
+    invariantIds: [INV-EXACT-EVIDENCE]
+    scenarioIds: [SCN-BFD-001]
+    coverage: new_behavior
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-BFD-002
+    statement: >-
+      A source commit/tree or extractor identity change makes prior repository
+      evidence stale.
+    invariantIds: [INV-EXACT-EVIDENCE]
+    scenarioIds: [SCN-BFD-002]
+    coverage: new_behavior
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-BFD-003
+    statement: >-
+      Discovery fails closed for unsafe source inputs and reports unresolved
+      static relationships explicitly.
+    invariantIds: [INV-EXACT-EVIDENCE]
+    scenarioIds: [SCN-BFD-003]
+    coverage: new_behavior
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-BFD-004
+    statement: >-
+      Discovery is read-only and grants no task, delivery, merge, or release
+      authority.
+    invariantIds: [INV-EXACT-EVIDENCE, INV-HUMAN-AUTHORITY]
+    scenarioIds: [SCN-BFD-004]
+    coverage: both
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-BFD-005
+    statement: >-
+      Change results preserve direct and transitive importer leads while never
+      proving unaffectedness from absence.
+    invariantIds: [INV-EXACT-EVIDENCE]
+    scenarioIds: [SCN-BFD-005]
+    coverage: new_behavior
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-BFD-006
+    statement: >-
+      Static test inventory and declared selection remain distinct from unknown
+      executed coverage.
+    invariantIds: [INV-EXACT-EVIDENCE]
+    scenarioIds: [SCN-BFD-006]
+    coverage: new_behavior
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-BFD-007
+    statement: >-
+      The installed package exposes the same bounded discovery command and
+      schema.
+    invariantIds: [INV-DOWNSTREAM-INDEPENDENT]
+    scenarioIds: [SCN-BFD-007]
+    coverage: new_behavior
+    evidence: { mode: command, commandId: test:package }
+commit:
+  message: >-
+    docs: format brownfield discovery evidence
+
+    Signed-off-by: David Ahmann <dilmurat.personal@gmail.com>
+  authorName: David Ahmann
+  authorEmail: dilmurat.personal@gmail.com
+budget:
+  deadlineSeconds: 7200
+  maxOutputBytes: 2000000
+  retryCount: 1
