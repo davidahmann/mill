@@ -1,0 +1,73 @@
+schemaVersion: "2"
+id: mill-brownfield-draft-delivery-format-repair
+title: Normalize brownfield draft-delivery canary formatting
+objective: >-
+  Apply the repository formatter only to the committed brownfield draft-delivery
+  canary, preserving every policy, authority, recovery, and draft-only assertion
+  while changing no control input or delivery capability.
+riskClass: high
+baseRef: HEAD
+authority:
+  productContract:
+    path: product/contract.yaml
+    digest: sha256:e5a3dcd58a9face5a6ab36ec9aab99dc2c09f48cde59ed31fd2f42f16e217fca
+  scenarioSet:
+    path: quality/scenarios.yaml
+    digest: sha256:7c431796d5d1d314ac1625ba133d4d8d095123cf85c59a94d404f0b4379a26b3
+  policy:
+    path: WORKFLOW.md
+    digest: sha256:efdaa55eaa6ec241d9a8a290d6a0d7b6413c0c7bd631def37e33d19922cbdd55
+  impactManifest:
+    path: product/impacts/BROWNFIELD_DRAFT_DELIVERY_FORMAT_REPAIR.yaml
+    digest: sha256:50d67c894f3cb55ca5af5ac8925f39439f97f3f9d8777f06681d84466f77feef
+contextPaths:
+  - WORKFLOW.md
+  - product/contract.yaml
+  - quality/scenarios.yaml
+  - product/impacts/BROWNFIELD_DRAFT_DELIVERY_FORMAT_REPAIR.yaml
+allowedPaths:
+  - docs/canaries/brownfield-draft-delivery.md
+commandIds: [test:coverage]
+attestations:
+  - id: ATT-BROWNFIELD-DRAFT-FORMAT-HUMAN-AUTHORITY-20260904
+    approvedBy: davidahmann
+    approvedAt: "2026-09-04T19:38:24Z"
+    expiresAt: "2026-09-05T19:38:24Z"
+    claims:
+      - kind: invariant
+        id: INV-HUMAN-AUTHORITY
+        digest: sha256:5f275bad059e1ade8ff0f09df259a76b61ebcfedea97baf1a6fb4b02f369a1d0
+acceptance:
+  - id: ACC-REVIEWED-DRAFT
+    statement: >-
+      The unchanged exact candidate reaches one independently reviewed draft
+      pull request.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: test:coverage }
+  - id: ACC-TRUTHFUL-RECOVERY
+    statement: >-
+      Cancellation, ambiguity, and resume never duplicate work or invent
+      success.
+    invariantIds:
+      - INV-HUMAN-AUTHORITY
+      - INV-EXACT-EVIDENCE
+      - INV-WORKER-LEAST-AUTHORITY
+    scenarioIds: [SCN-DRAFT-DELIVERY]
+    coverage: both
+    evidence: { mode: command, commandId: test:coverage }
+commit:
+  message: >-
+    docs: format brownfield draft delivery evidence
+
+    Signed-off-by: David Ahmann <dilmurat.personal@gmail.com>
+  authorName: David Ahmann
+  authorEmail: dilmurat.personal@gmail.com
+budget:
+  deadlineSeconds: 7200
+  maxOutputBytes: 2000000
+  retryCount: 1
