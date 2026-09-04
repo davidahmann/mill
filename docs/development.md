@@ -51,10 +51,10 @@ field accepts a nonempty list whose names must already occur in
 `propose.requiredChecks`. Without it, the effective post-merge list is the
 complete PR list. Both effective lists enter new proposal digests and persisted
 delivery records. New records also persist `postMergePolicySource` as
-`configured` when the optional field is present or `implicit_default` when it
-is omitted; continuity checks reject later policy drift. Keep the full PR
-gate, independent exact-candidate review, separately approved draft delivery,
-and human readiness/merge boundaries intact.
+`configured` when the optional field is present or `implicit_default` when it is
+omitted; continuity checks reject later policy drift. Keep the full PR gate,
+independent exact-candidate review, separately approved draft delivery, and
+human readiness/merge boundaries intact.
 
 Legacy delivery records may lack `postMergeRequiredChecks`. Only finalization
 can bind an explicitly configured subset once, and only after GitHub proves the
@@ -63,13 +63,12 @@ allowed method, with the exact reviewed candidate tree. The task, candidate
 commit/tree, repository, remote, base, actor, original PR checks, review policy,
 and merger/method bindings must still match. Each selected name must have been
 required before merge. The implementation persists the subset and
-`postMergePolicySource: legacy_migrated` and
-`legacyPostMergePolicyConfigDigest` and emits
-`delivery.legacy_post_merge_policy_bound`; subsequent readback must match that
-bound configuration digest and list. It does not rewrite the original delivery
-approval, relax pre-merge checks, grant another push, or permit repeated policy
-rebinding. An unmerged PR returns `HUMAN_MERGE_PENDING` without persisting the
-legacy binding.
+`postMergePolicySource: legacy_migrated` and `legacyPostMergePolicyConfigDigest`
+and emits `delivery.legacy_post_merge_policy_bound`; subsequent readback must
+match that bound configuration digest and list. It does not rewrite the original
+delivery approval, relax pre-merge checks, grant another push, or permit
+repeated policy rebinding. An unmerged PR returns `HUMAN_MERGE_PENDING` without
+persisting the legacy binding.
 
 The prepared compatibility extension also admits a historical record whose
 `postMergeRequiredChecks` exactly equals its original `requiredChecks` list,
@@ -80,8 +79,8 @@ as a Mill configuration, and requires omission of
 `LEGACY_POST_MERGE_POLICY_SOURCE_UNAVAILABLE`; invalid YAML or configuration
 produces `LEGACY_POST_MERGE_POLICY_SOURCE_INVALID`. An explicitly configured
 full list cannot be treated as an implicit default. New records carrying either
-`configured` or `implicit_default` cannot enter this historical extension.
-The same merge and continuity checks above must pass before the one-time local
+`configured` or `implicit_default` cannot enter this historical extension. The
+same merge and continuity checks above must pass before the one-time local
 binding is persisted; later configuration drift cannot rebind it.
 
 `checkDecision` treats absent checks and incomplete results as pending. Every

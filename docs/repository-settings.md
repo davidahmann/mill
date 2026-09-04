@@ -55,10 +55,10 @@ workflow event or branch-protection setting.
 Historical merged deliveries have the bounded local binding described in the
 [development guide](development.md#delivery-check-contract). The prepared
 migration additionally covers a full defaulted list without policy provenance,
-only when the exact reviewed candidate proves the optional field was omitted.
-It requires authoritative merge, identity and tree readback, unchanged original
-PR requirements, and a nonempty subset drawn from those requirements. It grants
-no remote mutation or human merge authority. The
+only when the exact reviewed candidate proves the optional field was omitted. It
+requires authoritative merge, identity and tree readback, unchanged original PR
+requirements, and a nonempty subset drawn from those requirements. It grants no
+remote mutation or human merge authority. The
 [migration record](canaries/post-merge-default-policy-migration.md) documents
 the conditions for delivery `01801a1b-58f9-480f-8cee-54ea2bbeabb2`; it does not
 claim live closure. The earlier

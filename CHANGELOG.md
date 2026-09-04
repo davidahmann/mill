@@ -30,10 +30,10 @@ separately authorized; `0.1.5` remains the qualified public-alpha trust root.
 
 ### Fixed
 
-- Permit one historical full-list post-merge policy binding only when the
-  record lacks provenance and a prior binding, the exact reviewed candidate
-  proves an implicit default, and authoritative merge readback establishes all
-  other delivery identities. Persist the configured nonempty subset and its
+- Permit one historical full-list post-merge policy binding only when the record
+  lacks provenance and a prior binding, the exact reviewed candidate proves an
+  implicit default, and authoritative merge readback establishes all other
+  delivery identities. Persist the configured nonempty subset and its
   configuration digest as `legacy_migrated`. The
   [migration record](docs/canaries/post-merge-default-policy-migration.md)
   documents delivery `01801a1b-58f9-480f-8cee-54ea2bbeabb2` without claiming

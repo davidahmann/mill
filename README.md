@@ -263,9 +263,10 @@ New delivery records identify the policy source as `configured` or
 provenance can bind the configured subset once only if its exact reviewed
 candidate proves omission of the optional policy and authoritative merge
 readback establishes every other delivery identity. That compatibility path
-cannot relax a new delivery. See [repository settings](docs/repository-settings.md)
-and the [migration record](docs/canaries/post-merge-default-policy-migration.md)
-for the conditions and outstanding live evidence for delivery
+cannot relax a new delivery. See
+[repository settings](docs/repository-settings.md) and the
+[migration record](docs/canaries/post-merge-default-policy-migration.md) for the
+conditions and outstanding live evidence for delivery
 `01801a1b-58f9-480f-8cee-54ea2bbeabb2`. Human readiness, merge authority, and
 exact candidate/tree checks remain required.
 
