@@ -131,8 +131,8 @@ Static discovery is a separate read-only operation. It requires a clean Git
 repository root and rejects sensitive paths, symbolic links, unsafe Git
 configuration, and incomplete source traversal. It parses local TypeScript and
 JavaScript imports only after each regular file's physical bytes match its blob
-in the captured `HEAD` tree. The same check protects parsed package metadata.
-It reports source locations, inventories test files, and gives conservative
+in the captured `HEAD` tree. The same check protects parsed package metadata. It
+reports source locations, inventories test files, and gives conservative
 importer leads for named paths. Nonliteral module loads and option-bearing test
 commands remain explicit unknowns. It never installs dependencies, runs the
 target's code, or claims executed coverage or delivery authority.

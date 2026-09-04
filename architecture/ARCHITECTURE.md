@@ -20,11 +20,10 @@ existing safe-path reader and derives evidence only when the physical bytes
 match the captured blobs. A final `HEAD` check rejects a concurrent identity
 change. The report binds extractor identity and the Git commit/tree, preserves
 import source locations, marks external, unresolved, and nonliteral
-relationships, separates static test inventory and literal selector matches
-from unknown executed coverage, and traverses reverse local imports for
-conservative direct/transitive change leads. Recursive glob selectors and
-option-bearing test commands remain unknown unless a future extractor
-explicitly supports them.
+relationships, separates static test inventory and literal selector matches from
+unknown executed coverage, and traverses reverse local imports for conservative
+direct/transitive change leads. Recursive glob selectors and option-bearing test
+commands remain unknown unless a future extractor explicitly supports them.
 
 The command uses Git only for read-only identity/status queries after static
 configuration screening; it does not invoke a package manager, model, target

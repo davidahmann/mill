@@ -69,8 +69,8 @@ physical source bytes hidden by Git's `assume-unchanged` flag with
 `DISCOVERY_COMMITTED_SOURCE_MISMATCH`. A clean-looking status alone cannot
 attribute those bytes to the captured commit/tree.
 
-They also require nonliteral `import(imported)` and `require(required)` loads
-to remain `unresolved`, with `nonliteral_specifier`, rather than guessing their
+They also require nonliteral `import(imported)` and `require(required)` loads to
+remain `unresolved`, with `nonliteral_specifier`, rather than guessing their
 targets. The option-bearing command
 `vitest run --exclude src/service.test.ts src/*.test.ts` must yield
 `static_selection_unknown`, an empty matched inventory, and status `unknown`.
@@ -108,8 +108,8 @@ record supplies no baseline approval digest, passing qualification, review,
 audit, or delivery approval. Missing or failed required evidence still blocks
 promotion.
 
-Discovery remains static orientation evidence. Neither these regressions nor
-the retained JSON Server observation authorize target dependency installation,
+Discovery remains static orientation evidence. Neither these regressions nor the
+retained JSON Server observation authorize target dependency installation,
 target execution, repository mutation, a task, PR, merge, or release. They add
 no supported runtime tuple or adoption compatibility claim, and introduce no
 Mill dependency into the downstream repository.
@@ -121,9 +121,9 @@ David Ahmann's explicit approval as attestation
 `ATT-BFD-HUMAN-AUTHORITY-20260904`, approved by `davidahmann` at
 `2026-09-04T18:45:00.000Z`, expiring at `2026-09-05T18:45:00.000Z`. Its sole
 claim binds `INV-HUMAN-AUTHORITY` to
-`sha256:7de5bf4a333908ce8584b13c479a35cbb2bc364ec535a01519831b1d3e2c1380`.
-The invariant reserves consequential ambiguity and merge approval to the
-configured human authority. Recording this claim does not approve a merge.
+`sha256:7de5bf4a333908ce8584b13c479a35cbb2bc364ec535a01519831b1d3e2c1380`. The
+invariant reserves consequential ambiguity and merge approval to the configured
+human authority. Recording this claim does not approve a merge.
 
 ACC-BFD-004 and SCN-BFD-004 retain their command-evidence requirement for
 read-only discovery under `test:coverage`. The invariant's human verification
@@ -136,8 +136,8 @@ This builder inspected clean starting commit
 `5c1a6fe2ac9d7ae857a4a8e23acf7bda73a70945`, tree
 `db5aa59f6be88ce42f78af8617d797bc3c99d81f`. All six approved context-file
 digests matched, and the extractor, regression test, and packed-package script
-retained the file digests recorded above. Only this canary record changed;
-the human attestation was already present in the task before this edit.
+retained the file digests recorded above. Only this canary record changed; the
+human attestation was already present in the task before this edit.
 
 Requalification results for ACC-BFD-001 through ACC-BFD-007 remain pending
 authoritative lifecycle validation of the exact committed candidate through
