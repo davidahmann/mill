@@ -1,0 +1,32 @@
+schemaVersion: "2"
+id: mill-release-v0.3.0-closeout
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-05: "ok but make 0.3.0 latest version
+  on gh release and npm", "try npm auth in chrome again if needed", and "do it".
+source_base: e8243b2658b8ac421a67b424fe91875099dbda1c
+authority: product/release-v0.3.0-closeout.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Candidate release qualification fails before any subsequent workflow step
+    unless the dispatched tag owns a regular, non-symlink, nonempty release
+    record.
+  - Workflow policy treats the checkout-to-notes sequence as one exact
+    structural boundary rather than attempting to enumerate later effects.
+affected_surfaces:
+  - release workflow command control
+  - workflow policy and regression tests
+  - release and task evidence documentation
+verification:
+  - native check and exact-candidate audit
+  - read-only complete-diff review
+  - green PR and resulting-main checks
+exceptions:
+  - This attended maintainer task may change .github workflows, scripts, tests,
+    docs, and product evidence within its declared paths.
+  - It cannot publish, retag, rebuild, deploy, bypass protection, or alter
+    historical release artifacts.
