@@ -250,6 +250,23 @@ describe("change-plan task compilation", () => {
           }),
         ).rejects.toMatchObject({ code: "DIRTY_CHECKOUT" });
         await rm(path.join(record.worktreePath, "unexpected.txt"));
+        await writeFile(
+          path.join(record.worktreePath, "ignored-output"),
+          "operator-owned retention witness",
+        );
+        await expect(
+          statePurge({
+            root: fixture.root,
+            confirmation: inputs.config.repositoryId,
+          }),
+        ).rejects.toMatchObject({ code: "AUTHORITY_PLAN_IDENTITY_MISMATCH" });
+        expect(
+          await readFile(
+            path.join(record.worktreePath, "ignored-output"),
+            "utf8",
+          ),
+        ).toBe("operator-owned retention witness");
+        await rm(path.join(record.worktreePath, "ignored-output"));
         await statePurge({
           root: fixture.root,
           confirmation: inputs.config.repositoryId,

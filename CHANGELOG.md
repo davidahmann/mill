@@ -5,7 +5,9 @@
 - Add opt-in, exact-plan attended readiness/merge with producer-bound CI,
   strict-protection checks, separate intent journals and readback recovery.
 - Bind local review to the complete base-to-candidate diff, including
-  preparatory commits; preserve one bounded native-validation repair.
+  preparatory commits; add pre-effect attended scope refresh without changing
+  candidate identity or resetting budgets. Preserve one bounded
+  native-validation repair.
 - Compile source-backed change requests into dependency-checked version-2 tasks;
   bind explicit supersession and propose closure from finalized evidence.
 - Add bounded repository-map context and experimental native Node ESM/npm
@@ -14,6 +16,8 @@
   readback before purge; preserve partial apply worktrees. Reject existing task
   output paths before approval; add attended exact-plan abandonment retaining
   the original plan and partial-output commit without claiming successful apply.
+  Centralize pending-effect admission for both authority compilers and refuse
+  authority purge when ignored or untracked foreign content remains.
 - Reconcile interrupted push/PR intent independently of enclosing run status;
   settle the effect journal and lifecycle atomically without losing cancellation
   or the original retry budget.

@@ -100,6 +100,35 @@ never a new effect. Cancellation continues to prevent later mutations.
 
 ## Recovery, integrity and evidence
 
+### Completion of the same approved systemic correction
+
+Review of `0ceb3f0` resolved the prior material findings but identified two P2
+gaps: unreachable full-diff review refresh and status-only authority admission.
+A separate non-destructive probe also showed that an ignored foreign file passes
+normal authority purge preflight. The following bounded corrections stay within
+AF-02/07/08 and the owner's systemic-fix approval; no gate is waived.
+
+All authority-plan creation, including task compilation and native adoption,
+must centrally check every run's external-effect boundary before durable intent.
+Terminal enclosing status cannot override a pending journal.
+
+Before any remote attempt, `review --refresh --base <exact-commit> --attended`
+may replace stale scope without changing the candidate, validation, Git refs,
+task approval, deadline or total per-candidate review budget. The base must
+already exist locally. Preparation atomically retains old review/delivery
+evidence, invalidates the unexecuted delivery approval and records the new exact
+scope before another reviewer invocation. A crash can resume that recorded scope
+without replaying preparation or resetting attempts. Ordinary delivery still
+compares reviewed scope with GitHub's authoritative base. Refresh after any
+remote attempt, with findings, cancellation or unresolved/merged effects is
+denied. This is not permission to synchronize frozen refs or erase a journal.
+
+Authority purge must inspect every remaining entry against the retained commit,
+including ignored and untracked content, before recording deletion intent.
+Unknown content blocks deletion even when Git calls the checkout clean. The same
+verifier serves normal and interrupted deletion; no ownership is inferred from
+`.gitignore`. Abandonment itself remains non-destructive.
+
 Authority purge first retains its exact commit and durable intent. Recovery
 after partial deletion verifies the retained branch and every remaining entry
 against that commit (including file type/content and the worktree Git marker).

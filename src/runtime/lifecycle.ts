@@ -909,6 +909,9 @@ export async function reviewRun(input: {
   root: string;
   taskPath: string;
   runId: string;
+  refresh?: boolean;
+  baseCommit?: string;
+  attended?: boolean;
 }): Promise<{
   run: PublicRunRecord;
   review: ReturnType<typeof reviewResultSchema.parse>;
@@ -918,10 +921,53 @@ export async function reviewRun(input: {
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   const signals = processCancellationScope();
+  let reviewPrepared = false;
   try {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
+    assertEffectAllowsNewWork(run);
     const deadlineMs = persistedRunDeadline(run);
+    if (input.refresh === true) {
+      if (input.attended !== true)
+        throw new MillError(
+          "ATTENDANCE_REQUIRED",
+          "Review refresh requires the attended operator.",
+          ExitCode.configuration,
+        );
+      if (
+        input.baseCommit === undefined ||
+        !/^[a-f0-9]{40}$/u.test(input.baseCommit)
+      )
+        throw new MillError(
+          "REVIEW_BASE_REQUIRED",
+          "Review refresh requires an exact locally available base commit.",
+          ExitCode.configuration,
+        );
+      if (run.reviewJson === undefined)
+        throw new MillError(
+          "REVIEW_REFRESH_UNAVAILABLE",
+          "No completed review exists to refresh; resume an already prepared review without --refresh.",
+          ExitCode.configuration,
+        );
+      const candidate = await assertRunBindings(input.root, run, inputs);
+      const scope = await captureReviewScope(
+        candidate.worktree,
+        input.baseCommit,
+        candidate.commit,
+      );
+      run = store.prepareReviewRefresh(
+        run.id,
+        run.reviewJson,
+        scope,
+        inputs.task.budget.retryCount + 1,
+      );
+      reviewPrepared = true;
+    } else if (input.baseCommit !== undefined)
+      throw new MillError(
+        "REVIEW_REFRESH_REQUIRED",
+        "An explicit review base requires --refresh and --attended.",
+        ExitCode.configuration,
+      );
     const retryableReviewBlocks = new Set([
       "CODEX_CANCELLED",
       "CODEX_DEADLINE_EXCEEDED",
@@ -973,10 +1019,29 @@ export async function reviewRun(input: {
       );
     }
     const candidate = await assertRunBindings(input.root, run, inputs);
+    const refreshedScope = store.reviewRefreshScope(run.id);
+    const reviewScope = await captureReviewScope(
+      candidate.worktree,
+      refreshedScope?.baseCommit ??
+        (inputs.config.propose === undefined
+          ? run.baseCommit
+          : `refs/heads/${inputs.config.propose.baseBranch}`),
+      candidate.commit,
+    );
+    if (
+      refreshedScope !== undefined &&
+      reviewScope.digest !== refreshedScope.digest
+    )
+      throw new MillError(
+        "REVIEW_SCOPE_STALE",
+        "The prepared review scope no longer matches the candidate.",
+        ExitCode.configuration,
+      );
     const reviewAttempt = store.beginReviewAttempt(
       run.id,
       inputs.task.budget.retryCount + 1,
     );
+    reviewPrepared = true;
     const admission = await admitWorker({
       store,
       run,
@@ -995,13 +1060,7 @@ export async function reviewRun(input: {
         task: inputs.task,
         manifest: candidate.manifest,
         candidateCommit: candidate.commit,
-        reviewScope: await captureReviewScope(
-          candidate.worktree,
-          inputs.config.propose === undefined
-            ? run.baseCommit
-            : `refs/heads/${inputs.config.propose.baseBranch}`,
-          candidate.commit,
-        ),
+        reviewScope,
         deadlineMs,
         maxOutputBytes: inputs.task.budget.maxOutputBytes,
         signal: signals.signal,
@@ -1033,7 +1092,8 @@ export async function reviewRun(input: {
     }
   } catch (error) {
     const failure = asMillError(error);
-    if (lease !== undefined) settleFailure(store, input.runId, failure);
+    if (lease !== undefined && (input.refresh !== true || reviewPrepared))
+      settleFailure(store, input.runId, failure);
     throw failure;
   } finally {
     signals.dispose();

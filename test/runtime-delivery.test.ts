@@ -14,6 +14,7 @@ import {
 } from "../src/contracts/schemas.js";
 
 import { MillError, ExitCode } from "../src/errors.js";
+import { runCli } from "../src/cli-program.js";
 import {
   finalizeDraftPr,
   observeDraftPr,
@@ -645,6 +646,14 @@ describe("exact-candidate GitHub draft delivery", () => {
               attended: true,
             }),
           ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
+          await expect(
+            reviewRun({
+              ...input,
+              refresh: true,
+              baseCommit: initial.baseCommit,
+              attended: true,
+            }),
+          ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
           const outage = vi
             .spyOn(adapter, "readBranch")
             .mockRejectedValue(new Error("readback unavailable"));
@@ -658,6 +667,33 @@ describe("exact-candidate GitHub draft delivery", () => {
             path.join(store.directory, "state.sqlite3"),
           );
           try {
+            if (kind === "push" && point === "before" && !cancel) {
+              db.prepare(
+                "UPDATE runs SET status = 'cancelled' WHERE id = ?",
+              ).run(runId);
+              const digest = `sha256:${"a".repeat(64)}`;
+              expect(() =>
+                store.beginAuthorityPlan(
+                  {
+                    kind: "tasks",
+                    state: "intent",
+                    approvalDigest: digest,
+                    baseCommit: initial.baseCommit,
+                    worktreePath: path.join(
+                      store.worktreesDirectory,
+                      `plan-${digest.slice(7)}`,
+                    ),
+                    branch: "mill/guard-probe",
+                    files: [{ path: "product/plan.yaml", digest }],
+                  },
+                  "DUPLICATE",
+                ),
+              ).toThrow("Reconcile the recorded external effect");
+              expect(store.authorityPlans()).toEqual([]);
+              db.prepare(
+                "UPDATE runs SET status = 'proposing' WHERE id = ?",
+              ).run(runId);
+            }
             db.exec(
               "CREATE TRIGGER test_fail_settlement BEFORE INSERT ON run_events WHEN NEW.type = 'delivery.effect_reconciled' BEGIN SELECT RAISE(ABORT, 'settlement fault'); END;",
             );
@@ -686,6 +722,15 @@ describe("exact-candidate GitHub draft delivery", () => {
                 ? "awaiting_ci"
                 : "proposing",
             );
+            if (kind === "push")
+              await expect(
+                reviewRun({
+                  ...input,
+                  refresh: true,
+                  baseCommit: result.delivery.candidateCommit,
+                  attended: true,
+                }),
+              ).rejects.toMatchObject({ code: "REVIEW_REFRESH_AFTER_EFFECT" });
           }
           expect((await fixtureDelivery(fixture, runId)).effects).toEqual(
             expect.arrayContaining([
@@ -1037,39 +1082,185 @@ describe("exact-candidate GitHub draft delivery", () => {
     }
   });
 
-  it("rejects a local review that omits preparation present in GitHub's actual PR diff", async () => {
-    const { fixture, runId } = await reviewedFixture({
-      postMergeRequiredChecks: ["validate"],
-    });
-    const base = (await git(fixture.root, ["rev-parse", "main"])).stdout.trim();
-    const adapter = new FakeGitHub(base);
-    const input = {
-      root: fixture.root,
-      taskPath: fixture.taskPath,
-      runId,
-      adapter,
-    };
-    try {
-      const plan = await planDraftPr(input);
-      adapter.defaultBranchHead = (
-        await git(fixture.root, ["rev-parse", "main^"])
-      ).stdout.trim();
-      await expect(
-        openDraftPr({
-          ...input,
-          approvalDigest: plan.delivery.proposalDigest,
-          attended: true,
-        }),
-      ).rejects.toMatchObject({ code: "REVIEW_SCOPE_STALE" });
-      await expect(planDraftPr(input)).rejects.toMatchObject({
-        code: "REVIEW_SCOPE_STALE",
+  it.each(["normal", "interrupted"])(
+    "refreshes a local review missing GitHub preparation without changing the candidate (%s)",
+    async (scenario) => {
+      const { fixture, runId } = await reviewedFixture({
+        postMergeRequiredChecks: ["validate"],
       });
-      expect(adapter.pushCalls).toBe(0);
-      expect(adapter.createCalls).toBe(0);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
+      const base = (
+        await git(fixture.root, ["rev-parse", "main"])
+      ).stdout.trim();
+      const adapter = new FakeGitHub(base);
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      };
+      try {
+        const plan = await planDraftPr(input);
+        adapter.defaultBranchHead = (
+          await git(fixture.root, ["rev-parse", "main^"])
+        ).stdout.trim();
+        await expect(
+          openDraftPr({
+            ...input,
+            approvalDigest: plan.delivery.proposalDigest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "REVIEW_SCOPE_STALE" });
+        await expect(planDraftPr(input)).rejects.toMatchObject({
+          code: "REVIEW_SCOPE_STALE",
+        });
+        expect(adapter.pushCalls).toBe(0);
+        expect(adapter.createCalls).toBe(0);
+        const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+        const store = await StateStore.open(
+          inputs.config.repositoryId,
+          await commonGitDirectory(fixture.root),
+        );
+        const original = store.getRun(runId);
+        store.close();
+        const refreshInput = {
+          ...input,
+          refresh: true,
+          baseCommit: adapter.defaultBranchHead,
+          attended: true,
+        };
+        await expect(
+          reviewRun({ ...refreshInput, attended: false }),
+        ).rejects.toMatchObject({ code: "ATTENDANCE_REQUIRED" });
+        await expect(
+          reviewRun({ ...refreshInput, baseCommit: "main" }),
+        ).rejects.toMatchObject({ code: "REVIEW_BASE_REQUIRED" });
+        await expect(
+          reviewRun({ ...refreshInput, baseCommit: base }),
+        ).rejects.toMatchObject({ code: "REVIEW_REFRESH_NOT_REQUIRED" });
+        if (scenario === "normal") {
+          const probeStore = await StateStore.open(
+            inputs.config.repositoryId,
+            await commonGitDirectory(fixture.root),
+          );
+          const db = new DatabaseSync(
+            path.join(probeStore.directory, "state.sqlite3"),
+          );
+          try {
+            db.exec(
+              "CREATE TRIGGER fail_refresh BEFORE INSERT ON run_events WHEN NEW.type = 'review.refresh_prepared' BEGIN SELECT RAISE(ABORT, 'refresh fault'); END;",
+            );
+            await expect(reviewRun(refreshInput)).rejects.toMatchObject({
+              code: "STATE_WRITE_FAILED",
+            });
+            expect(probeStore.getRun(runId)).toEqual(original);
+            db.exec("DROP TRIGGER fail_refresh;");
+          } finally {
+            db.close();
+            probeStore.close();
+          }
+        }
+        if (scenario === "interrupted") {
+          // eslint-disable-next-line @typescript-eslint/unbound-method
+          const prepare = StateStore.prototype.prepareReviewRefresh;
+          const fault = vi
+            .spyOn(StateStore.prototype, "prepareReviewRefresh")
+            .mockImplementation(function (this: StateStore, ...args) {
+              prepare.apply(this, args);
+              throw new Error("interrupted after refresh preparation");
+            });
+          try {
+            await expect(reviewRun(refreshInput)).rejects.toThrow(
+              "interrupted after refresh preparation",
+            );
+          } finally {
+            fault.mockRestore();
+          }
+        }
+        let refreshed: Awaited<ReturnType<typeof reviewRun>>;
+        if (scenario === "interrupted") refreshed = await reviewRun(input);
+        else {
+          const output: string[] = [];
+          const errors: string[] = [];
+          expect(
+            await runCli(
+              [
+                "--json",
+                "--cwd",
+                fixture.root,
+                "review",
+                "--task",
+                fixture.taskPath,
+                "--run",
+                runId,
+                "--refresh",
+                "--base",
+                adapter.defaultBranchHead,
+                "--attended",
+              ],
+              {
+                stdout: { write: (value) => void output.push(value) },
+                stderr: { write: (value) => void errors.push(value) },
+              },
+            ),
+          ).toBe(0);
+          expect(errors).toEqual([]);
+          const envelope = JSON.parse(output.join("")) as {
+            data: Awaited<ReturnType<typeof reviewRun>>;
+          };
+          expect(envelope).toMatchObject({ command: "review", ok: true });
+          refreshed = envelope.data;
+        }
+        expect(refreshed.run.status).toBe("reviewed");
+        expect(refreshed.review.scope?.baseCommit).toBe(
+          adapter.defaultBranchHead,
+        );
+        const afterStore = await StateStore.open(
+          inputs.config.repositoryId,
+          await commonGitDirectory(fixture.root),
+        );
+        try {
+          expect(afterStore.getRun(runId)).toMatchObject({
+            candidateCommit: original.candidateCommit,
+            candidateTree: original.candidateTree,
+            validationJson: original.validationJson,
+            deadlineAt: original.deadlineAt,
+            repairCount: original.repairCount,
+          });
+          const receipt = afterStore
+            .events(runId)
+            .find((event) => event.type === "review.refresh_prepared");
+          expect(receipt?.data).toMatchObject({
+            previousReviewJson: original.reviewJson,
+            previousDeliveryJson: original.deliveryJson,
+          });
+        } finally {
+          afterStore.close();
+        }
+        await expect(
+          reviewRun({ ...refreshInput, baseCommit: base }),
+        ).rejects.toMatchObject({ code: "REVIEW_RETRY_BUDGET_EXHAUSTED" });
+        expect(
+          (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+        ).toBe(base);
+        await expect(
+          openDraftPr({
+            ...input,
+            approvalDigest: plan.delivery.proposalDigest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "DELIVERY_NOT_APPLICABLE" });
+        const freshPlan = await planDraftPr(input);
+        const opened = await openDraftPr({
+          ...input,
+          approvalDigest: freshPlan.delivery.proposalDigest,
+          attended: true,
+        });
+        expect(opened.run.status).toBe("awaiting_ci");
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   it("requires an exact attended proposal and closes only after merge readback", async () => {
     const { fixture, runId, candidateTree } = await reviewedFixture();

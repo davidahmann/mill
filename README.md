@@ -357,6 +357,11 @@ Cancellation records intent without discarding the receipt. Use
 `pr finalize` and green main checks before cleanup. See
 [approval recovery](docs/approvals.md#interruptions).
 
+Before any remote attempt, stale review scope can use attended
+`review --refresh --base <exact-provider-commit>`. This preserves the candidate
+and remaining review budget, invalidates the unexecuted delivery plan and does
+not move frozen Git refs. Plan delivery again after the fresh review passes.
+
 For generated authority, `state reconcile-plans` verifies the exact committed
 files. A failed plan can instead be explicitly discontinued with
 `state abandon-plan --approve <original-plan-digest> --attended`, after

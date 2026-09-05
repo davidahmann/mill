@@ -264,9 +264,10 @@ async function assertReviewedCandidate(
   const candidate = await assertRunBindings(root, run, inputs);
   const expectedScope = await captureReviewScope(
     candidate.worktree,
-    inputs.config.propose === undefined
-      ? run.baseCommit
-      : `refs/heads/${inputs.config.propose.baseBranch}`,
+    review.scope?.baseCommit ??
+      (inputs.config.propose === undefined
+        ? run.baseCommit
+        : `refs/heads/${inputs.config.propose.baseBranch}`),
     candidate.commit,
   );
   if (review.scope?.digest !== expectedScope.digest) {
@@ -309,7 +310,7 @@ async function assertProviderReviewScope(
   if (review.scope?.digest !== scope.digest)
     throw new MillError(
       "REVIEW_SCOPE_STALE",
-      "The reviewed diff differs from GitHub's actual PR base. Synchronize the local base and obtain fresh complete-diff review before delivery.",
+      "The reviewed diff differs from GitHub's actual PR base. Before any remote attempt, use attended review --refresh --base with the exact locally available provider commit, then plan delivery again. Do not change frozen refs.",
       ExitCode.configuration,
     );
   // Reading the provider SHA never fetches or changes local refs implicitly.

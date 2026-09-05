@@ -240,6 +240,11 @@ try {
     ["state", "abandon-plan", "--help"],
     temporary,
   );
+  const refreshHelp = command(bin, ["review", "--help"], temporary);
+  for (const option of ["--refresh", "--base <commit>", "--attended"]) {
+    if (!refreshHelp.includes(option))
+      throw new Error(`Packed review-refresh contract is missing ${option}`);
+  }
   for (const option of ["--approve <digest>", "--attended"]) {
     if (!abandonmentHelp.includes(option))
       throw new Error(`Packed abandonment contract is missing ${option}`);

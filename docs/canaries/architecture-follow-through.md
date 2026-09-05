@@ -126,6 +126,23 @@ The systemic repair then passed the full native gate: 258 tests in 32 files,
 The exact committed host/OCI checks, audit and independent review still gate
 promotion; this working-tree result is not their substitute.
 
+The `0ceb3f0` exact host gate, offline OCI gate and structural audit passed. Its
+independent complete 73-file review returned two P2 findings and no P0/P1:
+pre-effect review-scope refresh was unreachable, and authority apply admitted
+terminal runs with nested pending effects. A separate non-destructive
+ignored-file probe also showed normal authority purge accepting unrelated
+content. None of these findings was treated as a release exception.
+
+The next coherent correction centralizes authority admission, adds attended
+pre-effect scope refresh with unchanged candidate/budgets and retained receipts,
+and checks every authority-worktree entry before normal as well as resumed
+purge. Four red fixture failures reproduced the three failure groups. The
+completed native gate passed 259 tests, 81.32% branch coverage and
+packed-package qualification. The unchanged external ignored-file probe now
+rejects cleanup with `AUTHORITY_PLAN_IDENTITY_MISMATCH` and preserves its
+witness. Exact-commit verification and the next independent complete review
+still gate promotion.
+
 Native tests and fixed cases are deterministic evidence; a single live model run
 is not an estimate of productivity, reliability or customer acceptance. This
 canary does not qualify a new public support tuple. Read-only Codex sandboxing

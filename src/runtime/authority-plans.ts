@@ -190,17 +190,23 @@ export async function verifyAuthorityPlanPurge(
     else throw error;
   }
   if (present && plan.purgeCommit === undefined) {
+    let evidence;
     if (plan.state === "abandoned") {
-      const evidence = await retainedAuthorityIdentity(plan, commonDirectory);
+      evidence = await retainedAuthorityIdentity(plan, commonDirectory);
       if (evidence.committedCommit !== plan.abandonedCommit)
         throw new MillError(
           "AUTHORITY_PLAN_IDENTITY_MISMATCH",
           "Abandoned authority branch changed.",
           ExitCode.configuration,
         );
-      return evidence;
-    }
-    return await verifyAuthorityPlanCommit(plan, commonDirectory);
+    } else evidence = await verifyAuthorityPlanCommit(plan, commonDirectory);
+    await verifyPartiallyRemovedWorktree(
+      root,
+      plan.worktreePath,
+      evidence.committedCommit,
+      commonDirectory,
+    );
+    return evidence;
   }
   if (
     plan.purgeCommit === undefined ||

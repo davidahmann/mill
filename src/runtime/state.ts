@@ -16,7 +16,12 @@ import path from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
-import { deliveryRecordSchema } from "../contracts/schemas.js";
+import {
+  deliveryRecordSchema,
+  reviewResultSchema,
+  reviewScopeSchema,
+  validationEvidenceSchema,
+} from "../contracts/schemas.js";
 
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
@@ -1038,10 +1043,123 @@ export class StateStore {
     return this.getRun(id);
   }
 
+  reviewRefreshScope(
+    id: string,
+  ): z.infer<typeof reviewScopeSchema> | undefined {
+    const run = this.getRun(id);
+    const row = this.#database
+      .prepare(
+        `SELECT data_json FROM run_events WHERE run_id = ? AND type = 'review.refresh_prepared' AND json_extract(data_json, '$.candidateCommit') = ? ORDER BY sequence DESC LIMIT 1`,
+      )
+      .get(id, run.candidateCommit ?? "") as { data_json: string } | undefined;
+    if (row === undefined) return undefined;
+    const data = JSON.parse(row.data_json) as { scope: unknown };
+    return reviewScopeSchema.parse(data.scope);
+  }
+
+  prepareReviewRefresh(
+    id: string,
+    expectedReviewJson: string,
+    scope: z.infer<typeof reviewScopeSchema>,
+    maximum: number,
+  ): RunRecord {
+    this.#transaction(() => {
+      const current = this.getRun(id);
+      assertEffectAllowsNewWork(current);
+      if (current.cancelRequested)
+        throw new MillError(
+          "OPERATOR_CANCELLED",
+          "A cancelled run cannot refresh review.",
+          ExitCode.temporary,
+        );
+      if (
+        !["reviewed", "proposing"].includes(current.status) ||
+        current.reviewJson !== expectedReviewJson ||
+        current.validationJson === undefined
+      )
+        throw new MillError(
+          "REVIEW_REFRESH_UNAVAILABLE",
+          "Refresh requires unchanged successful review and validation before delivery.",
+          ExitCode.configuration,
+        );
+      const review = reviewResultSchema.parse(JSON.parse(expectedReviewJson));
+      const validation = validationEvidenceSchema.parse(
+        JSON.parse(current.validationJson),
+      );
+      const checked = reviewScopeSchema.parse(scope);
+      if (
+        !validation.passed ||
+        validation.candidateCommit !== current.candidateCommit ||
+        review.candidateCommit !== current.candidateCommit ||
+        review.findings.length !== 0 ||
+        checked.candidateCommit !== current.candidateCommit ||
+        checked.candidateTree !== current.candidateTree
+      )
+        throw new MillError(
+          "LOCAL_EVIDENCE_STALE",
+          "Refresh cannot change the candidate or bypass failed evidence.",
+          ExitCode.configuration,
+        );
+      if (review.scope?.digest === checked.digest)
+        throw new MillError(
+          "REVIEW_REFRESH_NOT_REQUIRED",
+          "The candidate already has this review scope.",
+          ExitCode.configuration,
+        );
+      if (current.deliveryJson !== undefined) {
+        const delivery = deliveryRecordSchema.parse(
+          JSON.parse(current.deliveryJson),
+        );
+        if (
+          delivery.effects.length !== 0 ||
+          delivery.pullRequest !== null ||
+          delivery.mergeApproval !== undefined ||
+          delivery.remoteHeadCommit !== null
+        )
+          throw new MillError(
+            "REVIEW_REFRESH_AFTER_EFFECT",
+            "Refresh cannot discard a delivery that has attempted external effects.",
+            ExitCode.configuration,
+          );
+      }
+      this.#assertReviewBudget(current, maximum);
+      this.#database
+        .prepare(
+          "UPDATE runs SET status = 'verified', review_json = NULL, delivery_json = NULL, block_code = NULL, updated_at = ? WHERE id = ?",
+        )
+        .run(new Date().toISOString(), id);
+      this.#event(id, "review.refresh_prepared", {
+        candidateCommit: current.candidateCommit,
+        scope: checked,
+        previousReviewJson: current.reviewJson,
+        previousDeliveryJson: current.deliveryJson ?? null,
+        from: current.status,
+        to: "verified",
+      });
+    });
+    return this.getRun(id);
+  }
+
+  #assertReviewBudget(run: RunRecord, maximum: number): number {
+    const row = this.#database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM run_events WHERE run_id = ? AND type = 'review.started' AND json_extract(data_json, '$.candidateCommit') = ?`,
+      )
+      .get(run.id, run.candidateCommit ?? "") as { count: number };
+    if (row.count >= maximum)
+      throw new MillError(
+        "REVIEW_RETRY_BUDGET_EXHAUSTED",
+        "The bounded review attempt budget is exhausted.",
+        ExitCode.configuration,
+      );
+    return row.count + 1;
+  }
+
   beginReviewAttempt(id: string, maximum: number): number {
     let attempt = 0;
     this.#transaction(() => {
       const current = this.getRun(id);
+      assertEffectAllowsNewWork(current);
       if (current.cancelRequested) {
         throw new MillError(
           "OPERATOR_CANCELLED",
@@ -1063,21 +1181,7 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
-      const row = this.#database
-        .prepare(
-          `SELECT COUNT(*) AS count FROM run_events
-           WHERE run_id = ? AND type = 'review.started'
-             AND json_extract(data_json, '$.candidateCommit') = ?`,
-        )
-        .get(id, current.candidateCommit) as { count: number };
-      if (row.count >= maximum) {
-        throw new MillError(
-          "REVIEW_RETRY_BUDGET_EXHAUSTED",
-          "The bounded review attempt budget is exhausted.",
-          ExitCode.configuration,
-        );
-      }
-      attempt = row.count + 1;
+      attempt = this.#assertReviewBudget(current, maximum);
       this.#event(id, "review.started", {
         candidateCommit: current.candidateCommit,
         attempt,
@@ -1304,15 +1408,21 @@ export class StateStore {
         "A plan must begin with durable intent.",
         ExitCode.data,
       );
-    const result = this.#database
-      .prepare("INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)")
-      .run(`authority_plan:${checked.approvalDigest}`, JSON.stringify(checked));
-    if (result.changes !== 1)
-      throw new MillError(
-        duplicateCode,
-        "This exact plan already has an apply intent. Reconcile its preserved worktree; do not replay it.",
-        ExitCode.configuration,
-      );
+    this.#transaction(() => {
+      for (const run of this.runs()) assertEffectAllowsNewWork(run);
+      const result = this.#database
+        .prepare("INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)")
+        .run(
+          `authority_plan:${checked.approvalDigest}`,
+          JSON.stringify(checked),
+        );
+      if (result.changes !== 1)
+        throw new MillError(
+          duplicateCode,
+          "This exact plan already has an apply intent. Reconcile its preserved worktree; do not replay it.",
+          ExitCode.configuration,
+        );
+    });
   }
 
   settleAuthorityPlan(

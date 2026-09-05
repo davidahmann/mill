@@ -1194,44 +1194,65 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     )
     .requiredOption("--task <path>", "approved task packet path")
     .requiredOption("--run <id>", "run identifier")
-    .action(async (options: { task: string; run: string }) => {
-      const global = globals(program);
-      const root = await findRepositoryRoot(global.cwd);
-      await enforceExactVersion(root);
-      const result = await reviewRun({
-        root,
-        taskPath: options.task,
-        runId: options.run,
-      });
-      const ok = result.review.findings.length === 0;
-      emit(
-        io,
-        global.json === true,
-        commandResult({
-          command: "review",
-          ok,
-          status: ok ? "ok" : "blocked",
-          data: result,
-          reasons: ok
-            ? []
-            : [
-                {
-                  code: result.run.blockCode ?? "REVIEW_FINDINGS",
-                  message:
-                    "The exact-candidate review reported actionable findings.",
-                },
-              ],
-        }),
-      );
-      if (!ok) {
-        throw new MillError(
-          result.run.blockCode ?? "REVIEW_FINDINGS",
-          "The exact-candidate review reported actionable findings.",
-          ExitCode.configuration,
-          { resultAlreadyEmitted: true },
+    .option("--refresh", "refresh stale scope before any remote attempt")
+    .option(
+      "--base <commit>",
+      "exact locally available provider-base commit for refresh",
+    )
+    .option("--attended", "confirm attended review-scope selection")
+    .action(
+      async (options: {
+        task: string;
+        run: string;
+        refresh?: boolean;
+        base?: string;
+        attended?: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const result = await reviewRun({
+          root,
+          taskPath: options.task,
+          runId: options.run,
+          ...(options.refresh === undefined
+            ? {}
+            : { refresh: options.refresh }),
+          ...(options.base === undefined ? {} : { baseCommit: options.base }),
+          ...(options.attended === undefined
+            ? {}
+            : { attended: options.attended }),
+        });
+        const ok = result.review.findings.length === 0;
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "review",
+            ok,
+            status: ok ? "ok" : "blocked",
+            data: result,
+            reasons: ok
+              ? []
+              : [
+                  {
+                    code: result.run.blockCode ?? "REVIEW_FINDINGS",
+                    message:
+                      "The exact-candidate review reported actionable findings.",
+                  },
+                ],
+          }),
         );
-      }
-    });
+        if (!ok) {
+          throw new MillError(
+            result.run.blockCode ?? "REVIEW_FINDINGS",
+            "The exact-candidate review reported actionable findings.",
+            ExitCode.configuration,
+            { resultAlreadyEmitted: true },
+          );
+        }
+      },
+    );
 
   program
     .command("resume")

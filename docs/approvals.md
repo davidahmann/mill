@@ -60,10 +60,26 @@ still required. Do not interpret an API success as verified lifecycle closure.
 
 Draft planning, push and PR creation compare the locally reviewed merge-base
 diff with GitHub's authoritative base SHA. An unpushed preparation commit on
-local `main` cannot hide from that gate. If the base is unavailable locally or
-the diff differs, synchronize the base deliberately and obtain fresh full-diff
-review; Mill does not fetch or rewrite refs implicitly. Merge repeats that
-comparison against its live observation.
+local `main` cannot hide from that gate. If the provider commit is unavailable,
+obtain its objects deliberately without moving frozen refs before requesting
+fresh full-diff review; Mill does not fetch or rewrite refs implicitly. Before
+any remote attempt, an already reviewed run can refresh stale scope:
+
+```sh
+millctl --json review --task product/tasks/TASK.yaml --run RUN \
+  --refresh --base EXACT_PROVIDER_COMMIT --attended
+```
+
+Use a full 40-character commit SHA already available locally. Do not move the
+frozen base ref or Git controls to recover scope. The refresh retains the exact
+candidate, validation, previous review/delivery evidence and original deadline;
+it spends only the remaining per-candidate review attempts. Preparation
+invalidates unexecuted delivery approval. After interruption, ordinary `review`
+uses the durably prepared scope; repeating `--refresh` is not a retry mechanism.
+After successful review, run `pr plan` again and approve that new plan. Refresh
+does not permit post-effect journal replacement, bypass review findings or reset
+an exhausted budget. Merge repeats the provider-base comparison against its live
+observation.
 
 The earliest task-attestation or impact-exception expiry caps the merge plan and
 effect deadline. Current impact authority is reassessed immediately before

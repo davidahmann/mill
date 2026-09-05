@@ -123,6 +123,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   commit and binds its commit and tree identities.
 - Review is read-only and exact-candidate-bound. Batch one complete review into
   one systemic repair generation; do not churn one PR per comment.
+- Before any remote attempt, stale full-diff scope may use attended
+  `review --refresh --base <exact-provider-commit>`. Preserve candidate, native
+  validation, prior receipts, deadline and remaining review budget; do not move
+  frozen refs. Refresh invalidates the unexecuted delivery approval. Resume an
+  interrupted prepared refresh with ordinary `review`.
 - The shipper may push only the unchanged verified candidate to its configured
   branch and may open only a draft PR in the bound repository.
 - `requiredChecks` are exact pull-request-head requirements. When configured,
