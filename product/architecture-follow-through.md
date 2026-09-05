@@ -59,6 +59,14 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+For this maintainer increment, the owner's subsequent "ignore standalone p2s"
+instruction makes isolated P2 review findings non-blocking: record the finding
+and residual risk without another repair cycle. It does not waive P0/P1 stops,
+required checks, exact review identity, external-effect boundaries or release
+provenance. This is a maintainer disposition, not a change to downstream Mill
+review policy or a claim of Factory-profile certification. Already completed
+corrections remain in this candidate.
+
 The owner's subsequent explicit "fix systemically" request authorizes the
 journal-driven atomic reconciliation and attended failed-plan abandonment
 amendment in `architecture/effect-recovery.md` after review of `83d34b1`.

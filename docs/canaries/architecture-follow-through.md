@@ -143,6 +143,24 @@ rejects cleanup with `AUTHORITY_PLAN_IDENTITY_MISMATCH` and preserves its
 witness. Exact-commit verification and the next independent complete review
 still gate promotion.
 
+Candidate `c41ebd3` passed exact host/OCI checks and the structural audit. Its
+independent full-diff review found one P2: producer binding equated an Actions
+job ID with a check-run ID instead of following the job's `check_run_url`. Live
+readback of main's three checks showed equal IDs, so this is not claimed as an
+observed production outage. The adapter now verifies the requested job ID and
+the explicit check-run relationship independently, preserving run, repository,
+head, app, workflow and event checks. A distinct-ID positive fixture and
+wrong-job negative fixture cover this contract. GitHub documents the
+relationship in its
+[workflow jobs API](https://docs.github.com/en/rest/actions/workflow-jobs).
+
+A non-executing check of published shell examples separately found two invalid
+`resume --attended` examples. They now match the existing foreground CLI, and a
+native test checks long-option spelling across current README/AGENTS/WORKFLOW
+and top-level docs examples. It is a syntax-consistency check, not execution or
+behavioral certification of every example. Both new regressions failed before
+the correction; final gates and review remain mandatory.
+
 Native tests and fixed cases are deterministic evidence; a single live model run
 is not an estimate of productivity, reliability or customer acceptance. This
 canary does not qualify a new public support tuple. Read-only Codex sandboxing

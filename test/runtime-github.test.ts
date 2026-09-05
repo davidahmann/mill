@@ -64,7 +64,7 @@ else if(endpoint.includes("/pulls?"))console.log(JSON.stringify([[listedPull]]))
 else if(args.includes("--method")&&endpoint==="repos/example/app/pulls")console.log(JSON.stringify(pull));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{id:101,name:"validate",status:"completed",conclusion:"success",app:{id:15368},head_sha:"${sha}",details_url:"https://github.com/example/app/actions/runs/50/job/101",...mode.check}]}]));
-else if(endpoint.endsWith("/actions/jobs/101"))console.log(JSON.stringify({run_id:50,head_sha:"${sha}",check_run_url:"https://api.github.com/repos/example/app/check-runs/101",...mode.job}));
+else if(endpoint.endsWith("/actions/jobs/101"))console.log(JSON.stringify({id:101,run_id:50,head_sha:"${sha}",check_run_url:"https://api.github.com/repos/example/app/check-runs/101",...mode.job}));
 else if(endpoint.endsWith("/actions/runs/50"))console.log(JSON.stringify({head_sha:"${sha}",repository:{node_id:"R_example"},path:".github/workflows/ci.yml",event:"pull_request",...mode.run}));
 else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({enforce_admins:{enabled:mode.admins??true},required_status_checks:{strict:mode.strict??true,checks:mode.protectedChecks??[{context:"validate",app_id:15368}]}}));
 else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markPullRequestReadyForReview:{pullRequest:{id:"PR_example",isDraft:false}}}}));
@@ -157,6 +157,26 @@ else process.exit(2);
         workflowPath: ".github/workflows/ci.yml",
         event: "pull_request",
       });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          check: { id: 102 },
+          job: {
+            check_run_url:
+              "https://api.github.com/repos/example/app/check-runs/102",
+          },
+        }),
+      );
+      const linked = await adapter.observe({
+        config: producerConfig,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(linked.checks[0]).toMatchObject({
+        id: 102,
+        workflowPath: ".github/workflows/ci.yml",
+        event: "pull_request",
+      });
       for (const mode of [
         { check: { app: { id: 99 } } },
         {
@@ -171,6 +191,7 @@ else process.exit(2);
           },
         },
         { check: { id: 102 } },
+        { job: { id: 102 } },
         { job: { run_id: 51 } },
         { job: { head_sha: "b".repeat(40) } },
         {

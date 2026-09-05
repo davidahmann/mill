@@ -1045,7 +1045,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       const match = /^(\d+)\/job\/(\d+)$/u.exec(
         check.detailsUrl.slice(urlPrefix.length),
       );
-      if (match === null || check.id !== Number(match[2])) continue;
+      if (match === null) continue;
       const runId = match[1];
       if (runId === undefined) continue;
       const job = object(
@@ -1061,6 +1061,7 @@ class GhGitHubAdapter implements GitHubAdapter {
         "workflow job",
       );
       if (
+        job.id !== Number(match[2]) ||
         job.run_id !== Number(runId) ||
         job.check_run_url !==
           `https://api.github.com/${prefix}/check-runs/${check.id}` ||

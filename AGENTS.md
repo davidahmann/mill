@@ -176,7 +176,7 @@ Do not rerun a possibly started mutation blindly.
 
 ```sh
 millctl --json status --run <run-id>
-millctl --json resume --task product/tasks/TASK.yaml --run <run-id> --attended
+millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
 millctl --json state backup
