@@ -94,6 +94,21 @@ installed-tarball draft-PR lifecycle. This is local check evidence, not the
 independent review or external release receipt. The boundary/recovery matrix is
 in `architecture/ARCHITECTURE.md`; required checks and review remain unchanged.
 
+The second static review of `abd1e0e` found one recurring P1 in merge recovery
+and three P2 issues (missing superseded task, partially deleted authority
+worktree, resumed usage). Promotion stopped. The owner's follow-up approval
+authorized the focused redesign in `architecture/effect-recovery.md`, not a
+waiver. Red-first regressions reproduced all four failure groups. The first
+targeted repair exposed two integration defects (canonical worktree marker
+comparison and generic failure settlement after confirmed merge); both were
+corrected. The subsequent targeted gate passed 53 tests across delivery, state,
+task compilation and public metadata. Full exact-candidate checks and the next
+independent review remain required; this paragraph does not pre-certify them.
+
+The redesigned working candidate then passed the complete native gate: 247 tests,
+80.90% branch coverage and installed-tarball delivery qualification. The exact
+committed tree still requires fresh host/OCI checks, audit and static review.
+
 Native tests and fixed cases are deterministic evidence; a single live model run
 is not an estimate of productivity, reliability or customer acceptance. This
 canary does not qualify a new public support tuple. Read-only Codex sandboxing

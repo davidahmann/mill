@@ -3,7 +3,6 @@ import path from "node:path";
 
 import {
   contextManifestSchema,
-  deliveryRecordSchema,
   reviewResultSchema,
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
@@ -38,6 +37,7 @@ import {
   deleteCandidateBranch,
   qualifyRepositoryForBuild,
   removeCandidateWorktree,
+  removeVerifiedAuthorityWorktree,
   resetCandidateWorktree,
   resolveCommit,
   type GitControlSnapshot,
@@ -64,6 +64,10 @@ import {
 import { MILL_VERSION } from "../version.js";
 import { validationRepairFindings } from "./repair.js";
 import { summarizeUsage } from "./usage.js";
+import {
+  assertEffectAllowsNewWork,
+  externalEffectBoundary,
+} from "./effect-boundary.js";
 
 interface RunContext {
   inputs: RuntimeInputs;
@@ -318,13 +322,14 @@ function settleFailure(
 ): void {
   try {
     const run = store.getRun(runId);
-    if (isTerminalRun(run.status)) return;
-    if (run.status === "effect_unknown") {
+    const boundary = externalEffectBoundary(run);
+    if (boundary.unresolved || boundary.merged) {
       store.recordEvent(runId, "run.reconciliation_required", {
         code: error.code,
       });
       return;
     }
+    if (isTerminalRun(run.status)) return;
     if (run.cancelRequested) {
       store.transition(runId, "cancelled", "run.cancelled", {
         code: error.code,
@@ -1054,13 +1059,7 @@ export async function resumeRun(input: {
     const active = storedActiveProcess(run);
     reconcileMutatingWorkerAdmissions(store, run, active);
     run = store.getRun(run.id);
-    if (run.status === "effect_unknown") {
-      throw new MillError(
-        "GITHUB_RECONCILIATION_REQUIRED",
-        "An unknown GitHub effect must be reconciled before cancellation or local resume.",
-        ExitCode.temporary,
-      );
-    }
+    assertEffectAllowsNewWork(run);
     if (run.cancelRequested && !isTerminalRun(run.status)) {
       return publicRunRecord(
         store.transition(run.id, "cancelled", "run.cancelled", {
@@ -1255,15 +1254,16 @@ export async function cancelRun(input: {
       throw error;
     }
     const current = store.getRun(run.id);
-    if (isTerminalRun(current.status)) {
-      return publicRunRecord(current);
-    }
-    if (current.status === "effect_unknown") {
+    const boundary = externalEffectBoundary(current);
+    if (boundary.unresolved || boundary.merged) {
       store.recordEvent(current.id, "run.cancellation_pending", {
-        code: "GITHUB_RECONCILIATION_REQUIRED",
+        code: boundary.unresolved
+          ? "GITHUB_RECONCILIATION_REQUIRED"
+          : "MERGE_FINALIZATION_REQUIRED",
       });
       return publicRunRecord(current);
     }
+    if (isTerminalRun(current.status)) return publicRunRecord(current);
     const active = storedActiveProcess(current);
     try {
       reconcileMutatingWorkerAdmissions(store, current, active);
@@ -1313,20 +1313,8 @@ export async function runStatus(input: {
     if (run === undefined) return {};
     let interrupted = false;
     let reconciliationRequired =
-      run.status === "effect_unknown" ||
+      externalEffectBoundary(run).unresolved ||
       store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
-    if (run.deliveryJson !== undefined) {
-      const approval = deliveryRecordSchema.parse(
-        JSON.parse(run.deliveryJson),
-      ).mergeApproval;
-      if (
-        approval !== undefined &&
-        ["ready_started", "merge_started", "effect_unknown"].includes(
-          approval.state,
-        )
-      )
-        reconciliationRequired = true;
-    }
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
     if (
@@ -1434,6 +1422,7 @@ export async function statePurge(input: {
   try {
     lease = await acquireWriterLease(store);
     const runs = store.runs();
+    for (const run of runs) assertEffectAllowsNewWork(run);
     const plans = store.authorityPlans();
     if (plans.some((plan) => plan.state !== "committed"))
       throw new MillError(
@@ -1462,7 +1451,7 @@ export async function statePurge(input: {
     store.close();
     storeClosed = true;
     for (const plan of plans)
-      await removeCandidateWorktree(input.root, plan.worktreePath);
+      await removeVerifiedAuthorityWorktree(input.root, plan.worktreePath);
     for (const run of runs) {
       if (run.worktreePath !== undefined) {
         await removeCandidateWorktree(input.root, run.worktreePath);

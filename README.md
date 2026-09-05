@@ -350,6 +350,13 @@ millctl --json support-bundle --output /absolute/path/support.json
 millctl --json detach plan
 ```
 
+An unresolved push, PR, readiness or merge blocks repair, new delivery and state
+purge/restore even if the enclosing run says `blocked` or `cancelled`.
+Cancellation records intent without discarding the receipt. Use
+`pr merge-reconcile` for readiness/merge; a confirmed merge then requires
+`pr finalize` and green main checks before cleanup. See
+[approval recovery](docs/approvals.md#interruptions).
+
 Restore validates the database before atomic replacement and quarantines newer
 unreferenced worktrees. Detach is plan-only; the operator performs the reviewed
 removal. A generated/adopted repo must continue to build and test natively after

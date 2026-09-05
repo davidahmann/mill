@@ -59,6 +59,12 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+The attended follow-up approval on 2026-09-05 authorizes the focused recovery
+redesign in `architecture/effect-recovery.md` after the second review's
+recurring P1 stop. Its state boundary and four regression groups are part of
+this same approved increment; prior failed evidence and all promotion gates
+remain.
+
 Run the unchanged baseline and full native `npm run check`, targeted positive
 and negative boundary tests, packed CLI tests, complete committed-diff local
 Codex review, offline OCI verification, CI, and exact merge readback. Qualify

@@ -35,13 +35,22 @@ import {
   reviewRun,
   runStatus,
   startLocalRun,
+  statePurge,
   verifyRun,
 } from "../src/runtime/lifecycle.js";
 import { loadRuntimeInputs } from "../src/runtime/inputs.js";
 import { commonGitDirectory } from "../src/runtime/repository.js";
-import { StateStore } from "../src/runtime/state.js";
+import {
+  StateStore,
+  restoreStateBackup,
+  purgeRepositoryState,
+} from "../src/runtime/state.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 import { applyMerge, planMerge, reconcileMerge } from "../src/runtime/merge.js";
+import {
+  assertEffectAllowsNewWork,
+  externalEffectBoundary,
+} from "../src/runtime/effect-boundary.js";
 
 const original = {
   state: process.env.MILL_STATE_HOME,
@@ -612,6 +621,12 @@ describe("exact-candidate GitHub draft delivery", () => {
             (await runStatus({ root: fixture.root, runId }))
               .reconciliationRequired,
           ).toBe(true);
+          await expect(observeDraftPr(input)).rejects.toMatchObject({
+            code: "GITHUB_RECONCILIATION_REQUIRED",
+          });
+          await expect(resumeRun(input)).rejects.toMatchObject({
+            code: "GITHUB_RECONCILIATION_REQUIRED",
+          });
           expect(adapter.mergeCalls).toBe(0);
           await expect(
             planMerge({ ...input, method: "squash" }),
@@ -636,6 +651,96 @@ describe("exact-candidate GitHub draft delivery", () => {
             (await runStatus({ root: fixture.root, runId }))
               .reconciliationRequired,
           ).toBe(true);
+          const before = await fixtureDelivery(fixture, runId);
+          await expect(observeDraftPr(input)).rejects.toMatchObject({
+            code: "GITHUB_RECONCILIATION_REQUIRED",
+          });
+          await expect(resumeRun(input)).rejects.toMatchObject({
+            code: "GITHUB_RECONCILIATION_REQUIRED",
+          });
+          await expect(planDraftPr(input)).rejects.toMatchObject({
+            code: "GITHUB_RECONCILIATION_REQUIRED",
+          });
+          await expect(finalizeDraftPr(input)).rejects.toMatchObject({
+            code: "GITHUB_RECONCILIATION_REQUIRED",
+          });
+          const inputs = await loadRuntimeInputs(
+            fixture.root,
+            fixture.taskPath,
+          );
+          const common = await commonGitDirectory(fixture.root);
+          const store = await StateStore.open(
+            inputs.config.repositoryId,
+            common,
+          );
+          try {
+            const persisted = store.getRun(runId);
+            for (const status of [
+              "blocked",
+              "cancelled",
+              "failed",
+              "reviewed",
+            ] as const) {
+              expect(() =>
+                assertEffectAllowsNewWork({ ...persisted, status }),
+              ).toThrow("Reconcile the recorded external effect");
+            }
+            expect(() =>
+              externalEffectBoundary({ ...persisted, deliveryJson: "{}" }),
+            ).toThrow();
+            expect(() =>
+              store.createRun({
+                repositoryId: inputs.config.repositoryId,
+                taskId: "another",
+                taskDigest: persisted.taskDigest,
+                configDigest: persisted.configDigest,
+                baseCommit: persisted.baseCommit,
+                deadlineAt: persisted.deadlineAt,
+              }),
+            ).toThrow("Reconcile the recorded external effect");
+            expect(() =>
+              store.admitWorkerInvocation({
+                runId,
+                invocationId: "new-worker",
+                phase: "repair",
+                envelopeDigest: `sha256:${"a".repeat(64)}`,
+                envelopeJson: "{}",
+              }),
+            ).toThrow("Reconcile the recorded external effect");
+            const backup = await store.backup();
+            await expect(
+              restoreStateBackup(inputs.config.repositoryId, common, backup),
+            ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
+            expect(() =>
+              store.transition(runId, "blocked", "test.feedback"),
+            ).toThrow();
+            expect(() => store.beginRepair(runId)).toThrow();
+            await expect(
+              purgeRepositoryState(inputs.config.repositoryId, common),
+            ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
+          } finally {
+            store.close();
+          }
+          expect((await cancelRun(input)).status).toBe("awaiting_human");
+          expect((await fixtureDelivery(fixture, runId)).mergeApproval).toEqual(
+            before.mergeApproval,
+          );
+          await expect(
+            statePurge({
+              root: fixture.root,
+              confirmation: inputs.config.repositoryId,
+            }),
+          ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
+          expect((await reconcileMerge(input)).state).toBe("merged");
+          await expect(resumeRun(input)).rejects.toMatchObject({
+            code: "MERGE_FINALIZATION_REQUIRED",
+          });
+          adapter.mergeChecks = [
+            { ...check, event: "push", headSha: "c".repeat(40) },
+          ];
+          expect((await finalizeDraftPr(input)).run.status).toBe("closed");
+          expect(adapter.mergeCalls).toBe(1);
+          return;
         } else {
           expect(
             (

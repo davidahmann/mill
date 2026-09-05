@@ -3,6 +3,7 @@ export function summarizeUsage(events: readonly Record<string, unknown>[]) {
   const completed = events.filter((event) =>
     [
       "builder.completed",
+      "builder.resume_completed",
       "repair.builder_completed",
       "review.completed",
     ].includes(String(event.type)),

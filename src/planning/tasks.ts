@@ -246,10 +246,15 @@ export async function compileChangeTasks(input: {
       taskRef: taskPath,
     });
   }
+  let previousText: string | undefined;
   try {
-    const previous = outcomePlanSchema.parse(
-      parseYaml(await safeReadText(input.root, "product/plan.yaml")),
-    );
+    previousText = await safeReadText(input.root, "product/plan.yaml");
+  } catch (error) {
+    if (!(error instanceof MillError && error.code === "FILE_NOT_FOUND"))
+      throw error;
+  }
+  if (previousText !== undefined) {
+    const previous = outcomePlanSchema.parse(parseYaml(previousText));
     for (const outcome of previous.outcomes) {
       if (!outcomes.some((next) => next.id === outcome.id))
         outcomes.push(outcome);
@@ -276,9 +281,6 @@ export async function compileChangeTasks(input: {
           );
       }
     }
-  } catch (error) {
-    if (!(error instanceof MillError && error.code === "FILE_NOT_FOUND"))
-      throw error;
   }
   const plan = outcomePlanSchema.parse({
     schemaVersion: "1",

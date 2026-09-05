@@ -1,4 +1,8 @@
 import type { z } from "zod";
+import {
+  assertEffectAllowsNewWork,
+  assertNoUnresolvedEffect,
+} from "./effect-boundary.js";
 import { parse as parseYaml } from "yaml";
 
 import { canonicalDigest } from "../contracts/canonical.js";
@@ -811,6 +815,7 @@ export async function planDraftPr(input: {
   try {
     lease = await acquireWriterLease(store);
     const run = store.getRun(input.runId);
+    assertEffectAllowsNewWork(run);
     const candidate = await assertReviewedCandidate(input.root, run, inputs);
     const adapter = input.adapter ?? createGitHubAdapter(input.root);
     const binding = await adapter.inspect({
@@ -970,6 +975,7 @@ export async function openDraftPr(input: {
         ExitCode.configuration,
       );
     }
+    assertEffectAllowsNewWork(run);
     const candidate = await assertReviewedCandidate(input.root, run, inputs);
     let delivery = storedDelivery(run);
     assertRemoteMutationNotCancelled(store, run.id, delivery);
@@ -1581,6 +1587,7 @@ export async function observeDraftPr(input: {
         ExitCode.configuration,
       );
     }
+    assertEffectAllowsNewWork(run);
     let delivery = storedDelivery(run);
     if (delivery.pullRequest === null) {
       throw new MillError(
@@ -1774,6 +1781,7 @@ export async function finalizeDraftPr(input: {
         ExitCode.configuration,
       );
     }
+    assertNoUnresolvedEffect(run);
     let delivery = storedDelivery(run);
     if (delivery.pullRequest === null) {
       throw new MillError(

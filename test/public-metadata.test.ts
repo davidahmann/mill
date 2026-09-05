@@ -5,6 +5,32 @@ import { publicRunRecord, type RunRecord } from "../src/runtime/state.js";
 import { summarizeUsage } from "../src/runtime/usage.js";
 
 describe("public delivery metadata", () => {
+  it("counts resumed settlements without claiming measurements for a failed admission", () => {
+    expect(
+      summarizeUsage([
+        { type: "worker.admitted" },
+        { type: "worker.admitted" },
+        { type: "worker.admitted" },
+        {
+          type: "builder.resume_completed",
+          data: { usageSource: "measured", inputTokens: 200, outputTokens: 9 },
+        },
+        {
+          type: "review.completed",
+          data: { usageSource: "measured", inputTokens: 50, outputTokens: 3 },
+        },
+        { type: "worker.settled" },
+      ]),
+    ).toMatchObject({
+      source: "partial",
+      admittedCalls: 3,
+      completedCalls: 2,
+      measuredCalls: 2,
+      inputTokens: 250,
+      outputTokens: 12,
+      cost: "unavailable",
+    });
+  });
   it("reports measured and partial usage without inventing missing spend", () => {
     expect(summarizeUsage([])).toMatchObject({
       source: "unavailable",

@@ -191,6 +191,11 @@ millctl --json support-bundle --output <absolute-path>
   authority or performs the original effect.
 - Restore validates the database and quarantines newer unreferenced worktrees.
   Purge is allowed only after all runs are reviewed or terminal.
+- Nested unresolved effects override enclosing run status: no repair, new
+  delivery, terminal cancellation, purge or restore may supersede their journal.
+  Confirmed merge freezes the candidate until exact post-merge finalization.
+  Partial authority purge requires its durable intent, retained branch and
+  verification of every remaining entry; foreign content blocks deletion.
 - Support bundles are redacted. Inspect them before sharing anyway.
 
 ## Release boundary

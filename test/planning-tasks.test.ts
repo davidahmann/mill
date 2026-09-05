@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { stringify as yaml } from "yaml";
+import { stringify as yaml, parse as parseYaml } from "yaml";
+import { outcomePlanSchema } from "../src/contracts/schemas.js";
 import { compileChangeTasks, applyChangeTasks } from "../src/planning/tasks.js";
 import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import {
@@ -98,6 +99,115 @@ async function requestFixture(kind = "prd", allowedPaths = ["src/value.js"]) {
 }
 
 describe("change-plan task compilation", () => {
+  it("rejects a missing superseded task instead of dropping closed history", async () => {
+    const { fixture, request, input } = await requestFixture();
+    try {
+      const proposed = await compileChangeTasks(input);
+      const prior = proposed.files.find(
+        (file) => file.path === "product/plan.yaml",
+      );
+      if (prior === undefined) throw new Error("missing plan");
+      const history = outcomePlanSchema.parse(parseYaml(prior.content));
+      history.outcomes.push({
+        id: "OUT-RETAINED-HISTORY",
+        title: "Closed history",
+        acceptance: ["Previously verified outcome remains closed."],
+        dependsOn: [],
+        status: "closed",
+      });
+      await writeFile(path.join(fixture.root, prior.path), yaml(history));
+      await writeFile(
+        path.join(fixture.root, "change.yaml"),
+        yaml({
+          ...request,
+          tasks: request.tasks.map((task) => ({
+            ...task,
+            supersedesTaskDigest: `sha256:${"a".repeat(64)}`,
+          })),
+        }),
+      );
+      await git(fixture.root, ["add", "product/plan.yaml", "change.yaml"]);
+      await git(fixture.root, [
+        "commit",
+        "-m",
+        "test: missing superseded task",
+      ]);
+      await expect(compileChangeTasks(input)).rejects.toMatchObject({
+        code: "FILE_NOT_FOUND",
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each(["product/PRD.md", ".git"])(
+    "recovers partial authority deletion of %s but rejects foreign content",
+    async (removed) => {
+      const { fixture, input } = await requestFixture();
+      try {
+        const plan = await compileChangeTasks(input);
+        const applied = await applyChangeTasks({
+          ...input,
+          approvalDigest: plan.approvalDigest,
+          attended: true,
+        });
+        await git(applied.worktree, ["add", "product"]);
+        await git(applied.worktree, [
+          "commit",
+          "-m",
+          "test: retained authority",
+        ]);
+        await reconcileAuthorityPlans({ root: fixture.root });
+        const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+        const common = await commonGitDirectory(fixture.root);
+        const store = await StateStore.open(inputs.config.repositoryId, common);
+        const record = store.authorityPlans()[0];
+        if (record?.committedCommit === undefined)
+          throw new Error("missing commit");
+        store.beginAuthorityPlanPurge(
+          record.approvalDigest,
+          record.committedCommit,
+        );
+        store.close();
+        await rm(path.join(applied.worktree, removed));
+        const foreign = path.join(applied.worktree, "foreign.txt");
+        await writeFile(foreign, "not owned by purge");
+        const purge = {
+          root: fixture.root,
+          confirmation: inputs.config.repositoryId,
+        };
+        await expect(statePurge(purge)).rejects.toMatchObject({
+          code: "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+        });
+        expect(await readFile(foreign, "utf8")).toBe("not owned by purge");
+        await rm(foreign);
+        await symlink(fixture.root, foreign);
+        await expect(statePurge(purge)).rejects.toMatchObject({
+          code: "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+        });
+        await rm(foreign);
+        const tracked = path.join(applied.worktree, "src/value.js");
+        const retained = await readFile(tracked);
+        await writeFile(tracked, "unrelated replacement");
+        await expect(statePurge(purge)).rejects.toMatchObject({
+          code: "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+        });
+        expect(await readFile(tracked, "utf8")).toBe("unrelated replacement");
+        await writeFile(tracked, retained);
+        await statePurge(purge);
+        expect(
+          (
+            await git(fixture.root, [
+              "rev-parse",
+              `refs/heads/${record.branch}`,
+            ])
+          ).stdout.trim(),
+        ).toBe(record.committedCommit);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
   it("keeps inspect-only task apply free of authority writes", async () => {
     const { fixture, input } = await requestFixture();
     try {

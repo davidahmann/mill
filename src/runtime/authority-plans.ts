@@ -8,6 +8,7 @@ import {
   readCandidateIdentity,
   readCommittedFile,
   resolveCommit,
+  verifyPartiallyRemovedWorktree,
 } from "./repository.js";
 import {
   acquireWriterLease,
@@ -78,18 +79,8 @@ export async function verifyAuthorityPlanPurge(
       present = false;
     else throw error;
   }
-  if (present) {
-    const evidence = await verifyAuthorityPlanCommit(plan, commonDirectory);
-    if (
-      plan.purgeCommit !== undefined &&
-      plan.purgeCommit !== evidence.committedCommit
-    )
-      throw new MillError(
-        "AUTHORITY_PLAN_IDENTITY_MISMATCH",
-        "Authority changed after purge intent.",
-        ExitCode.configuration,
-      );
-    return evidence;
+  if (present && plan.purgeCommit === undefined) {
+    return await verifyAuthorityPlanCommit(plan, commonDirectory);
   }
   if (
     plan.purgeCommit === undefined ||
@@ -113,6 +104,13 @@ export async function verifyAuthorityPlanPurge(
         ExitCode.configuration,
       );
   }
+  if (present)
+    await verifyPartiallyRemovedWorktree(
+      root,
+      plan.worktreePath,
+      plan.purgeCommit,
+      commonDirectory,
+    );
   return { branch: plan.branch, committedCommit: plan.purgeCommit };
 }
 

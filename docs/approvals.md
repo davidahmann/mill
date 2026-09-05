@@ -86,6 +86,14 @@ If readiness succeeded but merge never started, reconciliation can establish
 started, an open PR alone is not proof that retry is safe. Preserve the receipt
 and investigate GitHub state. Expiry prevents new effects, not readback.
 
+The same journal protects the enclosing lifecycle. Feedback observation, repair,
+new delivery, worker admission, purge and backup restore cannot bypass
+unresolved readiness/merge by changing the run status. Cancellation records
+intent but does not terminalize the run or erase the receipt. After matching
+merged readback, only post-merge finalization can close that candidate; it
+cannot be repaired or replanned as though it were still an unmerged PR. Status,
+backup and support remain available throughout recovery.
+
 ## Public metadata and identity
 
 PR titles use a sanitized first subject line, omit DCO/coauthor trailers, redact

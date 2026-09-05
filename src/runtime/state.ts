@@ -19,6 +19,10 @@ import { z } from "zod";
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
 import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
+import {
+  assertEffectAllowsNewWork,
+  externalEffectBoundary,
+} from "./effect-boundary.js";
 
 const authorityPlanSchema = z
   .object({
@@ -510,6 +514,7 @@ export class StateStore {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.#transaction(() => {
+      for (const run of this.runs()) assertEffectAllowsNewWork(run);
       this.#database
         .prepare(
           `INSERT INTO runs(
@@ -570,6 +575,29 @@ export class StateStore {
   ): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
+      // Effect-specific reconciliation settles the journal before advancing
+      // an enclosing effect_unknown status. Never unlock it via a status alone.
+      if (
+        externalEffectBoundary(current).journalUnresolved &&
+        to !== "effect_unknown"
+      )
+        throw new MillError(
+          "GITHUB_RECONCILIATION_REQUIRED",
+          "The effect journal must be reconciled before a lifecycle transition.",
+          ExitCode.temporary,
+        );
+      if (
+        [
+          "running",
+          "cancelled",
+          "failed",
+          "stale",
+          "reviewed",
+          "proposing",
+        ].includes(to) &&
+        externalEffectBoundary(current).merged
+      )
+        assertEffectAllowsNewWork(current);
       if (!transitions[current.status].includes(to)) {
         throw new MillError(
           "INVALID_RUN_TRANSITION",
@@ -831,7 +859,7 @@ export class StateStore {
 
   setRemoteFeedback(id: string, feedbackJson: string): RunRecord {
     this.#transaction(() => {
-      this.getRun(id);
+      assertEffectAllowsNewWork(this.getRun(id));
       this.#database
         .prepare(
           "UPDATE runs SET remote_feedback_json = ?, updated_at = ? WHERE id = ?",
@@ -872,6 +900,7 @@ export class StateStore {
   beginRepair(id: string): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
+      assertEffectAllowsNewWork(current);
       if (current.cancelRequested) {
         throw new MillError(
           "OPERATOR_CANCELLED",
@@ -1291,7 +1320,7 @@ export class StateStore {
   }): "created" | "existing" {
     let disposition: "created" | "existing" = "existing";
     this.#transaction(() => {
-      this.getRun(input.runId);
+      assertEffectAllowsNewWork(this.getRun(input.runId));
       const result = this.#database
         .prepare(
           `INSERT OR IGNORE INTO worker_invocations(
@@ -1634,6 +1663,12 @@ export async function restoreStateBackup(
     );
   }
   const databasePath = path.join(directory, "state.sqlite3");
+  const currentStore = await StateStore.open(repositoryId, commonDirectory);
+  try {
+    for (const run of currentStore.runs()) assertEffectAllowsNewWork(run);
+  } finally {
+    currentStore.close();
+  }
   const temporaryPath = path.join(directory, `restore-${randomUUID()}.sqlite3`);
   const expectedWorktrees = new Set<string>();
   let quarantineManifest: string | undefined;
@@ -1806,6 +1841,7 @@ export async function purgeRepositoryState(
   }
   const store = await StateStore.open(repositoryId, commonDirectory);
   try {
+    for (const run of store.runs()) assertEffectAllowsNewWork(run);
     if (store.authorityPlans().some((plan) => plan.state !== "committed"))
       throw new MillError(
         "AUTHORITY_PLANS_BLOCK_PURGE",
