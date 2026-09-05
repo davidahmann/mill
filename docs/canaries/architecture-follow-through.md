@@ -2,9 +2,9 @@
 
 Owner: David Ahmann. Approved scope: `product/architecture-follow-through.md`.
 Mill source base: `75a9d65e22414ab274d0a476c456673c1e1c5b9d`; candidate version
-0.2.0. This record distinguishes local implementation evidence from final PR,
-release and npm qualification. The latter require exact final candidate
-receipts.
+0.2.0 initially, released as 0.2.1 after the publication-preflight repair. The
+chronology below retains earlier failed and pending checkpoints as history; the
+final release closure below records the completed evidence chain.
 
 ## Acceptance coverage
 
@@ -215,3 +215,95 @@ repair; the targeted guard and independent-artifact tests then passed. Earlier
 lint and version-alignment failures are retained and corrected without changing
 their acceptance tests. Exact candidate checks/review, a fresh matched canary,
 PR/main readback and the complete immutable release chain still gate promotion.
+
+## Exact 0.2.1 source and fresh longitudinal evidence
+
+[PR #23](https://github.com/davidahmann/mill/pull/23) merged as
+`a2dcd27fa01df9a609b3d057d14dca25c0895262`. Its tree
+`477d6f7fbca7502a5d6aea6545c2f34bd85c8665` equals independently reviewed
+candidate `a937c72c279347602ff1a17d79b8c39284cafad9`. The complete two-commit,
+14-file static review returned no material findings. Exact host/OCI native
+gates, structural audit, PR checks and fresh resulting-main validation passed:
+270 tests, 81.31% branch coverage and installed-package lifecycle qualification.
+Main [CI](https://github.com/davidahmann/mill/actions/runs/33945089051) and
+[CodeQL](https://github.com/davidahmann/mill/actions/runs/33945089017)
+succeeded. The PR-only dependency review passed before merge; its main-push skip
+is not missing evidence for the configured main phase.
+
+The fresh live canary ran on 2026-09-05, using exact Mill source `a937c72c`, new
+repository identity `cb84c8e6-02a6-45c8-84d8-d6c55b8d582a` and frozen authority
+base `bcd29fbbe4da10ed815c28742d2e237f90d0ae12`. It did not relabel the earlier
+0.2.0 observations. Each step started from the prior accepted candidate,
+executed native offline checks plus separate prewritten browser checks for its
+new and every prior fact, and received fresh static-only review.
+
+| Step | New fact                           | Accepted candidate                         |
+| ---- | ---------------------------------- | ------------------------------------------ |
+| 1    | Public-alpha status                | `617b818a71119a3dd121c9b8bb20df6643df337f` |
+| 2    | Release channel                    | `9f114fc9ba24fb0ddf3cab2282e7c915eff5d106` |
+| 3    | Responsible owner                  | `9793266dbd26263b5448e5ef0b59f0475bbfd955` |
+| 4    | Exact verifier identity            | `9afd26745f8e1ca337afdcd2b34c80770e48d992` |
+| 5    | Accessible runbook link and target | `8bd75e4981ebf2544ec00f786b2ced85b313a922` |
+
+Steps 2 and 3 initially failed frozen exact-text browser checks. Each received
+one independent finding and one bounded repair, retaining the original task,
+scope, oracle, deadline and failed candidate. All final checks and reviews
+passed. The step-3 review labeled its finding P2, but an executed required
+acceptance failure made it ineligible for the standalone-P2 disposition. The
+final native anchor was checked for its accessible name and target; this does
+not claim that a release-runbook destination page was implemented.
+
+The separate seeded health fault `c89d9ef1419529e46123f0aa6259bbc3c17c7980`
+changed only the health route from accepted step 2. Its frozen browser check
+failed with exit 1. The unchanged accepted base passed recovery, and the faulty
+commit never entered accepted ancestry. External SQLite backups, candidate
+branches and failed evidence are retained; disposable Mill state was purged from
+the surviving checkout only.
+
+Provider measurements, including both repairs and all reviews, total 3,028,051
+input and 14,819 output tokens. Currency cost is unavailable. The exact host
+tuple is macOS arm64, Node 24.20.0, npm 11.19.0, Codex CLI 0.153.1, Git 2.50.0,
+GitHub CLI 2.74.2 and Docker 29.7.2. Validation used the unchanged digest-pinned
+Playwright image. The tuple observation completed at `2026-09-05T09:11:04.564Z`;
+its 30-day qualification window ends `2026-10-05T09:11:04.564Z`. The model
+identity is provider-mutable. These are bounded technical observations, not
+statistical reliability, productivity, operator-adoption or enterprise
+production-readiness claims.
+
+The observed-sequence JSON digest is
+`sha256:b399d2824f235e9bd6141f07b5932b7783c78c72d76c58a3ba4af4336ed4d6b1`; the
+support-tuple digest is
+`sha256:ee04c056b1993d9b14e4282c5ea99a5803dfc732a56c335a546bac1d60b8e2d2`. The
+exact-tag workflow independently checks the assembled qualification and
+preserved artifact; the live canary alone does not authorize publication.
+
+## Final release closure
+
+AF-01 through AF-10 are delivered in the exact `0.2.1` release. The acceptance
+matrix above names their deterministic and real-fixture evidence; the source and
+longitudinal receipts above distinguish tested behavior from structural audit
+and limited live observations. The final [release record](../releases/v0.2.1.md)
+links the successful independent candidate run, npm provenance, qualification
+and verified GitHub evidence assets.
+
+OIDC publish run `33957855919` passed package publication, signatures and the
+registry-package full canary, then failed only at duplicate-release GitHub
+lookup. It remains failed historical evidence. After explicit owner approval,
+recovery attached the preserved bytes to public release `383198362`, verified
+all 11 assets by download, and assembled final evidence with tagged tools. Draft
+`383199322` was not changed. Separate owner-approved GitHub Latest and npm
+`latest` promotion were read back; npm `alpha` and `latest` both name `0.2.1`.
+No immutable publication was replayed, artifact repacked or tag moved.
+
+The owner accepted the sole standalone purge-from-a-deletable-worktree P2; the
+surviving-checkout and external-backup workaround is in README/AGENTS. Currency
+cost and enterprise reliability/adoption evidence remain unavailable, not
+inferred from technical qualification. Experimental native Node adoption is not
+a newly qualified public stack. The support tuple expires on
+`2026-10-05T09:11:04.564Z`; changed tuples require fresh qualification.
+
+This closes the implemented/released architecture increment, not the promotion
+checks of the containing documentation PR. That PR must independently pass its
+complete native host/OCI gate, exact-commit audit, read-only full-diff review,
+PR checks and resulting-main checks. Its provider PR/check records establish
+those later results; this source record does not pre-certify them.

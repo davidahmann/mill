@@ -59,6 +59,42 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+### Approved documentation and release closure
+
+On 2026-09-05 the owner explicitly approved recovery into the existing public
+GitHub release, promotion as GitHub Latest, and then npm `latest` promotion in
+separate attended exchanges. Provider readback confirmed the preserved artifact
+and both distribution channels at `0.2.1`. The duplicate draft, original tags,
+package bytes and failed workflow history remain unchanged.
+
+The owner's subsequent "ok do it ship merge" approval authorizes one coherent
+source-only documentation closure PR, including an overall README/AGENTS check
+against the released code. It includes truthful release/settings/canary notes
+and mechanical closure of the completed increment. The containing PR requires
+fresh native host/OCI checks, exact audit and full-diff static review, green PR
+checks, normal protected merge and resulting-main checks. This grants no new
+runtime implementation, package publication or protection changes. No check is
+waived and no generated text authenticates a human decision.
+
+### Approved exact-tag publication environment
+
+On 2026-09-05, after the maintainer reported the protected-branch versus
+exact-tag dispatch mismatch, David Ahmann explicitly approved the proposed
+four-step completion plan with "ok do it" in the attended conversation. This
+separate approval permits the GitHub `npm` environment to allow only branch
+`main` and tag `v0.2.1`, retaining its required reviewer and all main branch
+protections. It supersedes the preflight repair's unchanged-environment
+restriction only for that exact policy change; no wildcard tags, review bypass,
+branch-protection change or premature publication is authorized.
+
+Provider readback confirmed the exact two rules and unchanged non-branch-policy
+environment controls and main branch protections before further release work.
+The native effect journal preserves the before/after responses. The maintainer
+may record the actual release evidence and mechanical task closure in one
+documentation PR after the remaining qualification and npm/GitHub readback gates
+pass. This record is an account of the owner's approval, not a generated
+authentication receipt or Factory-profile exception.
+
 ### Publication preflight repair
 
 The existing approved AF-04/release scope includes the publication preflight

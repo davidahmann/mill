@@ -11,13 +11,14 @@ candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity. Draft-only is the default;
 repositories may explicitly enable a separately approved, exact-plan merge.
 
-Mill `0.1.5` is the first qualified public alpha. It is available from npm and
-as a GitHub prerelease with provenance, an SBOM, exact-artifact qualification,
-and registry and GitHub readback evidence. The source package identity is now
-prepared as `0.2.1`. The `v0.2.0` tag is retained as prepublication evidence:
-publication was held when a missing publish-runner verifier preflight was
-identified. Source changes do not establish release qualification or publication
-for the new version.
+Mill `0.2.1` is the current qualified public alpha and the latest release on
+[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.2.1) and npm. The
+release includes provenance, an SBOM, independent exact-artifact qualification,
+and verified registry and GitHub downloads. GitHub's Latest label does not
+expand the public-alpha support limits. See the
+[release record](docs/releases/v0.2.1.md) for exact evidence and recovery
+history. The `v0.1.5` genesis release remains the historical trust root;
+`v0.2.0` was held before publication and its tag is preserved.
 
 ## Why Mill
 
@@ -62,14 +63,16 @@ For its one qualified shape, Mill can:
 5. run one approved task through Codex build, OCI validation, exact-candidate
    review, and one bounded repair generation;
 6. plan and open one draft GitHub PR through the operator's own `gh` session;
-7. observe exact-head CI and review, then record human merge and resulting-main
-   closure;
+7. observe exact-head CI and review, optionally execute a separately approved
+   attended merge, then verify resulting-main closure;
 8. back up, restore, purge, reconcile, cancel, detach, and export a redacted
    support bundle through explicit commands;
 9. audit the exact repository candidate and validate a public-alpha
-   qualification record.
+   qualification record;
 10. derive bounded, source-revision-bound TypeScript repository evidence from a
-    clean Git root without executing its code.
+    clean Git root without executing its code;
+11. compile an operator-supplied follow-up change request and approved impacts
+    into dependency-checked task packets and an outcome plan.
 
 Mill does not autonomously research the web or invent a product specification in
 this alpha. The operator supplies the structured proposal that Mill assesses and
@@ -90,8 +93,12 @@ The first recipe is intentionally exact:
 
 Mill itself is developed with Node.js 24.20.0 and npm 11.19.0. Exact support is
 published in release qualification evidence, not inferred from nearby versions.
-All other stacks, operating systems, architectures, forges, models, and worker
-harnesses are experimental or unsupported until independently qualified.
+The `0.2.1` host tuple was exercised on September 5, 2026 and expires on October
+5, 2026 at 09:11:04 UTC; its attached qualification lists every exact version
+and digest. All other stacks, operating systems, architectures, forges, models,
+and worker harnesses are experimental or unsupported until independently
+qualified. Experimental native Node ESM/npm adoption is separate from this
+qualified web recipe.
 
 ## Install
 
@@ -99,7 +106,7 @@ Install the qualified public alpha at its exact version with lifecycle scripts
 disabled:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.1.5
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.2.1
 npx --no-install millctl --version
 ```
 
@@ -116,21 +123,28 @@ PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
 node dist/cli.js --version
 ```
 
-The `alpha` and `latest` npm tags currently resolve to `0.1.5`. Downstream
+The `alpha` and `latest` npm tags both resolve to `0.2.1`. Downstream
 repositories should still pin the exact version so a later release cannot alter
-their delivery machinery implicitly.
+their delivery machinery implicitly. Updating an existing Mill installation is
+deliberate: preserve state and repository snapshots, inspect the release notes,
+and requalify the changed toolchain. There is no automatic upgrade or proven
+general downgrade path for operational state.
 
 ## Quick start
 
 Start with read-only readiness. These commands do not execute repository code:
 
 ```sh
-node dist/cli.js doctor --mode inspect
-node dist/cli.js inspect --prd product/PRD.md
-node dist/cli.js adopt --scan-only
+npx --no-install millctl doctor --mode inspect
+npx --no-install millctl inspect --prd product/PRD.md
+npx --no-install millctl adopt --scan-only
 ```
 
 ### Discover a TypeScript repository
+
+The remaining examples use `millctl` as shorthand for the installed executable;
+use `npx --no-install millctl` when it is installed locally. Supply your actual
+PRD and approved authority paths; installing the CLI does not create them.
 
 Static discovery is a separate read-only operation. It requires a clean Git
 repository root and rejects sensitive paths, symbolic links, unsafe Git
@@ -248,8 +262,9 @@ authorizes readiness or merge.
 
 ### Approve a merge from your work surface
 
-With `propose.attendedMerge: true`, producer-bound required checks, and strict
-up-to-date branch protection, the attending operator can inspect and approve:
+With `propose.attendedMerge: true`, producer-bound required checks, strict
+up-to-date protection enforced for administrators, and no bypass-role grants,
+the attending operator can inspect and approve:
 
 ```sh
 millctl --json pr merge-plan --task product/tasks/TASK.yaml --run <run-id> --method squash
@@ -262,6 +277,10 @@ The plan binds PR/head/base, exact tree, actor, method, policy and expiry. A
 chat host can submit the operator's approval through this CLI; Mill does not
 authenticate arbitrary chat messages or let the builder approve its own work.
 See [attended approvals and recovery](docs/approvals.md).
+
+Mill checks classic branch-protection enforcement and exact check-producer
+bindings. The operator must separately inspect bypass-role/ruleset grants; do
+not infer a complete permissions audit from a successful merge preflight.
 
 ### Compile follow-up work and adopt native brownfield commands
 
@@ -359,10 +378,11 @@ Cancellation records intent without discarding the receipt. Use
 `pr finalize` and green main checks before cleanup. See
 [approval recovery](docs/approvals.md#interruptions).
 
-Before any remote attempt, stale review scope can use attended
-`review --refresh --base <exact-provider-commit>`. This preserves the candidate
-and remaining review budget, invalidates the unexecuted delivery plan and does
-not move frozen Git refs. Plan delivery again after the fresh review passes.
+Before any remote attempt, stale review scope can use
+`review --task product/tasks/TASK.yaml --run <run-id> --refresh --base <exact-provider-commit> --attended`.
+This preserves the candidate and remaining review budget, invalidates the
+unexecuted delivery plan and does not move frozen Git refs. Plan delivery again
+after the fresh review passes.
 
 For generated authority, `state reconcile-plans` verifies the exact committed
 files. A failed plan can instead be explicitly discontinued with
@@ -375,6 +395,12 @@ Restore validates the database before atomic replacement and quarantines newer
 unreferenced worktrees. Detach is plan-only; the operator performs the reviewed
 removal. A generated/adopted repo must continue to build and test natively after
 Mill is removed.
+
+Run purge from a surviving original checkout, never a worktree scheduled for
+deletion. Preserve an external state backup and committed candidate branches
+first. The known purge-from-a-deletable-worktree P2 can leave cleanup
+incomplete; it does not grant permission to discard unresolved effects or
+foreign files.
 
 ## Audit and qualification
 
@@ -398,10 +424,10 @@ seeded-fault branch, a current exact support tuple, every required packed and
 integration canary, and all nine audits. A later success cannot conceal an
 earlier unresolved preservation failure.
 
-The one-time genesis release additionally requires two independent clean builds
-from the exact annotated tag, canonical content equality, a preserved tarball,
-SBOM, trusted npm OIDC publication, provenance, registry reinstallation, and
-GitHub Release readback. See [the release runbook](docs/release.md).
+Every qualified release also requires two independent clean builds from the
+exact annotated tag, canonical content equality, a preserved tarball, SBOM,
+trusted npm OIDC publication, provenance, registry reinstallation, and GitHub
+Release readback. See [the release runbook](docs/release.md).
 
 ## Troubleshooting
 

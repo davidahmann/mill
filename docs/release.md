@@ -36,6 +36,12 @@ now retries signature readback within a fixed budget. The qualified path uses
 GitHub-hosted clean builders outside the tagged checkout and the following
 gates.
 
+## Qualified release procedure
+
+Use a fresh approved package version in place of `vX.Y.Z`. This procedure is for
+new releases, never replay of an existing npm version. Genesis identities above
+remain historical evidence.
+
 ### 1. Qualify the source candidate
 
 Before tagging:
@@ -101,7 +107,7 @@ Recheck that the package version and intended tag match. Record the reviewed
 candidate tree in exactly one annotated-tag trailer:
 
 ```sh
-tag=v0.1.5
+tag=vX.Y.Z
 reviewed_tree=$(git rev-parse <reviewed-candidate>^{tree})
 main_tree=$(git rev-parse origin/main^{tree})
 test "$reviewed_tree" = "$main_tree"
@@ -122,9 +128,9 @@ breaks, then start the `candidate` workflow:
 ```sh
 support_tuple_base64=$(base64 < /absolute/path/support-tuple.json | tr -d '\n')
 sequence_base64=$(base64 < /absolute/path/sequence.json | tr -d '\n')
-gh workflow run release.yml \
+gh workflow run release.yml --ref "$tag" \
   -f mode=candidate \
-  -f tag=v0.1.5 \
+  -f tag="$tag" \
   -f support_tuple_base64="$support_tuple_base64" \
   -f sequence_base64="$sequence_base64"
 ```
@@ -142,7 +148,8 @@ and compatible-adoption canaries in clean temporary repositories, executes the
 downstream native gate in the exact verifier image, proves downstream operation
 without Mill, exercises recovery and path-escape rejection, produces an SBOM,
 runs all nine read-only audits, assembles the public-alpha qualification, and
-stores one seven-day `genesis-candidate-v0.1.5` artifact.
+stores one seven-day `genesis-candidate-<tag>` artifact. Routine releases retain
+this historical artifact-name prefix.
 
 Inspect that artifact and workflow result. A missing or skipped required result
 is a failure, not an exception.
@@ -154,9 +161,9 @@ run ID, the protected GitHub `npm` environment, and npm trusted publishing bound
 to this repository and workflow:
 
 ```sh
-gh workflow run release.yml \
+gh workflow run release.yml --ref "$tag" \
   -f mode=publish \
-  -f tag=v0.1.5 \
+  -f tag="$tag" \
   -f candidate_run_id=<successful-run-id>
 ```
 
@@ -178,14 +185,22 @@ the durable tag URL, and only then publishes the prerelease.
 
 Record the workflow run, tag commit/tree, tarball digest/integrity, npm tarball
 and provenance, GitHub Release URL and asset digest, qualification digest,
-support tuple, and canary window. Reinstall `@davidahmann/mill@0.1.5` in an
-empty directory with lifecycle scripts disabled and confirm its version and
+support tuple, and canary window. Reinstall the exact newly qualified version in
+an empty directory with lifecycle scripts disabled and confirm its version and
 help.
 
 The release becomes the trust root for qualifying the next candidate. It does
 not qualify a new stack, host tuple, worker profile, model identity, or forge.
 
 ## Routine releases after genesis
+
+Before creating a new release identity, read back the `npm` environment's
+reviewer and branch/tag admission rules. Protected-branches-only is not the same
+policy as selected release tags. The owner authorized branch `main` plus exact
+tag `v0.2.1` on 2026-09-05; provider readback confirmed both rules and unchanged
+reviewer and main branch protections. A subsequent tag needs its own explicit
+environment-policy authorization. Do not use a wildcard, bypass approval, or
+dispatch a different ref to work around an admission failure.
 
 The `v0.2.0` tag is retained as prepublication evidence. Publication was held
 after source inspection identified that the fresh publish runner lacked explicit
@@ -228,6 +243,16 @@ architecture follow-through canary evidence.
 
 ## Withdrawal
 
+First classify an interrupted publication from provider readback; do not rerun
+the publish workflow. If npm and registry qualification succeeded but GitHub
+finalization is incomplete, inventory all release records for the tag by numeric
+ID. A draft and a public release can share a tag; tag-only lookup may select the
+wrong record. Stop for owner disposition before changing an existing release.
+The owner-approved `0.2.1` recovery retained the duplicate draft and verified
+the original artifact on the public release, using the tagged native evidence
+tools. It did not waive an artifact mismatch or failed package qualification.
+See [the exact recovery record](releases/v0.2.1.md).
+
 npm versions and Git tags are immutable. Never overwrite or republish a broken
 version.
 
@@ -253,6 +278,23 @@ Do not claim rollback to a prior Mill version until a real released migration
 has proven state and schema compatibility.
 
 ## Required repository and npm settings
+
+### Channel promotion
+
+GitHub Latest and npm dist-tags are separate owner-approved effects after exact
+release qualification and readback. They do not require rebuilding or
+republishing. GitHub Latest cannot designate a prerelease; a separately approved
+normal-release label must still disclose Mill's public-alpha limits. As of
+2026-09-05, GitHub Latest and npm `alpha`/`latest` select `0.2.1`.
+
+For an approved npm channel change, use the operator's own npm login and 2FA,
+change only the named dist-tag, and read back the resulting version and
+unchanged integrity. Do not collect credentials in chat, store tokens in the
+repository, weaken trusted publishing, or replay publication after an
+authentication error. Keep exact install pins in user docs; never replace
+historical trust-root pins.
+
+### Publication protection
 
 The GitHub `npm` environment must require maintainer approval and restrict the
 deployment branch/tag policy. The workflow receives only `id-token: write` and
