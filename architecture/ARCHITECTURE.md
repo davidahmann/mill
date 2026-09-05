@@ -287,9 +287,14 @@ identity rechecked before promotion.
 
 Audit categories report structural assurance, not executed behavior. Compact
 status omits raw validation/review data and reports measured/partial/unavailable
-usage without invented cost. Routine release qualification additionally runs the
-verifier and artifact canary pinned to the qualified v0.1.5 commit; candidate
-checks do not replace that independent policy.
+usage without invented cost. Its versioned `continuation` projection binds the
+public run identity to a single attended next action; unresolved worker or
+external-effect evidence routes only to reconciliation, and the projection
+cannot mutate the run. Input, output, and cache-input tokens are reported only
+when a completed provider event supplied each integer field. Routine release
+qualification additionally runs the verifier and artifact canary pinned to the
+qualified v0.1.5 commit; candidate checks do not replace that independent
+policy.
 
 Only one writer lease may mutate a repository namespace. The lease is a
 dedicated SQLite exclusive transaction: kernel ownership makes acquisition
@@ -313,6 +318,17 @@ every run to be reviewed or terminal. A failed pre-build context setup removes
 its provisional worktree and branch. Review attempt budgets are scoped to an
 exact candidate generation, and repair reasserts the reviewed commit/tree before
 allowing writes. There is no background daemon or implicit retry.
+
+The built-in Codex builder is a trusted-host `workspace-write` process, not an
+isolated worker. Mill exposes that boundary through `isolation`; an explicit
+isolated request fails closed because an external adapter has not been
+qualified. The qualification requirements are intentionally concrete: disposable
+filesystem and declared scratch only, no host/forge/package/provider credential
+mount, deny-by-default egress, pinned identity with resource and cancellation
+controls, and negative boundary tests. The fuller brownfield evidence design and
+the deliberately deferred repository-context and governed improvement forms are
+recorded in
+[`reliability-brownfield-foundation.md`](reliability-brownfield-foundation.md).
 
 ## Core modules
 

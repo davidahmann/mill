@@ -126,6 +126,10 @@ two-step plan/apply wrapper, never as implicit push authority.
   and does not establish arbitrary-stack or pnpm support.
 - Report measured, partial and unavailable usage truthfully. Routine output must
   not expose private emails, commit trailers, raw worker context or logs.
+- `continuation` is a read-only, versioned state projection. It may name one
+  attended safe next action but must never perform that action, expose a
+  worktree/prompt/delivery receipt, or route an uncertain worker or external
+  effect past reconciliation.
 
 ### Build, verify, review and deliver
 
@@ -133,6 +137,12 @@ two-step plan/apply wrapper, never as implicit push authority.
 - The builder never receives GitHub mutation tools or forge credentials.
 - Codex uses the operator's existing login and billing. Its workspace sandbox is
   not hostile-host containment; do not expose a sensitive repository or host.
+- The built-in builder is `trusted-host` only.
+  `millctl isolation --request isolated`, `run --isolation isolated`, and
+  `resume --isolation isolated` must fail closed until a separately qualified
+  adapter proves disposable storage, credential non-mounting, deny-by-default
+  egress, pinned identity/resource limits, cancellation, and negative boundary
+  tests. A disposable worktree is not evidence of that isolation.
 - Validation runs declared commands in an already-present digest-pinned OCI
   image with no network, read-only source, bounded resources, and explicit
   scratch paths. Mill never pulls the image implicitly.
@@ -194,6 +204,7 @@ Do not rerun a possibly started mutation blindly.
 
 ```sh
 millctl --json status --run <run-id>
+millctl --json continuation --run <run-id>
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>

@@ -51,6 +51,11 @@ import {
   supportBundle,
   verifyRun,
 } from "./runtime/lifecycle.js";
+import {
+  builderIsolationBoundary,
+  requireBuilderIsolation,
+  type BuilderIsolationRequest,
+} from "./runtime/isolation.js";
 import { commandResult, formatHuman, type CommandResult } from "./result.js";
 import { safeReadText } from "./security/safe-path.js";
 import { MILL_VERSION } from "./version.js";
@@ -86,6 +91,13 @@ function parseMode(value: string): DoctorMode {
     return value;
   }
   throw new InvalidArgumentError("mode must be inspect, build, or propose");
+}
+
+function parseBuilderIsolation(value: string): BuilderIsolationRequest {
+  if (value === "trusted-host" || value === "isolated") return value;
+  throw new InvalidArgumentError(
+    "builder isolation must be trusted-host or isolated",
+  );
 }
 
 function emit(io: CliIo, json: boolean, result: CommandResult<unknown>): void {
@@ -893,6 +905,50 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       }
     });
 
+  program
+    .command("isolation")
+    .description("report or reject the requested builder isolation boundary")
+    .option(
+      "--request <boundary>",
+      "trusted-host or isolated",
+      parseBuilderIsolation,
+      "trusted-host",
+    )
+    .action(async (options: { request: BuilderIsolationRequest }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const boundary = builderIsolationBoundary(options.request);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "isolation",
+          ok: boundary.status === "supported",
+          status: boundary.status === "supported" ? "ok" : "blocked",
+          data: boundary,
+          reasons:
+            boundary.status === "supported"
+              ? []
+              : [
+                  {
+                    code: "BUILDER_ISOLATION_UNQUALIFIED",
+                    message:
+                      "No qualified isolated builder adapter is installed.",
+                  },
+                ],
+        }),
+      );
+      if (boundary.status !== "supported") {
+        throw new MillError(
+          "BUILDER_ISOLATION_UNQUALIFIED",
+          "Mill has no qualified isolated builder adapter; it will not silently fall back to the trusted host.",
+          ExitCode.configuration,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
   const qualify = program
     .command("qualify")
     .description(
@@ -1027,11 +1083,18 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       "--approve <digest>",
       "approval digest from successful matching baseline qualification",
     )
+    .option(
+      "--isolation <boundary>",
+      "trusted-host or isolated",
+      parseBuilderIsolation,
+      "trusted-host",
+    )
     .option("--attended", "acknowledge attended trusted-host Codex execution")
     .action(
       async (options: {
         task?: string;
         approve?: string;
+        isolation: BuilderIsolationRequest;
         attended?: boolean;
       }) => {
         const global = globals(program);
@@ -1044,6 +1107,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
             ExitCode.configuration,
           );
         }
+        requireBuilderIsolation(options.isolation);
         const result = await startLocalRun({
           root,
           taskPath: requiredValue(options.task, "--task"),
@@ -1141,6 +1205,50 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         global.json === true,
         commandResult({ command: "status", ok: true, data }),
       );
+    });
+
+  program
+    .command("continuation")
+    .description(
+      "project one run into a read-only attended continuation packet",
+    )
+    .option("--run <id>", "run identifier")
+    .action(async (options: { run?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await runStatus({
+        root,
+        ...(options.run === undefined ? {} : { runId: options.run }),
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "continuation",
+          ok: data.continuation !== undefined,
+          status: data.continuation === undefined ? "blocked" : "ok",
+          data: data.continuation ?? {},
+          reasons:
+            data.continuation === undefined
+              ? [
+                  {
+                    code: "RUN_NOT_FOUND",
+                    message:
+                      "No durable run exists for this continuation request.",
+                  },
+                ]
+              : [],
+        }),
+      );
+      if (data.continuation === undefined) {
+        throw new MillError(
+          "RUN_NOT_FOUND",
+          "No durable run exists for this continuation request.",
+          ExitCode.data,
+          { resultAlreadyEmitted: true },
+        );
+      }
     });
 
   program
@@ -1259,21 +1367,34 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     .description("resume one safe blocked checkpoint within its retry budget")
     .requiredOption("--task <path>", "approved task packet path")
     .requiredOption("--run <id>", "run identifier")
-    .action(async (options: { task: string; run: string }) => {
-      const global = globals(program);
-      const root = await findRepositoryRoot(global.cwd);
-      await enforceExactVersion(root);
-      const run = await resumeRun({
-        root,
-        taskPath: options.task,
-        runId: options.run,
-      });
-      emit(
-        io,
-        global.json === true,
-        commandResult({ command: "resume", ok: true, data: { run } }),
-      );
-    });
+    .option(
+      "--isolation <boundary>",
+      "trusted-host or isolated",
+      parseBuilderIsolation,
+      "trusted-host",
+    )
+    .action(
+      async (options: {
+        task: string;
+        run: string;
+        isolation: BuilderIsolationRequest;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        requireBuilderIsolation(options.isolation);
+        const run = await resumeRun({
+          root,
+          taskPath: options.task,
+          runId: options.run,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "resume", ok: true, data: { run } }),
+        );
+      },
+    );
 
   const pr = program
     .command("pr")

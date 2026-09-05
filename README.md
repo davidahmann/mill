@@ -73,6 +73,11 @@ For its one qualified shape, Mill can:
     clean Git root without executing its code;
 11. compile an operator-supplied follow-up change request and approved impacts
     into dependency-checked task packets and an outcome plan.
+12. project a durable run into a versioned, read-only continuation packet that
+    names the next attended safe action without taking it;
+13. report the built-in builder's trusted-host boundary and reject an
+    unqualified request for isolated execution rather than silently claiming
+    containment.
 
 Mill does not autonomously research the web or invent a product specification in
 this alpha. The operator supplies the structured proposal that Mill assesses and
@@ -347,6 +352,12 @@ pre-pulled digest-pinned OCI image, no network, read-only source/root, dropped
 capabilities, deadlines, bounded output and resources, and explicit cleanup. Do
 not use this alpha with hostile repositories or sensitive source.
 
+`millctl isolation --request trusted-host` reports the exact built-in boundary.
+`millctl isolation --request isolated` fails closed because no isolated builder
+adapter has been qualified; `run` and `resume` accept the same `--isolation`
+option and will not silently fall back. See the
+[reliability boundary](architecture/reliability-brownfield-foundation.md).
+
 ## Recovery
 
 Every run has durable state and an append-only event history. If a controller is
@@ -354,6 +365,7 @@ interrupted, inspect before acting:
 
 ```sh
 millctl --json status --run <run-id>
+millctl --json continuation --run <run-id>
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
@@ -370,6 +382,14 @@ millctl --json state purge --confirm <repository-uuid>
 millctl --json support-bundle --run <run-id>
 millctl --json detach plan
 ```
+
+`status` remains compact: it does not reveal the worktree, raw worker context,
+validation/review data, logs, private commit trailers, or credentials. Its
+`continuation` projection binds task/base/candidate/configuration identities,
+observed interruption/effect uncertainty, measured resource fields, and the next
+attended action without performing it. It reports provider-measured input,
+output, and cache-input tokens when present, partial fields when a completed
+call omitted them, and `unavailable` currency cost rather than an estimate.
 
 An unresolved push, PR, readiness or merge blocks repair, new delivery and state
 purge/restore even if the enclosing run says `blocked` or `cancelled`.

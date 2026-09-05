@@ -219,6 +219,86 @@ describe("local delivery lifecycle", () => {
       });
       expect(status.run).not.toHaveProperty("worktreePath");
       expect(status.run).not.toHaveProperty("contextJson");
+      expect(status.continuation).toMatchObject({
+        schemaVersion: "1",
+        run: {
+          id: started.run.id,
+          status: "reviewed",
+          candidateCommit: started.run.candidateCommit,
+        },
+        next: { action: "plan_draft_pr", attended: true },
+      });
+      expect(status.continuation).not.toHaveProperty("worktreePath");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("retains provider-reported reviewer cache tokens in durable status", async () => {
+    const fixture = await runtimeFixture({ reviewerCacheInputTokens: 8 });
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      await verifyRun(input);
+      await reviewRun(input);
+      await expect(
+        runStatus({ root: fixture.root, runId: started.run.id }),
+      ).resolves.toMatchObject({
+        usage: {
+          cacheInputTokens: 8,
+          cacheSource: "partial",
+        },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("recovers a stale verifier binding instead of indefinitely waiting", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const store = await StateStore.open(
+        "11111111-1111-4111-8111-111111111111",
+        await commonGitDirectory(fixture.root),
+      );
+      store.setActiveProcess(started.run.id, {
+        id: randomUUID(),
+        pid: 99_999_999,
+        processGroup: 99_999_999,
+        identity: `sha256:${"0".repeat(64)}`,
+      });
+      store.close();
+      await expect(
+        runStatus({ root: fixture.root, runId: started.run.id }),
+      ).resolves.toMatchObject({
+        interrupted: true,
+        continuation: {
+          observation: { activeWorker: "not_observed" },
+          next: { action: "verify", attended: true },
+        },
+      });
+      await expect(
+        verifyRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId: started.run.id,
+        }),
+      ).resolves.toMatchObject({ run: { status: "verified" } });
     } finally {
       await fixture.cleanup();
     }

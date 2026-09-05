@@ -1,0 +1,53 @@
+schemaVersion: "2"
+task_id: mill-reliability-brownfield-foundation
+status: approved
+owner: davidahmann
+base_commit: 2a6925dd4bd388573fbfbaa9aa219f103ed84ea2
+execution_mode: approved_native_maintainer
+authority: product/reliability-brownfield-foundation.md
+impact_manifest: product/impacts/RELIABILITY_BROWNFIELD_FOUNDATION.yaml
+objective: >-
+  Strengthen truthful brownfield continuation, recovery evidence, evaluation,
+  resource observability, and isolation-boundary qualification without
+  broadening Mill's attended local-first authority.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - docs/**
+  - architecture/**
+  - product/**
+  - README.md
+  - AGENTS.md
+  - WORKFLOW.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - mill.yaml
+acceptance_items:
+  - RBF-01 versioned read-only continuation packet
+  - RBF-02 safe exhaustive and generated recovery routing
+  - RBF-03 deterministic brownfield evaluation pack
+  - RBF-04 truthful measured resource and cache-token observations
+  - RBF-05 explicit trusted-host isolation boundary and qualification gate
+  - RBF-06 documented bounded context-adapter form
+  - RBF-07 documented governed-improvement form
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - read-only local Codex review of the entire committed PR diff
+constraints:
+  - single writer in a disposable worktree
+  - preserve baseline evidence and coverage thresholds
+  - no forge capabilities for builders or reviewers
+  - no daemon, parallel writers, auto-merge, deployment, graph service, or
+    arbitrary-stack support
+  - no secret disclosure, historical rewrite, protection bypass, cost estimate,
+    or unqualified isolation claim
+  - retain failures and reconcile uncertain effects before retry
+stop_conditions:
+  - ambiguous authority, identity, effect, or provider measurement
+  - unavailable required verification, release provenance, or exact policy
+  - recurring same-subsystem P0 or P1 review findings

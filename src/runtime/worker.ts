@@ -16,6 +16,7 @@ export interface ProviderUsage {
   source: "measured" | "unavailable";
   inputTokens?: number;
   outputTokens?: number;
+  cacheInputTokens?: number;
   cost: "unavailable";
 }
 

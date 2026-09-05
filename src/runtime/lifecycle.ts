@@ -65,6 +65,7 @@ import {
 import { MILL_VERSION } from "../version.js";
 import { validationRepairFindings } from "./repair.js";
 import { summarizeUsage } from "./usage.js";
+import { continuationPacket } from "./continuation.js";
 import {
   assertEffectAllowsNewWork,
   externalEffectBoundary,
@@ -528,7 +529,7 @@ function reconcileMutatingWorkerAdmissions(
       );
     }
   }
-  store.setActiveProcess(run.id, null);
+  if (active !== undefined) store.setActiveProcess(run.id, null);
 }
 
 function recordProviderUsage(
@@ -542,6 +543,7 @@ function recordProviderUsage(
     costSource: usage.cost,
     inputTokens: usage.inputTokens ?? null,
     outputTokens: usage.outputTokens ?? null,
+    cacheInputTokens: usage.cacheInputTokens ?? null,
   });
 }
 
@@ -844,7 +846,9 @@ export async function verifyRun(input: {
   const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
-    const run = store.getRun(input.runId);
+    let run = store.getRun(input.runId);
+    reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
+    run = store.getRun(run.id);
     if (run.status !== "committed") {
       throw new MillError(
         "RUN_NOT_COMMITTED",
@@ -925,6 +929,8 @@ export async function reviewRun(input: {
   try {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
+    reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
+    run = store.getRun(run.id);
     assertEffectAllowsNewWork(run);
     const deadlineMs = persistedRunDeadline(run);
     if (input.refresh === true) {
@@ -1079,6 +1085,7 @@ export async function reviewRun(input: {
           costSource: result.usage.cost,
           inputTokens: result.usage.inputTokens ?? null,
           outputTokens: result.usage.outputTokens ?? null,
+          cacheInputTokens: result.usage.cacheInputTokens ?? null,
         },
       );
       return {
@@ -1363,6 +1370,7 @@ export async function runStatus(input: {
   interrupted?: boolean;
   reconciliationRequired?: boolean;
   usage?: ReturnType<typeof summarizeUsage>;
+  continuation?: ReturnType<typeof continuationPacket>;
 }> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
@@ -1373,8 +1381,9 @@ export async function runStatus(input: {
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
     if (run === undefined) return {};
     let interrupted = false;
+    const effectBoundary = externalEffectBoundary(run);
     let reconciliationRequired =
-      externalEffectBoundary(run).unresolved ||
+      effectBoundary.unresolved ||
       store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
@@ -1393,21 +1402,37 @@ export async function runStatus(input: {
         }
       }
     }
+    let activeWorker = active !== undefined;
     if (controllerAbsent) {
-      if (
-        active !== undefined &&
-        processIdentityStatus(active) !== "mismatch"
-      ) {
+      const activeStatus =
+        active === undefined ? undefined : processIdentityStatus(active);
+      if (activeStatus === "mismatch") {
+        interrupted = true;
+        activeWorker = false;
+      } else if (active !== undefined) {
         reconciliationRequired = true;
       } else if (run.status === "running") {
         interrupted = true;
       }
     }
-    return {
-      run: publicRunRecord(run),
-      usage: summarizeUsage(store.events(run.id)),
+    const publicRun = publicRunRecord(run);
+    const usage = summarizeUsage(store.events(run.id));
+    const status = {
+      run: publicRun,
+      usage,
       ...(interrupted ? { interrupted: true } : {}),
       ...(reconciliationRequired ? { reconciliationRequired: true } : {}),
+    };
+    return {
+      ...status,
+      continuation: continuationPacket({
+        run: publicRun,
+        usage,
+        ...(interrupted ? { interrupted } : {}),
+        ...(reconciliationRequired ? { reconciliationRequired } : {}),
+        ...(effectBoundary.merged ? { mergeFinalizationRequired: true } : {}),
+        activeWorker,
+      }),
     };
   } finally {
     try {

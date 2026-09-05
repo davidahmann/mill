@@ -189,6 +189,7 @@ export function decodeCodexEvents(
   let threadId: string | undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
+  let cacheInputTokens: number | undefined;
   let providerErrorCode: string | undefined;
   let completedTerminalCount = 0;
   let failedTerminalCount = 0;
@@ -259,6 +260,9 @@ export function decodeCodexEvents(
       if (typeof usageRecord.output_tokens === "number") {
         outputTokens = usageRecord.output_tokens;
       }
+      if (typeof usageRecord.cached_input_tokens === "number") {
+        cacheInputTokens = usageRecord.cached_input_tokens;
+      }
     }
   }
   const terminalCount = completedTerminalCount + failedTerminalCount;
@@ -297,6 +301,7 @@ export function decodeCodexEvents(
             source: "measured",
             ...(inputTokens === undefined ? {} : { inputTokens }),
             ...(outputTokens === undefined ? {} : { outputTokens }),
+            ...(cacheInputTokens === undefined ? {} : { cacheInputTokens }),
             cost: "unavailable",
           },
   };
