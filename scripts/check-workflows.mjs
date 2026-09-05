@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { parse } from "yaml";
+import { releaseVerifierPreparationFailures } from "./release-workflow-policy.mjs";
 
 const workflowDirectory = path.resolve(".github/workflows");
 const files = (await readdir(workflowDirectory))
@@ -38,6 +39,9 @@ for (const file of files) {
   if (jobs === undefined || Object.keys(jobs).length === 0) {
     failures.push(`${file}: jobs must be a non-empty mapping`);
     continue;
+  }
+  if (file === "release.yml") {
+    failures.push(...releaseVerifierPreparationFailures(jobs));
   }
   for (const [jobName, rawJob] of Object.entries(jobs)) {
     const job = record(rawJob);

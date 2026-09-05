@@ -59,6 +59,26 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+### Publication preflight repair
+
+The existing approved AF-04/release scope includes the publication preflight
+repair discovered after PR #22 merged as
+`dbed247f19e115866dc828f55b9198a2c4789e21`. The publish job starts on a fresh
+runner but did not explicitly prepare the pinned image required by its registry
+canary, which forbids implicit pulls. Publication of `0.2.0` is held; its pushed
+annotated tag is retained, never moved. This is a bounded maintainer repair
+under the existing attended owner approval, not a new approval receipt.
+
+The repair may add explicit digest-pinned image preparation before publication,
+require preparation in every release job that executes the full canary, add
+red-first workflow-policy regressions, and prepare the unused `0.2.1` version
+with truthful documentation. Runtime behavior, recipe/oracle bytes, coverage
+thresholds, protection settings and publication permissions remain unchanged.
+The exact repaired source needs native host/OCI checks, audit and fresh complete
+read-only review, PR/main readback and a fresh matched release canary before
+tagging. Two independent builds, the v0.1.5 trust root, one preserved tarball,
+protected OIDC publication and registry/GitHub readback still gate release.
+
 For this maintainer increment, the owner's subsequent "ignore standalone p2s"
 instruction makes isolated P2 review findings non-blocking: record the finding
 and residual risk without another repair cycle. It does not waive P0/P1 stops,

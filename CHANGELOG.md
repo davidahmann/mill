@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.2.0 — candidate
+## 0.2.1 — candidate
+
+Retain the architecture follow-through below and explicitly prepare the pinned
+verifier image on each fresh full-canary runner, including before immutable npm
+publication. Native workflow policy rejects missing, late, conditional,
+failure-ignored or noncanonical preparation. The `v0.2.0` tag remains unchanged
+as prepublication evidence; no npm version or GitHub Release was published.
+
+## 0.2.0 — publication held
 
 - Add opt-in, exact-plan attended readiness/merge with producer-bound CI,
   strict-protection checks, separate intent journals and readback recovery.
@@ -34,9 +42,10 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
-The maintainer-prepared package identity is `0.2.0`. Release qualification,
-tagging, npm publication, and GitHub Release creation remain outstanding and
-separately authorized; `0.1.5` remains the qualified public-alpha trust root.
+The follow-through implementation initially prepared `0.2.0`. Release
+qualification, tagging, npm publication, and GitHub Release creation remain
+outstanding and separately authorized; `0.1.5` remains the qualified
+public-alpha trust root.
 
 ### Added
 

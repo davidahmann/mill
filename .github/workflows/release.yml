@@ -128,9 +128,11 @@ jobs:
           test -n "$artifact_a" && test -n "$artifact_b"
           node scripts/compare-release-artifacts.mjs "$artifact_a" "$artifact_b" "$RUNNER_TEMP/qualified"
       - name: Pull the explicitly qualified verifier image
-        run:
-          docker pull "$(node -e 'const fs=require("node:fs");const
-          y=require("yaml");process.stdout.write(y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage)')"
+        id: prepare-release-verifier
+        run: |
+          verifier_image=$(node -e 'const fs=require("node:fs"),y=require("yaml");const image=y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage;if(typeof image!=="string"||!/@sha256:[a-f0-9]{64}$/.test(image))throw new Error("Digest-pinned verifier required");process.stdout.write(image)')
+          docker pull "$verifier_image"
+          docker image inspect "$verifier_image" >/dev/null
       - name: Run packed greenfield and adoption canaries
         run: |
           artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
@@ -209,9 +211,11 @@ jobs:
           cp "$RUNNER_TEMP/qualified/qualification.json" .mill-release-qualification.json
           node dist/cli.js --json --cwd . qualify public-alpha --file .mill-release-qualification.json
       - name: Prepare the explicitly pinned recipe verifier
-        run: >-
-          docker pull "$(node -e 'const fs=require("node:fs");const
-          y=require("yaml");process.stdout.write(y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage)')"
+        id: prepare-release-verifier
+        run: |
+          verifier_image=$(node -e 'const fs=require("node:fs"),y=require("yaml");const image=y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage;if(typeof image!=="string"||!/@sha256:[a-f0-9]{64}$/.test(image))throw new Error("Digest-pinned verifier required");process.stdout.write(image)')
+          docker pull "$verifier_image"
+          docker image inspect "$verifier_image" >/dev/null
       - name:
           Exercise the candidate using the previous release's independent canary
         run: |
@@ -308,6 +312,12 @@ jobs:
             "$RUNNER_TEMP/qualified/sbom.cdx.json" \
             "$RUNNER_TEMP/identity.json" \
             "$RUNNER_TEMP/qualified/release-evidence-prepublication.json"
+      - name: Prepare the pinned verifier before immutable publication
+        id: prepare-release-verifier
+        run: |
+          verifier_image=$(node -e 'const fs=require("node:fs"),y=require("yaml");const image=y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage;if(typeof image!=="string"||!/@sha256:[a-f0-9]{64}$/.test(image))throw new Error("Digest-pinned verifier required");process.stdout.write(image)')
+          docker pull "$verifier_image"
+          docker image inspect "$verifier_image" >/dev/null
       - name: Publish the exact preserved artifact with provenance
         run: |
           artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')

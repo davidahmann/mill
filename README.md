@@ -14,8 +14,10 @@ repositories may explicitly enable a separately approved, exact-plan merge.
 Mill `0.1.5` is the first qualified public alpha. It is available from npm and
 as a GitHub prerelease with provenance, an SBOM, exact-artifact qualification,
 and registry and GitHub readback evidence. The source package identity is now
-prepared as `0.2.0`; source changes do not establish release qualification or
-publication for that version.
+prepared as `0.2.1`. The `v0.2.0` tag is retained as prepublication evidence:
+publication was held when a missing publish-runner verifier preflight was
+identified. Source changes do not establish release qualification or publication
+for the new version.
 
 ## Why Mill
 
