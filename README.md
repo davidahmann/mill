@@ -11,12 +11,12 @@ candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity. Draft-only is the default;
 repositories may explicitly enable a separately approved, exact-plan merge.
 
-Mill `0.2.1` is the current qualified public alpha and the latest release on
-[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.2.1) and npm. The
+Mill `0.3.0` is the current qualified public alpha and the latest release on
+[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.3.0) and npm. The
 release includes provenance, an SBOM, independent exact-artifact qualification,
 and verified registry and GitHub downloads. GitHub's Latest label does not
 expand the public-alpha support limits. See the
-[release record](docs/releases/v0.2.1.md) for exact evidence and recovery
+[release record](docs/releases/v0.3.0.md) for exact evidence and recovery
 history. The `v0.1.5` genesis release remains the historical trust root;
 `v0.2.0` was held before publication and its tag is preserved.
 
@@ -98,8 +98,8 @@ The first recipe is intentionally exact:
 
 Mill itself is developed with Node.js 24.20.0 and npm 11.19.0. Exact support is
 published in release qualification evidence, not inferred from nearby versions.
-The `0.2.1` host tuple was exercised on September 5, 2026 and expires on October
-5, 2026 at 09:11:04 UTC; its attached qualification lists every exact version
+The `0.3.0` host tuple was exercised on September 5, 2026 and expires on October
+5, 2026 at 15:35:52 UTC; its attached qualification lists every exact version
 and digest. All other stacks, operating systems, architectures, forges, models,
 and worker harnesses are experimental or unsupported until independently
 qualified. Experimental native Node ESM/npm adoption is separate from this
@@ -111,7 +111,7 @@ Install the qualified public alpha at its exact version with lifecycle scripts
 disabled:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.2.1
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.3.0
 npx --no-install millctl --version
 ```
 
@@ -128,7 +128,7 @@ PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
 node dist/cli.js --version
 ```
 
-The `alpha` and `latest` npm tags both resolve to `0.2.1`. Downstream
+The `alpha` and `latest` npm tags both resolve to `0.3.0`. Downstream
 repositories should still pin the exact version so a later release cannot alter
 their delivery machinery implicitly. Updating an existing Mill installation is
 deliberate: preserve state and repository snapshots, inspect the release notes,

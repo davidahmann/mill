@@ -70,7 +70,8 @@ historical configuration and blocker as evidence of the preceding task.
 The publication boundary is configured as follows:
 
 - the protected GitHub environment `npm` requires David's approval and permits
-  only branch `main` and exact tag `v0.2.1` through selected branch/tag rules;
+  branch `main` plus historical tag `v0.2.1` and exact tag `v0.3.0` through
+  selected branch/tag rules;
 - npm trusted publishing binds package `@davidahmann/mill`, repository
   `davidahmann/mill`, workflow `release.yml`, and environment `npm`;
 - require passkey or 2FA on the npm maintainer account and store recovery codes
@@ -88,19 +89,21 @@ publish phase alone receives `id-token: write` and `contents: write`, inside the
 protected environment. Fork jobs never supply artifacts or credentials to that
 phase.
 
-The exact-tag rule was separately owner-approved on 2026-09-05. The prior
+Each exact-tag rule was separately owner-approved on 2026-09-05. The prior
 protected-branches-only policy did not match the routine runbook's tag-ref
-dispatch. Provider readback verified exactly the two permitted refs, unchanged
-reviewer requirements and unchanged main branch protection. This is an
+dispatch. Provider readback verified `main`, historical `v0.2.1`, and `v0.3.0`,
+with unchanged reviewer requirements and main branch protection. This is an
 environment admission change, not a protection bypass or an npm token grant.
 Future release tags require their own explicit policy authorization; do not
-replace the exact tag rule with a wildcard or an unrestricted environment.
+replace the exact tag rules with a wildcard or an unrestricted environment.
 
 ## Current distribution channels
 
-As of 2026-09-05, npm `alpha` and `latest` both select `0.2.1`, and GitHub
-Latest selects public release ID `383198362`. The owner separately approved each
-promotion. The duplicate workflow draft `383199322` remains untouched; release
-automation must not confuse its tag with the public release identity during
-recovery. See [release evidence](releases/v0.2.1.md). Channel labels do not
-expand Mill's qualified public-alpha support tuple or authorize republishing.
+As of 2026-09-05, npm `alpha`/`latest` and GitHub Latest select `0.3.0`. The
+`latest` change used the account's hardware-2FA assertion and provider readback;
+it did not republish the artifact. GitHub Latest is public release ID
+`383294609`. The historical duplicate workflow draft `383199322` remains
+untouched; release automation must not confuse its tag with the public release
+identity during recovery. See [release evidence](releases/v0.3.0.md). Channel
+labels do not expand Mill's qualified public-alpha support tuple or authorize
+republishing.

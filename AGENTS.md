@@ -252,15 +252,16 @@ precede the immutable npm effect; a prior job's Docker cache is not evidence.
 Native workflow policy guards this order. Mill runtime validation still never
 pulls an image implicitly.
 
-The owner-approved GitHub `npm` environment admits only branch `main` and exact
-tag `v0.2.1`, with its required reviewer retained. Routine release dispatch uses
-the exact tag, not an unbound main ref. A future tag requires a separate exact
-environment-policy authorization; never widen to wildcard tags or bypass the
-reviewer gate. Main branch protections remain unchanged.
+The owner-approved GitHub `npm` environment admits branch `main` plus historical
+tag `v0.2.1` and exact tag `v0.3.0`, with its required reviewer retained.
+Routine release dispatch uses its exact tag, not an unbound main ref. A future
+tag requires a separate exact environment-policy authorization; never widen to
+wildcard tags or bypass the reviewer gate. Main branch protections remain
+unchanged.
 
-The current published public alpha is `0.2.1`; both npm `alpha` and `latest` and
+The current published public alpha is `0.3.0`; both npm `alpha` and `latest` and
 GitHub Latest point to it. Its exact support tuple and expiry are in
-`docs/releases/v0.2.1.md`. This distribution status does not broaden supported
+`docs/releases/v0.3.0.md`. This distribution status does not broaden supported
 stacks or autonomy. The v0.1.5 verifier remains the workflow's independently
 pinned policy; do not silently replace it with the newest version.
 
