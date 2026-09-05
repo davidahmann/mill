@@ -4,6 +4,27 @@
   "properties": {
     "schemaVersion": { "type": "string", "const": "1" },
     "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "candidateTree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "changedPaths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "required": [
+        "baseCommit",
+        "candidateCommit",
+        "candidateTree",
+        "changedPaths",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
     "summary": { "type": "string" },
     "findings": {
       "type": "array",

@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
-import { runCli } from "../src/cli-program.js";
+import { createProgram, runCli } from "../src/cli-program.js";
 import { canonicalDigest } from "../src/contracts/canonical.js";
 import { textDigest } from "../src/runtime/inputs.js";
+import { MILL_VERSION } from "../src/version.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +34,51 @@ function capture(): {
 }
 
 describe("CLI contracts", () => {
+  it("keeps published shell-example flags aligned with the CLI without executing examples", async () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    const program = createProgram(capture().io);
+    const files = [
+      "README.md",
+      "AGENTS.md",
+      "WORKFLOW.md",
+      ...(await readdir(path.join(root, "docs")))
+        .filter((file) => file.endsWith(".md"))
+        .map((file) => `docs/${file}`),
+    ];
+    const unknown: { file: string; command: string; flag: string }[] = [];
+    let checked = 0;
+    for (const file of files) {
+      const source = (await readFile(path.join(root, file), "utf8")).replace(
+        /\\\n\s*/gu,
+        " ",
+      );
+      for (const match of source.matchAll(/^millctl\s+(.+)$/gmu)) {
+        const command = match[1];
+        if (command === undefined) continue;
+        checked++;
+        let current = program;
+        const options = [...program.options];
+        for (const token of command.split(/\s+/u)) {
+          const child = current.commands.find((item) => item.name() === token);
+          if (child !== undefined) {
+            current = child;
+            options.push(...child.options);
+          }
+        }
+        for (const flag of command.matchAll(
+          /(?<!\S)(--[a-z][a-z-]*)(?=\s|=|$)/gu,
+        )) {
+          if (
+            flag[1] !== undefined &&
+            !options.some((option) => option.long === flag[1])
+          )
+            unknown.push({ file, command, flag: flag[1] });
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+    expect(unknown).toEqual([]);
+  });
   it("emits a stable JSON envelope for PRD inspection", async () => {
     const temporary = await temporaryDirectory("mill-cli-");
     try {
@@ -642,7 +688,7 @@ describe("CLI contracts", () => {
       });
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.6"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n',
+        `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n`,
       );
       const detach = capture();
       expect(
@@ -657,7 +703,7 @@ describe("CLI contracts", () => {
       });
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.6"\n',
+        `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\n`,
       );
       const legacyDetach = capture();
       expect(
@@ -708,7 +754,7 @@ describe("CLI contracts", () => {
     expect(JSON.parse(version.stdout.join(""))).toMatchObject({
       command: "version",
       ok: true,
-      data: { version: "0.1.6" },
+      data: { version: MILL_VERSION },
     });
 
     const help = capture();

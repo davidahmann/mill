@@ -370,7 +370,7 @@ export async function loadRuntimeInputs(
     config,
     task,
     taskPath,
-    taskDigest: canonicalDigest(task),
+    taskDigest: canonicalDigest(task as unknown as JsonValue),
     configDigest: canonicalDigest(config as unknown as JsonValue),
     protectedPaths,
     ...(continuity === undefined ? {} : { continuity }),

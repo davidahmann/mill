@@ -14,10 +14,95 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
+import { z } from "zod";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
+import {
+  deliveryRecordSchema,
+  reviewResultSchema,
+  reviewScopeSchema,
+  validationEvidenceSchema,
+} from "../contracts/schemas.js";
 
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
 import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
+import {
+  assertEffectAllowsNewWork,
+  externalEffectBoundary,
+  reconcilableDraftEffect,
+  maximumRemoteEffectAttempts,
+} from "./effect-boundary.js";
+
+const authorityPlanSchema = z
+  .object({
+    kind: z.enum(["tasks", "native_adoption"]),
+    approvalDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    worktreePath: z.string(),
+    state: z.enum(["intent", "applied", "committed", "abandoned"]),
+    branch: z
+      .string()
+      .regex(/^mill\/[a-zA-Z0-9._-]+$/u)
+      .optional(),
+    committedCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    purgeCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    abandonedCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    files: z
+      .array(
+        z
+          .object({
+            path: z
+              .string()
+              .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[a-zA-Z0-9_./-]+$/u),
+            digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
+export type AuthorityPlanRecord = z.infer<typeof authorityPlanSchema>;
+
+export function isSettledAuthorityPlan(plan: AuthorityPlanRecord): boolean {
+  return plan.state === "committed" || plan.state === "abandoned";
+}
+
+function parseAuthorityPlan(
+  value: unknown,
+  directory: string,
+): AuthorityPlanRecord {
+  const record = authorityPlanSchema.parse(value);
+  const prefix = record.kind === "tasks" ? "plan-" : "native-";
+  const expected = path.join(
+    directory,
+    "worktrees",
+    `${prefix}${record.approvalDigest.slice(7)}`,
+  );
+  if (
+    record.worktreePath !== expected ||
+    (record.state !== "intent" && record.branch === undefined) ||
+    (record.state === "committed" && record.committedCommit === undefined) ||
+    (record.state === "abandoned" && record.abandonedCommit === undefined) ||
+    (record.abandonedCommit !== undefined && record.state !== "abandoned") ||
+    (record.purgeCommit !== undefined && !isSettledAuthorityPlan(record))
+  )
+    throw new MillError(
+      "INVALID_AUTHORITY_PLAN",
+      "Authority plan identity or worktree binding is invalid.",
+      ExitCode.data,
+    );
+  return record;
+}
 
 export type RunStatus =
   | "approved"
@@ -79,6 +164,8 @@ export type PublicRunRecord = Omit<
   | "activeProcessIdentity"
   | "deliveryJson"
   | "remoteFeedbackJson"
+  | "validationJson"
+  | "reviewJson"
 >;
 
 export function publicRunRecord(run: RunRecord): PublicRunRecord {
@@ -91,6 +178,8 @@ export function publicRunRecord(run: RunRecord): PublicRunRecord {
   delete publicRun.activeProcessIdentity;
   delete publicRun.deliveryJson;
   delete publicRun.remoteFeedbackJson;
+  delete publicRun.validationJson;
+  delete publicRun.reviewJson;
   return publicRun;
 }
 
@@ -444,6 +533,7 @@ export class StateStore {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.#transaction(() => {
+      for (const run of this.runs()) assertEffectAllowsNewWork(run);
       this.#database
         .prepare(
           `INSERT INTO runs(
@@ -504,6 +594,29 @@ export class StateStore {
   ): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
+      // Effect-specific reconciliation settles the journal before advancing
+      // an enclosing effect_unknown status. Never unlock it via a status alone.
+      if (
+        externalEffectBoundary(current).journalUnresolved &&
+        to !== "effect_unknown"
+      )
+        throw new MillError(
+          "GITHUB_RECONCILIATION_REQUIRED",
+          "The effect journal must be reconciled before a lifecycle transition.",
+          ExitCode.temporary,
+        );
+      if (
+        [
+          "running",
+          "cancelled",
+          "failed",
+          "stale",
+          "reviewed",
+          "proposing",
+        ].includes(to) &&
+        externalEffectBoundary(current).merged
+      )
+        assertEffectAllowsNewWork(current);
       if (!transitions[current.status].includes(to)) {
         throw new MillError(
           "INVALID_RUN_TRANSITION",
@@ -763,9 +876,99 @@ export class StateStore {
     return this.getRun(id);
   }
 
+  /** The effect-specific controller supplies authoritative readback; publish its
+   * journal and lifecycle disposition together, never as two crashable writes. */
+  settleDraftEffect(
+    id: string,
+    expectedDeliveryJson: string,
+    nextDeliveryJson: string,
+  ): RunRecord {
+    this.#transaction(() => {
+      const run = this.getRun(id);
+      if (run.deliveryJson !== expectedDeliveryJson)
+        throw new MillError(
+          "GITHUB_RECONCILIATION_STATE_INVALID",
+          "The journal changed during readback.",
+          ExitCode.data,
+        );
+      const pending = reconcilableDraftEffect(run);
+      const previous = deliveryRecordSchema.parse(
+        JSON.parse(expectedDeliveryJson),
+      );
+      const next = deliveryRecordSchema.parse(JSON.parse(nextDeliveryJson));
+      const settled = next.effects.find((effect) => effect.id === pending.id);
+      const immutable = {
+        ...next,
+        effects: previous.effects,
+        state: previous.state,
+        remoteHeadCommit: previous.remoteHeadCommit,
+        pullRequest: previous.pullRequest,
+        lastErrorCode: previous.lastErrorCode,
+        updatedAt: previous.updatedAt,
+      };
+      if (
+        settled === undefined ||
+        canonicalDigest(immutable as JsonValue) !==
+          canonicalDigest(previous as JsonValue) ||
+        next.effects.length !== previous.effects.length ||
+        canonicalDigest(
+          next.effects.map((effect) =>
+            effect.id === pending.id ? pending : effect,
+          ),
+        ) !== canonicalDigest(previous.effects) ||
+        canonicalDigest({
+          ...settled,
+          status: pending.status,
+          errorCode: pending.errorCode,
+          updatedAt: pending.updatedAt,
+        }) !== canonicalDigest(pending) ||
+        !(
+          (next.state === "proposing" &&
+            (settled.status === "verified" ||
+              (settled.status === "retryable_absent" &&
+                pending.attemptCount < maximumRemoteEffectAttempts))) ||
+          (next.state === "awaiting_ci" &&
+            settled.status === "verified" &&
+            next.pullRequest !== null &&
+            next.remoteHeadCommit === next.candidateCommit) ||
+          (next.state === "blocked" &&
+            settled.status === "blocked" &&
+            pending.attemptCount >= maximumRemoteEffectAttempts)
+        )
+      )
+        throw new MillError(
+          "GITHUB_RECONCILIATION_STATE_INVALID",
+          "Settlement may only classify the exact pending effect and its lifecycle.",
+          ExitCode.data,
+        );
+      let status: RunStatus = next.state;
+      if (run.cancelRequested || isTerminalRun(run.status)) {
+        status = isTerminalRun(run.status) ? run.status : "cancelled";
+        next.state = "cancelled";
+        next.lastErrorCode = "OPERATOR_CANCELLED";
+      }
+      const now = new Date().toISOString();
+      next.updatedAt = now;
+      this.#database
+        .prepare(
+          "UPDATE runs SET delivery_json = ?, status = ?, block_code = ?, updated_at = ? WHERE id = ?",
+        )
+        .run(JSON.stringify(next), status, next.lastErrorCode, now, id);
+      this.#event(id, "delivery.effect_reconciled", {
+        effectId: pending.id,
+        from: run.status,
+        to: status,
+        effectFrom: pending.status,
+        effectTo: settled.status,
+        attemptCount: settled.attemptCount,
+      });
+    });
+    return this.getRun(id);
+  }
+
   setRemoteFeedback(id: string, feedbackJson: string): RunRecord {
     this.#transaction(() => {
-      this.getRun(id);
+      assertEffectAllowsNewWork(this.getRun(id));
       this.#database
         .prepare(
           "UPDATE runs SET remote_feedback_json = ?, updated_at = ? WHERE id = ?",
@@ -806,6 +1009,7 @@ export class StateStore {
   beginRepair(id: string): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
+      assertEffectAllowsNewWork(current);
       if (current.cancelRequested) {
         throw new MillError(
           "OPERATOR_CANCELLED",
@@ -829,15 +1033,133 @@ export class StateStore {
         from: current.status,
         to: "running",
         repairCount: current.repairCount + 1,
+        candidateCommit: current.candidateCommit ?? null,
+        failureCode: current.blockCode ?? null,
+        validationJson: current.validationJson ?? null,
+        reviewJson: current.reviewJson ?? null,
+        remoteFeedbackJson: current.remoteFeedbackJson ?? null,
       });
     });
     return this.getRun(id);
+  }
+
+  reviewRefreshScope(
+    id: string,
+  ): z.infer<typeof reviewScopeSchema> | undefined {
+    const run = this.getRun(id);
+    const row = this.#database
+      .prepare(
+        `SELECT data_json FROM run_events WHERE run_id = ? AND type = 'review.refresh_prepared' AND json_extract(data_json, '$.candidateCommit') = ? ORDER BY sequence DESC LIMIT 1`,
+      )
+      .get(id, run.candidateCommit ?? "") as { data_json: string } | undefined;
+    if (row === undefined) return undefined;
+    const data = JSON.parse(row.data_json) as { scope: unknown };
+    return reviewScopeSchema.parse(data.scope);
+  }
+
+  prepareReviewRefresh(
+    id: string,
+    expectedReviewJson: string,
+    scope: z.infer<typeof reviewScopeSchema>,
+    maximum: number,
+  ): RunRecord {
+    this.#transaction(() => {
+      const current = this.getRun(id);
+      assertEffectAllowsNewWork(current);
+      if (current.cancelRequested)
+        throw new MillError(
+          "OPERATOR_CANCELLED",
+          "A cancelled run cannot refresh review.",
+          ExitCode.temporary,
+        );
+      if (
+        !["reviewed", "proposing"].includes(current.status) ||
+        current.reviewJson !== expectedReviewJson ||
+        current.validationJson === undefined
+      )
+        throw new MillError(
+          "REVIEW_REFRESH_UNAVAILABLE",
+          "Refresh requires unchanged successful review and validation before delivery.",
+          ExitCode.configuration,
+        );
+      const review = reviewResultSchema.parse(JSON.parse(expectedReviewJson));
+      const validation = validationEvidenceSchema.parse(
+        JSON.parse(current.validationJson),
+      );
+      const checked = reviewScopeSchema.parse(scope);
+      if (
+        !validation.passed ||
+        validation.candidateCommit !== current.candidateCommit ||
+        review.candidateCommit !== current.candidateCommit ||
+        review.findings.length !== 0 ||
+        checked.candidateCommit !== current.candidateCommit ||
+        checked.candidateTree !== current.candidateTree
+      )
+        throw new MillError(
+          "LOCAL_EVIDENCE_STALE",
+          "Refresh cannot change the candidate or bypass failed evidence.",
+          ExitCode.configuration,
+        );
+      if (review.scope?.digest === checked.digest)
+        throw new MillError(
+          "REVIEW_REFRESH_NOT_REQUIRED",
+          "The candidate already has this review scope.",
+          ExitCode.configuration,
+        );
+      if (current.deliveryJson !== undefined) {
+        const delivery = deliveryRecordSchema.parse(
+          JSON.parse(current.deliveryJson),
+        );
+        if (
+          delivery.effects.length !== 0 ||
+          delivery.pullRequest !== null ||
+          delivery.mergeApproval !== undefined ||
+          delivery.remoteHeadCommit !== null
+        )
+          throw new MillError(
+            "REVIEW_REFRESH_AFTER_EFFECT",
+            "Refresh cannot discard a delivery that has attempted external effects.",
+            ExitCode.configuration,
+          );
+      }
+      this.#assertReviewBudget(current, maximum);
+      this.#database
+        .prepare(
+          "UPDATE runs SET status = 'verified', review_json = NULL, delivery_json = NULL, block_code = NULL, updated_at = ? WHERE id = ?",
+        )
+        .run(new Date().toISOString(), id);
+      this.#event(id, "review.refresh_prepared", {
+        candidateCommit: current.candidateCommit,
+        scope: checked,
+        previousReviewJson: current.reviewJson,
+        previousDeliveryJson: current.deliveryJson ?? null,
+        from: current.status,
+        to: "verified",
+      });
+    });
+    return this.getRun(id);
+  }
+
+  #assertReviewBudget(run: RunRecord, maximum: number): number {
+    const row = this.#database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM run_events WHERE run_id = ? AND type = 'review.started' AND json_extract(data_json, '$.candidateCommit') = ?`,
+      )
+      .get(run.id, run.candidateCommit ?? "") as { count: number };
+    if (row.count >= maximum)
+      throw new MillError(
+        "REVIEW_RETRY_BUDGET_EXHAUSTED",
+        "The bounded review attempt budget is exhausted.",
+        ExitCode.configuration,
+      );
+    return row.count + 1;
   }
 
   beginReviewAttempt(id: string, maximum: number): number {
     let attempt = 0;
     this.#transaction(() => {
       const current = this.getRun(id);
+      assertEffectAllowsNewWork(current);
       if (current.cancelRequested) {
         throw new MillError(
           "OPERATOR_CANCELLED",
@@ -859,21 +1181,7 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
-      const row = this.#database
-        .prepare(
-          `SELECT COUNT(*) AS count FROM run_events
-           WHERE run_id = ? AND type = 'review.started'
-             AND json_extract(data_json, '$.candidateCommit') = ?`,
-        )
-        .get(id, current.candidateCommit) as { count: number };
-      if (row.count >= maximum) {
-        throw new MillError(
-          "REVIEW_RETRY_BUDGET_EXHAUSTED",
-          "The bounded review attempt budget is exhausted.",
-          ExitCode.configuration,
-        );
-      }
-      attempt = row.count + 1;
+      attempt = this.#assertReviewBudget(current, maximum);
       this.#event(id, "review.started", {
         candidateCommit: current.candidateCommit,
         attempt,
@@ -1071,6 +1379,144 @@ export class StateStore {
     return this.getRun(id);
   }
 
+  authorityPlans(): AuthorityPlanRecord[] {
+    return this.#database
+      .prepare(
+        "SELECT key, value FROM metadata WHERE key GLOB 'authority_plan:*'",
+      )
+      .all()
+      .map((row) => {
+        const record = parseAuthorityPlan(
+          JSON.parse(String(row.value)),
+          this.directory,
+        );
+        if (row.key !== `authority_plan:${record.approvalDigest}`)
+          throw new MillError(
+            "INVALID_AUTHORITY_PLAN",
+            "Authority plan key does not match its digest.",
+            ExitCode.data,
+          );
+        return record;
+      });
+  }
+
+  beginAuthorityPlan(record: AuthorityPlanRecord, duplicateCode: string): void {
+    const checked = parseAuthorityPlan(record, this.directory);
+    if (checked.state !== "intent")
+      throw new MillError(
+        "INVALID_AUTHORITY_PLAN",
+        "A plan must begin with durable intent.",
+        ExitCode.data,
+      );
+    this.#transaction(() => {
+      for (const run of this.runs()) assertEffectAllowsNewWork(run);
+      const result = this.#database
+        .prepare("INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)")
+        .run(
+          `authority_plan:${checked.approvalDigest}`,
+          JSON.stringify(checked),
+        );
+      if (result.changes !== 1)
+        throw new MillError(
+          duplicateCode,
+          "This exact plan already has an apply intent. Reconcile its preserved worktree; do not replay it.",
+          ExitCode.configuration,
+        );
+    });
+  }
+
+  settleAuthorityPlan(
+    approvalDigest: string,
+    evidence: { branch: string; committedCommit?: string },
+  ): void {
+    this.#transaction(() => {
+      const previous = this.authorityPlans().find(
+        (item) => item.approvalDigest === approvalDigest,
+      );
+      if (
+        previous === undefined ||
+        isSettledAuthorityPlan(previous) ||
+        (previous.branch !== undefined && previous.branch !== evidence.branch)
+      )
+        throw new MillError(
+          "INVALID_AUTHORITY_PLAN",
+          "Authority plan cannot accept this settlement.",
+          ExitCode.data,
+        );
+      const record = parseAuthorityPlan(
+        {
+          ...previous,
+          ...evidence,
+          state:
+            evidence.committedCommit === undefined ? "applied" : "committed",
+        },
+        this.directory,
+      );
+      this.#database
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(JSON.stringify(record), `authority_plan:${approvalDigest}`);
+    });
+  }
+
+  abandonAuthorityPlan(
+    approvalDigest: string,
+    branch: string,
+    abandonedCommit: string,
+  ): void {
+    this.#transaction(() => {
+      const plan = this.authorityPlans().find(
+        (item) => item.approvalDigest === approvalDigest,
+      );
+      if (
+        plan === undefined ||
+        isSettledAuthorityPlan(plan) ||
+        plan.branch !== branch
+      )
+        throw new MillError(
+          "INVALID_AUTHORITY_PLAN",
+          "Only an unfinished plan on its recorded branch can be abandoned.",
+          ExitCode.configuration,
+        );
+      const record = parseAuthorityPlan(
+        { ...plan, state: "abandoned", abandonedCommit },
+        this.directory,
+      );
+      this.#database
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(JSON.stringify(record), `authority_plan:${approvalDigest}`);
+    });
+  }
+
+  beginAuthorityPlanPurge(
+    approvalDigest: string,
+    committedCommit: string,
+  ): void {
+    this.#transaction(() => {
+      const plan = this.authorityPlans().find(
+        (item) => item.approvalDigest === approvalDigest,
+      );
+      if (
+        plan === undefined ||
+        !isSettledAuthorityPlan(plan) ||
+        (plan.state === "abandoned" &&
+          plan.abandonedCommit !== committedCommit) ||
+        (plan.purgeCommit !== undefined && plan.purgeCommit !== committedCommit)
+      )
+        throw new MillError(
+          "INVALID_AUTHORITY_PLAN",
+          "Purge must bind a reconciled exact authority commit.",
+          ExitCode.data,
+        );
+      const checked = parseAuthorityPlan(
+        { ...plan, purgeCommit: committedCommit },
+        this.directory,
+      );
+      this.#database
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(JSON.stringify(checked), `authority_plan:${approvalDigest}`);
+    });
+  }
+
   async backup(): Promise<string> {
     const destination = path.join(
       this.directory,
@@ -1120,7 +1566,7 @@ export class StateStore {
   }): "created" | "existing" {
     let disposition: "created" | "existing" = "existing";
     this.#transaction(() => {
-      this.getRun(input.runId);
+      assertEffectAllowsNewWork(this.getRun(input.runId));
       const result = this.#database
         .prepare(
           `INSERT OR IGNORE INTO worker_invocations(
@@ -1463,6 +1909,12 @@ export async function restoreStateBackup(
     );
   }
   const databasePath = path.join(directory, "state.sqlite3");
+  const currentStore = await StateStore.open(repositoryId, commonDirectory);
+  try {
+    for (const run of currentStore.runs()) assertEffectAllowsNewWork(run);
+  } finally {
+    currentStore.close();
+  }
   const temporaryPath = path.join(directory, `restore-${randomUUID()}.sqlite3`);
   const expectedWorktrees = new Set<string>();
   let quarantineManifest: string | undefined;
@@ -1510,6 +1962,20 @@ export async function restoreStateBackup(
         throw new Error("backup integrity, schema version, or objects invalid");
       }
       const worktreesDirectory = path.join(directory, "worktrees");
+      const plans = candidate
+        .prepare(
+          "SELECT key, value FROM metadata WHERE key GLOB 'authority_plan:*'",
+        )
+        .all();
+      for (const row of plans) {
+        const record = parseAuthorityPlan(
+          JSON.parse(String(row.value)),
+          directory,
+        );
+        if (row.key !== `authority_plan:${record.approvalDigest}`)
+          throw new Error("authority plan key mismatch");
+        expectedWorktrees.add(record.worktreePath);
+      }
       for (const row of worktrees) {
         const resolved = path.resolve(row.worktree_path);
         if (!isWithin(worktreesDirectory, resolved)) {
@@ -1618,6 +2084,42 @@ export async function purgeRepositoryState(
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return;
     throw error;
+  }
+  const store = await StateStore.open(repositoryId, commonDirectory);
+  try {
+    for (const run of store.runs()) assertEffectAllowsNewWork(run);
+    if (store.authorityPlans().some((plan) => !isSettledAuthorityPlan(plan)))
+      throw new MillError(
+        "AUTHORITY_PLANS_BLOCK_PURGE",
+        "Commit and reconcile generated authority worktrees before purging state.",
+        ExitCode.configuration,
+      );
+    for (const plan of store.authorityPlans()) {
+      if (plan.purgeCommit === undefined)
+        throw new MillError(
+          "AUTHORITY_PLANS_BLOCK_PURGE",
+          "Authority cleanup requires a durable exact-commit purge intent.",
+          ExitCode.configuration,
+        );
+      try {
+        await lstat(plan.worktreePath);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          continue;
+        throw error;
+      }
+      throw new MillError(
+        "AUTHORITY_PLANS_BLOCK_PURGE",
+        "Authority worktrees must be verified and removed through the attended state purge boundary.",
+        ExitCode.configuration,
+      );
+    }
+  } finally {
+    store.close();
   }
   await rm(directory, { recursive: true });
 }

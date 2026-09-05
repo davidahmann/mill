@@ -81,6 +81,34 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "checkProducers": {
+          "type": "object",
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "appId": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "workflowPath": {
+                "type": "string",
+                "pattern": "^\\.github\\/workflows\\/[A-Za-z0-9._-]+\\.ya?ml$"
+              },
+              "pullRequestEvent": { "type": "string", "const": "pull_request" },
+              "postMergeEvent": { "type": "string", "const": "push" }
+            },
+            "required": [
+              "appId",
+              "workflowPath",
+              "pullRequestEvent",
+              "postMergeEvent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "attendedMerge": { "type": "boolean", "const": true },
         "postMergeRequiredChecks": {
           "minItems": 1,
           "type": "array",

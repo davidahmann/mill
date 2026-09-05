@@ -1,0 +1,39 @@
+schemaVersion: "2"
+id: mill-architecture-follow-through
+status: approved
+approved_by: davidahmann
+approval_source: attended conversation on 2026-09-04
+source_base: 75a9d65e22414ab274d0a476c456673c1e1c5b9d
+authority: product/architecture-follow-through.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Human authority may arrive through an authenticated attended chat boundary.
+  - Merge remains a distinct exact-plan approved effect, never implicit
+    auto-merge.
+  - A complete PR diff, not just its final task commit, is reviewed.
+  - Native validation failures admit one scope-preserving repair generation.
+  - Release policy is pinned independently of candidate implementation.
+  - Product plans require dependency-aware compilation before task execution.
+  - Existing brownfield tests remain native authority, not replaced recipe
+    tests.
+affected_surfaces:
+  - local CLI and public JSON schemas
+  - worker context and review protocol
+  - durable recovery and external-effect journal
+  - GitHub metadata, checks, merge and authoritative readback
+  - product planning, task compilation and repository discovery
+  - release workflow, package qualification and documentation
+verification:
+  - positive, denial, stale-identity and ambiguous-effect regressions
+  - unchanged native baseline plus full candidate native and packed tests
+  - read-only complete-diff review and clean exact-candidate audit
+  - native OSS change with preserved prior behavior
+  - green PR and resulting-main checks, preserved release artifact and readback
+exceptions:
+  - The explicitly approved native maintainer path permits command-control and
+    test changes.
+  - This is a maintainer impact brief, not a runtime admission receipt.

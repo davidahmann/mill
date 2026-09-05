@@ -6,6 +6,16 @@ Status: normative
 
 Scope: this repository and coding agents operating its delivery workflow
 
+## Approved architecture follow-through
+
+The owner approved `product/architecture-follow-through.md` on 2026-09-04. For
+that bounded maintainer increment, its native implementation and complete PR
+review path governs changes to Mill's own command controls and tests. Its
+explicit human-approved merge capability supersedes browser-only/draft-only
+restrictions solely for the approved attended merge workflow. Builder and
+reviewer forge exclusions remain in force. Historical bootstrap exceptions
+remain closed. All release effects require their own verified identities.
+
 ## Operating Mill
 
 Mill turns approved repository-native product intent into a bounded, tested,
@@ -25,7 +35,9 @@ For every task, follow this path:
 6. Review the committed exact candidate in read-only mode.
 7. Plan the draft PR, obtain approval for that exact plan, then open it
    attended.
-8. Observe CI and review. Stop at the human readiness and merge boundary.
+8. Observe CI and review. Stop at the human readiness and merge boundary, or use
+   the explicitly enabled attended merge path with a separately approved exact
+   merge plan. A builder/reviewer cannot submit that approval.
 9. Finalize only from provider-authoritative merge and resulting-main evidence.
 
 The founder wrappers (`run next`, `start`, and `ship --draft`) coordinate the
@@ -111,6 +123,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   commit and binds its commit and tree identities.
 - Review is read-only and exact-candidate-bound. Batch one complete review into
   one systemic repair generation; do not churn one PR per comment.
+- Before any remote attempt, stale full-diff scope may use attended
+  `review --refresh --base <exact-provider-commit>`. Preserve candidate, native
+  validation, prior receipts, deadline and remaining review budget; do not move
+  frozen refs. Refresh invalidates the unexecuted delivery approval. Resume an
+  interrupted prepared refresh with ordinary `review`.
 - The shipper may push only the unchanged verified candidate to its configured
   branch and may open only a draft PR in the bound repository.
 - `requiredChecks` are exact pull-request-head requirements. When configured,
@@ -120,8 +137,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   record without the second list may bind the configured subset during readback
   only when every other delivery binding still matches and the subset was
   already required before merge; it never relaxes pre-merge evidence.
-- Mill never marks ready, auto-merges, deploys, provisions a repository, or
-  changes branch protection.
+- Readiness and merge require `propose.attendedMerge: true`, producer-bound
+  checks, strict up-to-date protection and exact attended merge-plan approval.
+  Draft delivery alone never grants them. Mill never auto-merges, deploys,
+  provisions a repository or changes branch protection. Read `docs/approvals.md`
+  before operating the optional merge path.
 
 ## Native validation
 
@@ -144,9 +164,11 @@ For the final committed candidate, also run:
 node dist/cli.js --json --cwd . audit
 ```
 
-The audit must bind to a clean exact commit/tree and pass every applicable
-product, code, UX, accessibility, security, dependency, architecture,
-operations, and release check.
+The structural audit must bind to a clean exact commit/tree and pass every
+applicable product, code, UX, accessibility, security, dependency, architecture,
+operations, and release check. It does not substitute for executed native
+checks, accessibility/security behavior, scenario evidence or release
+qualification.
 
 ## Recovery
 
@@ -154,11 +176,11 @@ Do not rerun a possibly started mutation blindly.
 
 ```sh
 millctl --json status --run <run-id>
-millctl --json resume --task product/tasks/TASK.yaml --run <run-id> --attended
+millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
-millctl --json state backup --output <absolute-path>
-millctl --json support-bundle --output <absolute-path>
+millctl --json state backup
+millctl --json support-bundle --run <run-id>
 ```
 
 - `resume` is permitted only when Mill can prove no prior worker still owns the
@@ -167,8 +189,21 @@ millctl --json support-bundle --output <absolute-path>
   own child process group.
 - An uncertain push or PR operation remains `effect_unknown` until GitHub
   readback classifies it. Reconcile before retry.
+- For uncertain readiness/merge, use `pr merge-reconcile`; never repeat a
+  possibly started merge. Generated task/native-adoption worktrees use durable
+  authority-plan records; commit their exact approved files and use
+  `state reconcile-plans` before purge. For an intentionally discontinued plan,
+  preserve partial output in a clean commit on the recorded branch and use
+  `state abandon-plan --approve <original-plan-digest> --attended`. Abandonment
+  retains evidence and is not successful apply. Neither reconciliation nor
+  abandonment grants new authority or performs the original effect.
 - Restore validates the database and quarantines newer unreferenced worktrees.
   Purge is allowed only after all runs are reviewed or terminal.
+- Nested unresolved effects override enclosing run status: no repair, new
+  delivery, terminal cancellation, purge or restore may supersede their journal.
+  Confirmed merge freezes the candidate until exact post-merge finalization.
+  Partial authority purge requires its durable intent, retained branch and
+  verification of every remaining entry; foreign content blocks deletion.
 - Support bundles are redacted. Inspect them before sharing anyway.
 
 ## Release boundary

@@ -50,6 +50,34 @@ const auditCategories = [
   "release",
 ] as const;
 const samples = {
+  changeRequest: {
+    schemaVersion: "1",
+    id: "follow-up",
+    kind: "plan",
+    source: { path: "product/PRD.md", digest },
+    productPath: "product/contract.yaml",
+    scenariosPath: "quality/scenarios.yaml",
+    policyPath: "WORKFLOW.md",
+    commit: {
+      message: "feat: follow-up",
+      authorName: "Test",
+      authorEmail: "test@example.invalid",
+    },
+    budget: { deadlineSeconds: 60, maxOutputBytes: 4096, retryCount: 1 },
+    readyOutcomeId: "OUT-EXAMPLE",
+    tasks: [
+      {
+        id: "follow-up",
+        outcomeId: "OUT-EXAMPLE",
+        title: "Follow up",
+        objective: "Preserve native behavior",
+        dependsOn: [],
+        impactPath: "product/impact.yaml",
+        allowedPaths: ["src/value.ts"],
+        contextPaths: ["README.md"],
+      },
+    ],
+  },
   sourceManifest: {
     schemaVersion: "1",
     trigger: "bootstrap",
@@ -590,6 +618,7 @@ const samples = {
 } as const;
 
 const schemaFiles = {
+  changeRequest: "change-request.schema.json",
   auditReport: "audit-report.schema.json",
   sourceManifest: "source-manifest.schema.json",
   managedRepository: "managed-repository.schema.json",

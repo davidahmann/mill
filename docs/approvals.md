@@ -1,0 +1,134 @@
+# Attended approvals
+
+Draft-only remains the default. Opt-in merge is a trusted operator capability,
+not a builder/reviewer tool, automatic merge, or a GitHub protection bypass.
+
+## Configure the boundary
+
+In `mill.yaml`, retain `trustCeiling: propose`, exact repository node identity,
+allowed operator/merger identities, checks and merge methods. Set
+`propose.attendedMerge: true`. Every required PR check must have a
+`checkProducers` entry binding its GitHub App ID, workflow path, PR event and
+resulting-main event. Example producer:
+
+```yaml
+checkProducers:
+  validate:
+    appId: 15368
+    workflowPath: .github/workflows/ci.yml
+    pullRequestEvent: pull_request
+    postMergeEvent: push
+```
+
+Use the actual producer for your repository. A same-name status from another
+App, workflow, event or head cannot satisfy this policy. Mill verifies Actions
+job/run relationships through GitHub readback. Missing, pending, failed or
+skipped required results do not pass. Strict up-to-date required checks must be
+enabled in branch protection, with each required context bound to its configured
+App ID and administrator/bypass-role enforcement enabled. Missing or weaker
+protection fails closed even if the current checks are green. Mill never
+configures protection itself. GitHub documents this setting as
+[Do not allow bypassing the above settings](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#do-not-allow-bypassing-the-above-settings).
+
+## Plan, approve, verify
+
+After a reviewed candidate reaches `awaiting_human`:
+
+```sh
+millctl --json pr merge-plan --task product/tasks/TASK.yaml --run RUN --method squash
+millctl --json pr merge --task product/tasks/TASK.yaml --run RUN \
+  --approve sha256:EXACT_PLAN --attended
+millctl --json pr finalize --task product/tasks/TASK.yaml --run RUN
+```
+
+Inspect the displayed repository, PR, head, base, tree, actor, policy, expiry,
+method and readiness action. `merge` and `squash` are the available request
+methods; squash requires the existing `linear_tree_preserving` policy. The
+operator is reauthenticated through the configured local `gh` session.
+
+A trusted chat integration must authenticate its operator and obtain their
+approval of this exact displayed plan before invoking the CLI. The local
+`attended_operator` receipt is not a signed chat event, an identity federation
+service, or proof that an arbitrary message was human-authored. Keep this
+capability outside all model-controlled builder/reviewer tool bundles.
+
+Mill rechecks policy, native validation, full-diff review, current GitHub
+review, feedback and CI before effects. GitHub's merge API compares the exact PR
+head; it does not offer an atomic base-SHA comparison. Strict branch protection
+and fresh base checks constrain that race, and exact merged-tree readback is
+still required. Do not interpret an API success as verified lifecycle closure.
+
+Draft planning, push and PR creation compare the locally reviewed merge-base
+diff with GitHub's authoritative base SHA. An unpushed preparation commit on
+local `main` cannot hide from that gate. If the provider commit is unavailable,
+obtain its objects deliberately without moving frozen refs before requesting
+fresh full-diff review; Mill does not fetch or rewrite refs implicitly. Before
+any remote attempt, an already reviewed run can refresh stale scope:
+
+```sh
+millctl --json review --task product/tasks/TASK.yaml --run RUN \
+  --refresh --base EXACT_PROVIDER_COMMIT --attended
+```
+
+Use a full 40-character commit SHA already available locally. Do not move the
+frozen base ref or Git controls to recover scope. The refresh retains the exact
+candidate, validation, previous review/delivery evidence and original deadline;
+it spends only the remaining per-candidate review attempts. Preparation
+invalidates unexecuted delivery approval. After interruption, ordinary `review`
+uses the durably prepared scope; repeating `--refresh` is not a retry mechanism.
+After successful review, run `pr plan` again and approve that new plan. Refresh
+does not permit post-effect journal replacement, bypass review findings or reset
+an exhausted budget. Merge repeats the provider-base comparison against its live
+observation.
+
+The earliest task-attestation or impact-exception expiry caps the merge plan and
+effect deadline. Current impact authority is reassessed immediately before
+readiness and merge; expiry after readiness leaves the PR ready but prevents
+merge. Expired authority still permits read-only reconciliation.
+
+## Interruptions
+
+```sh
+millctl --json status --run RUN
+millctl --json pr reconcile --task product/tasks/TASK.yaml --run RUN
+millctl --json pr merge-reconcile --task product/tasks/TASK.yaml --run RUN
+```
+
+Use `pr reconcile` for a push or draft-PR journal in `call_started` or
+`effect_unknown`, including when the enclosing run still says `proposing` or
+`blocked`. Readback does not repeat the external call. It classifies that exact
+effect and updates its journal and run status in one transaction. Unavailable or
+conflicting readback leaves the pending evidence intact. Verified absence
+retains the original bounded retry count and approval expiry. Cancellation
+becomes terminal only after the pending effect is classified; reconciliation
+cannot revive an already terminal run. `pr open` never doubles as this recovery
+entry point.
+
+Intent is durable before readiness and merge calls. Never rerun an uncertain
+merge. Readback can establish an exact merged PR, authorized merger and matching
+tree; `pr finalize` separately requires successful resulting-main checks.
+
+If readiness succeeded but merge never started, reconciliation can establish
+`ready_verified`; inspect and approve a fresh merge plan. If merge may have
+started, an open PR alone is not proof that retry is safe. Preserve the receipt
+and investigate GitHub state. Expiry prevents new effects, not readback.
+
+The same journal protects the enclosing lifecycle. Feedback observation, repair,
+new delivery, worker admission, purge and backup restore cannot bypass
+unresolved readiness/merge by changing the run status. Cancellation records
+intent but does not terminalize the run or erase the receipt. After matching
+merged readback, only post-merge finalization can close that candidate; it
+cannot be repaired or replanned as though it were still an unmerged PR. Status,
+backup and support remain available throughout recovery.
+
+## Public metadata and identity
+
+PR titles use a sanitized first subject line, omit DCO/coauthor trailers, redact
+email-shaped text and remove control characters. Routine status excludes raw
+validation/review payloads. Private local evidence is still retained for repair
+and audit; inspect support bundles before sharing.
+
+Use your verified GitHub noreply address in repository-local Git author settings
+and new task commit metadata. DCO sign-off remains in commits, not PR titles.
+This does not erase email addresses from historical commits, old artifacts, task
+packets or cached copies. Do not rewrite released history to hide them.

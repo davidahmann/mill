@@ -50,9 +50,10 @@ describe("GitHub CLI adapter", () => {
       await writeFile(
         gh,
         `#!${process.execPath}
-import {appendFileSync} from "node:fs";
+import {appendFileSync,existsSync,readFileSync} from "node:fs";
+const modeUrl=new URL("./mode.json",import.meta.url);const mode=existsSync(modeUrl)?JSON.parse(readFileSync(modeUrl,"utf8")):{};
 appendFileSync(new URL("./calls.log",import.meta.url),JSON.stringify(process.argv.slice(2))+"\\n");
-const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
+const args=process.argv.slice(2);const endpoint=args.includes("graphql")?"graphql":args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
 const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:"<!-- mill-delivery-key:fixture -->",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
 const listedPull={...pull};delete listedPull.merged;delete listedPull.merged_by;delete listedPull.merged_at;
 if(endpoint==="user")console.log(JSON.stringify({login:"operator",id:7}));
@@ -62,7 +63,12 @@ else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:
 else if(endpoint.includes("/pulls?"))console.log(JSON.stringify([[listedPull]]));
 else if(args.includes("--method")&&endpoint==="repos/example/app/pulls")console.log(JSON.stringify(pull));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
-else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{name:"validate",status:"completed",conclusion:"success"}]}]));
+else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{id:101,name:"validate",status:"completed",conclusion:"success",app:{id:15368},head_sha:"${sha}",details_url:"https://github.com/example/app/actions/runs/50/job/101",...mode.check}]}]));
+else if(endpoint.endsWith("/actions/jobs/101"))console.log(JSON.stringify({id:101,run_id:50,head_sha:"${sha}",check_run_url:"https://api.github.com/repos/example/app/check-runs/101",...mode.job}));
+else if(endpoint.endsWith("/actions/runs/50"))console.log(JSON.stringify({head_sha:"${sha}",repository:{node_id:"R_example"},path:".github/workflows/ci.yml",event:"pull_request",...mode.run}));
+else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({enforce_admins:{enabled:mode.admins??true},required_status_checks:{strict:mode.strict??true,checks:mode.protectedChecks??[{context:"validate",app_id:15368}]}}));
+else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markPullRequestReadyForReview:{pullRequest:{id:"PR_example",isDraft:false}}}}));
+else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
 else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"[P1] top-level finding",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11"}]]));
 else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
@@ -129,6 +135,152 @@ else process.exit(2);
         ],
       });
       const calls = await readFile(path.join(tools.path, "calls.log"), "utf8");
+      const producerConfig: ProposeConfig = {
+        ...config,
+        checkProducers: {
+          validate: {
+            appId: 15368,
+            workflowPath: ".github/workflows/ci.yml",
+            pullRequestEvent: "pull_request",
+            postMergeEvent: "push",
+          },
+        },
+      };
+      const bound = await adapter.observe({
+        config: producerConfig,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(bound.checks[0]).toMatchObject({
+        appId: 15368,
+        headSha: sha,
+        workflowPath: ".github/workflows/ci.yml",
+        event: "pull_request",
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          check: { id: 102 },
+          job: {
+            check_run_url:
+              "https://api.github.com/repos/example/app/check-runs/102",
+          },
+        }),
+      );
+      const linked = await adapter.observe({
+        config: producerConfig,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(linked.checks[0]).toMatchObject({
+        id: 102,
+        workflowPath: ".github/workflows/ci.yml",
+        event: "pull_request",
+      });
+      for (const mode of [
+        { check: { app: { id: 99 } } },
+        {
+          check: {
+            details_url:
+              "https://github.com/foreign/app/actions/runs/50/job/101",
+          },
+        },
+        {
+          check: {
+            details_url: "https://github.com/example/app/actions/runs/invalid",
+          },
+        },
+        { check: { id: 102 } },
+        { job: { id: 102 } },
+        { job: { run_id: 51 } },
+        { job: { head_sha: "b".repeat(40) } },
+        {
+          job: {
+            check_run_url:
+              "https://api.github.com/repos/foreign/app/check-runs/101",
+          },
+        },
+        { run: { head_sha: "b".repeat(40) } },
+        { run: { repository: { node_id: "R_foreign" } } },
+      ]) {
+        await writeFile(
+          path.join(tools.path, "mode.json"),
+          JSON.stringify(mode),
+        );
+        const denied = await adapter.observe({
+          config: producerConfig,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        });
+        expect(denied.checks[0]?.workflowPath).toBeUndefined();
+      }
+      await writeFile(path.join(tools.path, "mode.json"), "{}");
+      if (
+        adapter.strictChecks === undefined ||
+        adapter.markReady === undefined ||
+        adapter.mergeExact === undefined
+      )
+        throw new Error("merge adapter missing");
+      expect(
+        await adapter.strictChecks({
+          config: producerConfig,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).toBe(true);
+      for (const mode of [
+        { admins: false },
+        { protectedChecks: [] },
+        { protectedChecks: [{ context: "validate", app_id: null }] },
+        { protectedChecks: [{ context: "validate", app_id: 99 }] },
+      ]) {
+        await writeFile(
+          path.join(tools.path, "mode.json"),
+          JSON.stringify(mode),
+        );
+        expect(
+          await adapter.strictChecks({
+            config: producerConfig,
+            deadlineMs: Date.now() + 10_000,
+          }),
+        ).toBe(false);
+      }
+      await writeFile(path.join(tools.path, "mode.json"), "{}");
+      await adapter.markReady({
+        config,
+        pullRequestNodeId: "PR_example",
+        deadlineMs: Date.now() + 10_000,
+      });
+      await adapter.mergeExact({
+        config,
+        pullRequestNumber: 41,
+        headSha: sha,
+        method: "squash",
+        deadlineMs: Date.now() + 10_000,
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({ strict: false, ready: { errors: [] }, merged: false }),
+      );
+      expect(
+        await adapter.strictChecks({ config, deadlineMs: Date.now() + 10_000 }),
+      ).toBe(false);
+      await expect(
+        adapter.markReady({
+          config,
+          pullRequestNodeId: "PR_example",
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).rejects.toMatchObject({ code: "GITHUB_READY_FAILED" });
+      await expect(
+        adapter.mergeExact({
+          config,
+          pullRequestNumber: 41,
+          headSha: sha,
+          method: "squash",
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).rejects.toMatchObject({ code: "GITHUB_MERGE_NOT_CONFIRMED" });
+      await writeFile(path.join(tools.path, "mode.json"), "{}");
       const paginated = calls
         .trim()
         .split("\n")

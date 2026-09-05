@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, readFile, realpath, stat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { findTrustedExecutable } from "../doctor.js";
 import { ExitCode, MillError } from "../errors.js";
+import { canonicalDigest } from "../contracts/canonical.js";
 import { scanRepository } from "../repository/scan.js";
 import { isWithin } from "../security/safe-path.js";
 import type { TaskPacket } from "./inputs.js";
@@ -207,6 +208,40 @@ export async function readCandidateIdentity(
     );
   }
   return { commit, tree };
+}
+
+/** Review the complete merge-base diff, including commits prepared before a task. */
+export async function captureReviewScope(
+  root: string,
+  baseRef: string,
+  candidateCommit: string,
+) {
+  const target = await resolveCommit(root, baseRef);
+  const candidate = await readCandidateIdentity(root, candidateCommit);
+  const baseCommit = (
+    await git(root, ["merge-base", target, candidate.commit])
+  ).trim();
+  const paths = (
+    await git(root, [
+      "diff",
+      "--no-ext-diff",
+      "--no-renames",
+      "--name-only",
+      "-z",
+      baseCommit,
+      candidate.commit,
+    ])
+  )
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  const scope = {
+    baseCommit,
+    candidateCommit: candidate.commit,
+    candidateTree: candidate.tree,
+    changedPaths: paths,
+  };
+  return { ...scope, digest: canonicalDigest(scope) };
 }
 
 /**
@@ -571,6 +606,102 @@ export async function removeCandidateWorktree(
     throw error;
   }
   await git(root, ["worktree", "remove", "--force", destination]);
+}
+
+/** Only for a journal-bound authority purge whose original clean commit is retained. */
+export async function verifyPartiallyRemovedWorktree(
+  root: string,
+  destination: string,
+  commit: string,
+  commonDirectory: string,
+): Promise<void> {
+  const reject = () =>
+    new MillError(
+      "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+      "Remaining authority worktree content differs from its retained purge commit.",
+      ExitCode.configuration,
+    );
+  if (!/^[a-f0-9]{40}$/u.test(commit)) throw reject();
+  const entries = (await git(root, ["ls-tree", "-rz", "--full-tree", commit]))
+    .split("\0")
+    .filter(Boolean);
+  const files = new Map<string, { mode: string; oid: string }>();
+  const directories = new Set([""]);
+  for (const entry of entries) {
+    const match =
+      /^(100644|100755|120000|160000) (?:blob|commit) ([a-f0-9]{40})\t(.+)$/su.exec(
+        entry,
+      );
+    if (
+      match?.[1] === undefined ||
+      match[2] === undefined ||
+      match[3] === undefined
+    )
+      throw reject();
+    files.set(match[3], { mode: match[1], oid: match[2] });
+    for (
+      let parent = path.posix.dirname(match[3]);
+      parent !== ".";
+      parent = path.posix.dirname(parent)
+    )
+      directories.add(parent);
+  }
+  let seen = 0;
+  async function inspect(relative: string): Promise<void> {
+    if (++seen > 100_000) throw reject();
+    const absolute = path.join(destination, relative);
+    const info = await lstat(absolute);
+    if (info.isSymbolicLink()) throw reject();
+    if (info.isDirectory()) {
+      if (!directories.has(relative)) throw reject();
+      for (const entry of await readdir(absolute))
+        await inspect(relative === "" ? entry : `${relative}/${entry}`);
+      return;
+    }
+    if (!info.isFile() || info.size > 16 * 1024 * 1024) throw reject();
+    const bytes = await readFile(absolute);
+    if (relative === ".git") {
+      const marker = /^gitdir: ([^\n]+)\n?$/u.exec(bytes.toString("utf8"))?.[1];
+      if (
+        marker === undefined ||
+        !path.isAbsolute(marker) ||
+        !isWithin(path.join(commonDirectory, "worktrees"), marker)
+      )
+        throw reject();
+      const gitdir = await realpath(marker);
+      if (
+        !isWithin(path.join(commonDirectory, "worktrees"), gitdir) ||
+        (await realpath(
+          (await readFile(path.join(gitdir, "gitdir"), "utf8")).trim(),
+        )) !== (await realpath(path.join(destination, ".git")))
+      )
+        throw reject();
+      return;
+    }
+    const expected = files.get(relative);
+    const oid = createHash("sha1")
+      .update(`blob ${bytes.length}\0`)
+      .update(bytes)
+      .digest("hex");
+    if (
+      expected === undefined ||
+      !["100644", "100755"].includes(expected.mode) ||
+      expected.oid !== oid ||
+      ((info.mode & 0o111) !== 0) !== (expected.mode === "100755")
+    )
+      throw reject();
+  }
+  await inspect("");
+}
+
+export async function removeVerifiedAuthorityWorktree(
+  root: string,
+  destination: string,
+): Promise<void> {
+  // The caller holds the repository writer lease and has verified this exact
+  // journal-owned path. Do not require a .git file after interrupted deletion.
+  await rm(destination, { recursive: true, force: true });
+  await git(root, ["worktree", "prune", "--expire", "now"]);
 }
 
 export async function resetCandidateWorktree(

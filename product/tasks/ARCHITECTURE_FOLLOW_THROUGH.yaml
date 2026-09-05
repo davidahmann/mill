@@ -1,0 +1,60 @@
+schemaVersion: "2"
+task_id: mill-architecture-follow-through
+status: approved
+owner: davidahmann
+base_commit: 75a9d65e22414ab274d0a476c456673c1e1c5b9d
+execution_mode: approved_native_maintainer
+authority: product/architecture-follow-through.md
+impact_manifest: product/impacts/ARCHITECTURE_FOLLOW_THROUGH.yaml
+objective: Implement the ten approved architecture follow-through outcomes.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - recipes/**
+  - docs/**
+  - architecture/**
+  - .github/**
+  - README.md
+  - AGENTS.md
+  - WORKFLOW.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - mill.yaml
+authority_preparation_paths:
+  - product/**
+  - quality/**
+acceptance_items:
+  - AF-01 public identity and metadata privacy
+  - AF-02 complete base-to-candidate review scope
+  - AF-03 bounded committed-validation repair
+  - AF-04 independent pinned release verification
+  - AF-05 structural versus executed audit evidence
+  - AF-06 producer-bound phase-specific CI
+  - AF-07 source-backed change-plan to task compilation
+  - AF-08 attended exact-plan merge approval and reconciliation
+  - AF-09 bounded brownfield context and native OSS evidence
+  - AF-10 compact status and truthful usage reporting
+validation_commands:
+  - npm run check
+  - offline digest-pinned OCI native gate
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - read-only local Codex review of the entire committed PR diff
+constraints:
+  - single writer in a disposable worktree
+  - preserve baseline evidence and coverage thresholds
+  - new tests are supplementary, not independent self-certification
+  - no forge capabilities for builders or reviewers
+  - no daemon, parallel writers, auto-merge, deployment or arbitrary stacks
+  - no secret disclosure, historical commit rewriting or protection bypass
+  - retain failures and reconcile uncertain effects before retry
+stop_conditions:
+  - ambiguous authority or effect identity
+  - unavailable required verification or release provenance
+  - recurring same-subsystem P0 or P1 review findings
+closure:
+  status: pending
+  evidence: docs/canaries/architecture-follow-through.md

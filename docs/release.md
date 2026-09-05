@@ -194,6 +194,27 @@ release workflow requires a fresh matched canary. A future real state/schema
 migration must prove upgrade and downgrade before Mill documents an automated
 migration path.
 
+The 0.2.0 candidate workflow adds `independent-release-policy`, checked out at
+qualified v0.1.5 commit `c547762d7644f62ac48011089564f5f46a48b786` with its own
+lock, assessor and packed-artifact canary. Its tag/source identity is checked
+before execution. The candidate's own tests remain additional evidence, not a
+replacement for this independently pinned policy.
+
+Dispatch both phases with `--ref <exact-tag>` so the workflow-run head matches
+the immutable tag commit. Publication downloads both preserved artifacts from
+the same successful candidate run. It verifies the trusted verifier pin,
+tarball/qualification digests, exact repository/workflow/event/head and
+successful `build-a`, `build-b`, `qualify-candidate` and
+`independent-release-policy` jobs. A missing, duplicate, skipped or mismatched
+job blocks publication. Keep the seven-day artifact retention window in mind; an
+expired artifact is not permission to rebuild during publication.
+
+Native Node ESM/npm adoption remains experimental. A successful JSON Server
+canary does not add an enterprise-stack or pnpm support tuple to the qualified
+web recipe. Record exact upstream revision, local dependency overlay, native
+commands, failed and passing independent cases, worker usage and review in the
+architecture follow-through canary evidence.
+
 ## Withdrawal
 
 npm versions and Git tags are immutable. Never overwrite or republish a broken

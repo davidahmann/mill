@@ -21,6 +21,7 @@ import { format } from "prettier";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runCli } from "../src/cli-program.js";
+import { MILL_VERSION } from "../src/version.js";
 import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import {
   millConfigSchema,
@@ -873,7 +874,7 @@ describe("qualified repository integration", { concurrent: false }, () => {
         planDigest: first.approvalDigest,
         generator: {
           package: "@davidahmann/mill",
-          version: "0.1.6",
+          version: MILL_VERSION,
         },
         mode: "greenfield",
         baseline: "unverified",

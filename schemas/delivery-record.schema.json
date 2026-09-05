@@ -69,6 +69,33 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "checkProducers": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1 },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "workflowPath": {
+            "type": "string",
+            "pattern": "^\\.github\\/workflows\\/[A-Za-z0-9._-]+\\.ya?ml$"
+          },
+          "pullRequestEvent": { "type": "string", "const": "pull_request" },
+          "postMergeEvent": { "type": "string", "const": "push" }
+        },
+        "required": [
+          "appId",
+          "workflowPath",
+          "pullRequestEvent",
+          "postMergeEvent"
+        ],
+        "additionalProperties": false
+      }
+    },
     "postMergeRequiredChecks": {
       "minItems": 1,
       "type": "array",
@@ -164,6 +191,75 @@
         ],
         "additionalProperties": false
       }
+    },
+    "mergeApproval": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": { "type": "string", "const": "1" },
+            "repositoryNodeId": { "type": "string", "minLength": 1 },
+            "pullRequestNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "pullRequestNodeId": { "type": "string", "minLength": 1 },
+            "headCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "candidateTree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "actorLogin": { "type": "string", "minLength": 1 },
+            "actorId": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "policyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "method": { "type": "string", "enum": ["merge", "squash"] },
+            "markReady": { "type": "boolean" },
+            "expiresAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "repositoryNodeId",
+            "pullRequestNumber",
+            "pullRequestNodeId",
+            "headCommit",
+            "baseCommit",
+            "candidateTree",
+            "actorLogin",
+            "actorId",
+            "policyDigest",
+            "method",
+            "markReady",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "ready_started",
+            "ready_verified",
+            "merge_started",
+            "effect_unknown",
+            "merged"
+          ]
+        },
+        "approvalSource": { "type": "string", "const": "attended_operator" }
+      },
+      "required": ["plan", "digest", "state"],
+      "additionalProperties": false
     },
     "remoteHeadCommit": {
       "anyOf": [

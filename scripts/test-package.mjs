@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { canonicalDigest } from "../dist/contracts/canonical.js";
+import { MILL_VERSION } from "../dist/version.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 const temporary = await mkdtemp(path.join(tmpdir(), "mill-package-"));
@@ -118,7 +119,7 @@ try {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (version.status !== 0 || version.stdout.trim() !== "0.1.6") {
+  if (version.status !== 0 || version.stdout.trim() !== MILL_VERSION) {
     throw new Error(
       `packed millctl version smoke failed: ${version.stdout}${version.stderr}`,
     );
@@ -232,6 +233,21 @@ try {
         `packed millctl ${command} help failed: ${help.stdout}${help.stderr}`,
       );
     }
+  }
+
+  const abandonmentHelp = command(
+    bin,
+    ["state", "abandon-plan", "--help"],
+    temporary,
+  );
+  const refreshHelp = command(bin, ["review", "--help"], temporary);
+  for (const option of ["--refresh", "--base <commit>", "--attended"]) {
+    if (!refreshHelp.includes(option))
+      throw new Error(`Packed review-refresh contract is missing ${option}`);
+  }
+  for (const option of ["--approve <digest>", "--attended"]) {
+    if (!abandonmentHelp.includes(option))
+      throw new Error(`Packed abandonment contract is missing ${option}`);
   }
 
   await Promise.all([
@@ -502,6 +518,7 @@ commands:
     codex,
     `#!${process.execPath}
 import {readFile,writeFile} from "node:fs/promises";
+import {readFileSync} from "node:fs";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
@@ -517,7 +534,9 @@ if(sandboxIndex<0||args[sandboxIndex+1]!==expectedSandbox){process.exit(2)}
 const index=args.indexOf("--cd");const cwd=index>=0?args[index+1]:process.cwd();
 if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
-  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:"clean",findings:[]});
+  const prompt=readFileSync(0,"utf8");
+  const scope=JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0]??"null");
+  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:"clean",findings:[]});
   const outputIndex=args.indexOf("--output-last-message");
   if(outputIndex<0||!args[outputIndex+1])process.exit(2);
   await writeFile(args[outputIndex+1],text,{mode:0o600});
@@ -571,6 +590,7 @@ process.stdout.write(result.stdout??"");process.stderr.write(result.stderr??"");
     gh,
     `#!${process.execPath}
 import {readFileSync,writeFileSync} from "node:fs";
+import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
 const read=(name)=>{try{return readFileSync(new URL(name,import.meta.url),"utf8").trim()}catch{return null}};
 const remoteHead=()=>read("./remote-head");
@@ -583,7 +603,7 @@ else if(args.includes("--method")&&endpoint==="repos/example/app/pulls"){
   const value={number:41,node_id:"PR_package_canary",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:field("body")??"",head:{ref:field("head")??"",sha:remoteHead()},base:{ref:field("base")??"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
   writeFileSync(pullPath,JSON.stringify(value),{mode:0o600});console.log(JSON.stringify(value));
 }
-else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${"d".repeat(40)}"}}));
+else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:execFileSync("/usr/bin/git",["rev-parse","main"],{encoding:"utf8"}).trim()}}));
 else if(endpoint.includes("/git/ref/heads/")){const head=remoteHead();if(head===null){console.error("HTTP 404");process.exit(1)}console.log(JSON.stringify({object:{sha:head}}))}
 else if(endpoint.includes("/pulls?")){const value=pull();console.log(JSON.stringify(value===null?[[]]:[[value]]))}
 else if(endpoint.endsWith("/pulls/41")){const value=pull();if(value===null)process.exit(2);console.log(JSON.stringify(value))}
@@ -778,7 +798,7 @@ else process.exit(2);
         schemaVersion: "1",
         package: {
           name: "@davidahmann/mill",
-          version: "0.1.6",
+          version: MILL_VERSION,
           artifactDigest,
           npmIntegrity: packResult.integrity,
         },

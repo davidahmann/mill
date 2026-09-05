@@ -40,6 +40,7 @@ import {
 } from "../runtime/dependencies.js";
 import { isTerminalRun, repositoryStateDirectory } from "../runtime/state.js";
 import { safeReadText } from "../security/safe-path.js";
+import { assertOutcomeDependencies } from "../planning/outcomes.js";
 
 export interface NextOutcome {
   outcomeId: string;
@@ -63,6 +64,7 @@ export async function nextReadyOutcome(root: string): Promise<NextOutcome> {
     );
   }
   const plan = outcomePlanSchema.parse(raw);
+  assertOutcomeDependencies(plan);
   const ready = plan.outcomes.filter((outcome) => outcome.status === "ready");
   if (ready.length !== 1 || ready[0]?.taskRef === undefined) {
     throw new MillError(
@@ -275,6 +277,7 @@ function requiresBuildPreflight(
     (run.status === "blocked" &&
       [
         "REVIEW_FINDINGS",
+        "VALIDATION_FAILED",
         "REMOTE_REVIEW_FINDINGS",
         "INTERRUPTED_RUN",
         "CODEX_CANCELLED",
@@ -295,6 +298,7 @@ function requiresDependencyPreparation(
     (run.status === "blocked" &&
       [
         "REVIEW_FINDINGS",
+        "VALIDATION_FAILED",
         "REMOTE_REVIEW_FINDINGS",
         "INTERRUPTED_RUN",
         "CODEX_CANCELLED",
@@ -598,6 +602,7 @@ export async function startFounderDelivery(input: {
       (run.status === "blocked" &&
         [
           "REVIEW_FINDINGS",
+          "VALIDATION_FAILED",
           "REVIEW_NON_CONVERGENCE",
           "INTERRUPTED_RUN",
           "CODEX_CANCELLED",

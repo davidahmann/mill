@@ -44,6 +44,7 @@ async function runCheck(input: AuditCheckInput) {
     return {
       id: input.id,
       category: input.category,
+      assurance: "structural" as const,
       status: "passed" as const,
       summary: input.summary,
       evidence: input.evidence,
@@ -52,6 +53,7 @@ async function runCheck(input: AuditCheckInput) {
     return {
       id: input.id,
       category: input.category,
+      assurance: "structural" as const,
       status: "blocked" as const,
       summary: `${input.summary}: ${error instanceof Error ? error.message : String(error)}`,
       evidence: input.evidence,

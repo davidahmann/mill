@@ -83,6 +83,95 @@ async function qualifiedApproval(
 }
 
 describe("local delivery lifecycle", () => {
+  it("repairs a committed native failure once and retains its original evidence and deadline", async () => {
+    const fixture = await runtimeFixture({ nativeRepair: true });
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      const failed = await verifyRun(input);
+      expect(failed.run.blockCode).toBe("VALIDATION_FAILED");
+      const repaired = await resumeRun(input);
+      expect(repaired).toMatchObject({
+        status: "committed",
+        repairCount: 1,
+        deadlineAt: started.run.deadlineAt,
+      });
+      expect(repaired.candidateCommit).not.toBe(started.run.candidateCommit);
+      expect((await verifyRun(input)).evidence.passed).toBe(true);
+      expect((await reviewRun(input)).run.status).toBe("reviewed");
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      try {
+        expect(
+          store
+            .events(started.run.id)
+            .find((event) => event.type === "repair.started"),
+        ).toMatchObject({
+          data: {
+            candidateCommit: started.run.candidateCommit,
+            failureCode: "VALIDATION_FAILED",
+            validationJson: JSON.stringify(failed.evidence),
+          },
+        });
+      } finally {
+        store.close();
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("reviews preparation commits outside the final task diff", async () => {
+    const fixture = await runtimeFixture({ propose: true });
+    activate(fixture);
+    try {
+      await git(fixture.root, ["switch", "-c", "codex/prepared"]);
+      await writeFile(
+        path.join(fixture.root, "preparation.md"),
+        "A preparatory control change requiring independent review.\n",
+      );
+      await git(fixture.root, ["add", "preparation.md"]);
+      await git(fixture.root, [
+        "commit",
+        "-m",
+        "test: prepare a control change",
+      ]);
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      await verifyRun(input);
+      const reviewed = await reviewRun(input);
+      expect(reviewed.review.scope?.changedPaths).toEqual([
+        "preparation.md",
+        "src/value.js",
+      ]);
+      expect(reviewed.review.scope?.baseCommit).not.toBe(
+        started.run.baseCommit,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("turns an approved task into an exact committed, verified, reviewed candidate without changing the checkout", async () => {
     const fixture = await runtimeFixture();
     activate(fixture);

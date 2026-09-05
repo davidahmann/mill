@@ -15,6 +15,23 @@ propose:
   allowedMergerLogins: [davidahmann]
   requiredChecks: [validate, dependency-review, codeql]
   postMergeRequiredChecks: [validate, codeql]
+  attendedMerge: true
+  checkProducers:
+    validate:
+      appId: 15368
+      workflowPath: .github/workflows/ci.yml
+      pullRequestEvent: pull_request
+      postMergeEvent: push
+    dependency-review:
+      appId: 15368
+      workflowPath: .github/workflows/ci.yml
+      pullRequestEvent: pull_request
+      postMergeEvent: push
+    codeql:
+      appId: 15368
+      workflowPath: .github/workflows/codeql.yml
+      pullRequestEvent: pull_request
+      postMergeEvent: push
   reviewPolicy:
     mode: local_only
     requiredReviewerLogins: []

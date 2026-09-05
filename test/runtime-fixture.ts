@@ -31,6 +31,9 @@ export async function runtimeFixture(
     retryCount?: number;
     repositoryPrefix?: string;
     propose?: boolean;
+    attendedMerge?: boolean;
+    impactExpiresAt?: string;
+    nativeRepair?: boolean;
     githubReviewer?: string;
   } = {},
 ): Promise<{
@@ -120,7 +123,19 @@ scenarios:
     commandIds: ["test"],
     materialDecisions: [],
     unresolved: [],
-    exceptions: [],
+    exceptions:
+      options.impactExpiresAt === undefined
+        ? []
+        : [
+            {
+              id: "temporary-authority",
+              scopeRefs: ["INV-POSITIVE"],
+              reason: "Test bounded authority",
+              approvedBy: "mill-test",
+              approvedAt: "2026-09-02T00:00:00.000Z",
+              expiresAt: options.impactExpiresAt,
+            },
+          ],
     approval: null,
   } as const;
   const impact = stringifyYaml({
@@ -190,6 +205,7 @@ scenarios:
   allowedActors: [operator]
   allowedMergerLogins: [operator]
   requiredChecks: [validate]
+  ${options.attendedMerge === true ? "attendedMerge: true\n  checkProducers:\n    validate: { appId: 15368, workflowPath: .github/workflows/ci.yml, pullRequestEvent: pull_request, postMergeEvent: push }" : ""}
   reviewPolicy:
     mode: ${reviewMode}
     requiredReviewerLogins: ${reviewers}
@@ -311,7 +327,8 @@ let prompt="";for await(const chunk of process.stdin){prompt+=chunk}
 if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   ${reviewer}
-  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:findings.length?"repair required":"clean",findings});
+  const scope=JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0]??"null");
+  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:findings.length?"repair required":"clean",findings});
   const outputIndex=args.indexOf("--output-last-message");
   if(outputIndex<0||!args[outputIndex+1])process.exit(2);
   await writeFile(args[outputIndex+1],text,{mode:0o600});
@@ -344,7 +361,7 @@ const sourceMount=mounts.find((value)=>value.includes("target=/workspace/src,rea
 const source=/source=([^,]+)/u.exec(sourceMount)?.[1];
 if(!source)process.exit(2);
 const value=await readFile(path.join(source,"value.js"),"utf8");
-process.exit(/value = [1-9]/u.test(value)?0:1);
+process.exit(/value = [1-9]/u.test(value)&&!(${options.nativeRepair === true}&&/value = 2/u.test(value))?0:1);
 `,
     { mode: 0o755 },
   );

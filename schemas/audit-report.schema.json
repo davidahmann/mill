@@ -39,6 +39,7 @@
               "release"
             ]
           },
+          "assurance": { "type": "string", "enum": ["structural", "executed"] },
           "status": { "type": "string", "enum": ["passed", "blocked"] },
           "summary": { "type": "string", "minLength": 1 },
           "evidence": {

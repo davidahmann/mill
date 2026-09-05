@@ -414,6 +414,15 @@ const githubReviewPolicySchema = z
     ],
   });
 
+export const checkProducerSchema = z.strictObject({
+  appId: z.number().int().positive(),
+  workflowPath: z
+    .string()
+    .regex(/^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml$/u),
+  pullRequestEvent: z.literal("pull_request"),
+  postMergeEvent: z.literal("push"),
+});
+
 export const millConfigSchema = z
   .strictObject({
     schemaVersion: z.literal("1"),
@@ -447,6 +456,10 @@ export const millConfigSchema = z
         allowedActors: z.array(z.string().min(1)).min(1),
         allowedMergerLogins: z.array(z.string().min(1)).min(1),
         requiredChecks: z.array(z.string().min(1)),
+        checkProducers: z
+          .record(z.string().min(1), checkProducerSchema)
+          .optional(),
+        attendedMerge: z.literal(true).optional(),
         postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
         reviewPolicy: githubReviewPolicySchema,
         allowedMergeMethods: z
@@ -575,6 +588,7 @@ const evidenceDispositionSchema = z.discriminatedUnion("mode", [
 ]);
 
 const taskPacketCommonShape = {
+  repositoryIntelligence: z.literal(true).optional(),
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
   title: z.string().min(1),
   objective: z.string().min(1),
@@ -590,6 +604,7 @@ const taskPacketCommonShape = {
   }),
   budget: z.strictObject({
     deadlineSeconds: z.number().int().min(1).max(7200),
+    maxContextBytes: z.number().int().min(1024).max(16_777_216).optional(),
     maxOutputBytes: z.number().int().min(1024).max(10_000_000),
     retryCount: z.number().int().min(0).max(1),
   }),
@@ -642,6 +657,37 @@ export const taskPacketSchema = z.discriminatedUnion("schemaVersion", [
   taskPacketV2Schema,
 ]);
 
+export const changeRequestSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  repositoryIntelligence: z.literal(true).optional(),
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+  kind: z.enum(["prd", "plan", "bug", "review", "maintenance"]),
+  source: authorityReferenceSchema,
+  productPath: repositoryPathPatternSchema,
+  scenariosPath: repositoryPathPatternSchema,
+  policyPath: repositoryPathPatternSchema,
+  commit: taskPacketCommonShape.commit,
+  budget: taskPacketCommonShape.budget,
+  readyOutcomeId: z.string().min(1),
+  tasks: z
+    .array(
+      z.strictObject({
+        id: taskPacketCommonShape.id,
+        outcomeId: stableOutcomeIdSchema,
+        supersedesTaskDigest: digestSchema.optional(),
+        title: z.string().min(1),
+        objective: z.string().min(1),
+        dependsOn: z.array(stableOutcomeIdSchema),
+        impactPath: repositoryPathPatternSchema,
+        allowedPaths: taskPacketCommonShape.allowedPaths,
+        contextPaths: taskPacketCommonShape.contextPaths,
+        attestations: z.array(humanAttestationSchema).default([]),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
 export const workerProfileSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   adapter: z.literal("codex-cli"),
@@ -684,6 +730,26 @@ export const workerInvocationSchema = z.strictObject({
 
 export const contextManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
+  repositoryContext: z
+    .strictObject({
+      authority: z.literal("derived_read_only"),
+      sourceCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+      mapDigest: digestSchema,
+      extractorVersion: z.string().min(1),
+      modules: z
+        .array(
+          z.strictObject({
+            path: z.string().min(1),
+            digest: digestSchema,
+            localImports: z.array(z.string()),
+            unresolvedImports: z.number().int().min(0),
+          }),
+        )
+        .max(24),
+      omittedModules: z.number().int().min(0),
+      unknowns: z.array(z.string()),
+    })
+    .optional(),
   taskDigest: digestSchema,
   baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   provider: z.literal("openai"),
@@ -710,9 +776,18 @@ export const contextManifestSchema = z.strictObject({
     .optional(),
 });
 
+export const reviewScopeSchema = z.strictObject({
+  baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
+  changedPaths: z.array(z.string().min(1)),
+  digest: digestSchema,
+});
+
 export const reviewResultSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  scope: reviewScopeSchema.optional(),
   summary: z.string(),
   findings: z.array(
     z.strictObject({
@@ -802,6 +877,22 @@ const remoteEffectSchema = z.strictObject({
   updatedAt: z.iso.datetime(),
 });
 
+export const mergeApprovalPlanSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  repositoryNodeId: z.string().min(1),
+  pullRequestNumber: z.number().int().positive(),
+  pullRequestNodeId: z.string().min(1),
+  headCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+  candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
+  actorLogin: z.string().min(1),
+  actorId: z.number().int().positive(),
+  policyDigest: digestSchema,
+  method: z.enum(["merge", "squash"]),
+  markReady: z.boolean(),
+  expiresAt: z.iso.datetime(),
+});
+
 export const deliveryRecordSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   runId: z.uuid(),
@@ -836,6 +927,7 @@ export const deliveryRecordSchema = z.strictObject({
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
   requiredChecks: z.array(z.string().min(1)),
+  checkProducers: z.record(z.string().min(1), checkProducerSchema).optional(),
   postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
   postMergePolicySource: z
     .enum(["configured", "implicit_default", "legacy_migrated"])
@@ -847,6 +939,21 @@ export const deliveryRecordSchema = z.strictObject({
     .array(z.enum(["merge", "linear_tree_preserving"]))
     .min(1),
   effects: z.array(remoteEffectSchema),
+  mergeApproval: z
+    .strictObject({
+      plan: mergeApprovalPlanSchema,
+      digest: digestSchema,
+      state: z.enum([
+        "planned",
+        "ready_started",
+        "ready_verified",
+        "merge_started",
+        "effect_unknown",
+        "merged",
+      ]),
+      approvalSource: z.literal("attended_operator").optional(),
+    })
+    .optional(),
   remoteHeadCommit: z
     .string()
     .regex(/^[a-f0-9]{40}$/u)
@@ -1025,6 +1132,7 @@ export const auditReportSchema = z.strictObject({
       z.strictObject({
         id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
         category: auditCategorySchema,
+        assurance: z.enum(["structural", "executed"]).optional(),
         status: z.enum(["passed", "blocked"]),
         summary: z.string().min(1),
         evidence: z.array(z.string().min(1)).min(1),
@@ -1192,6 +1300,7 @@ export const releaseEvidenceSchema = z.strictObject({
 });
 
 export const contractSchemas = {
+  changeRequest: changeRequestSchema,
   auditReport: auditReportSchema,
   blueprint: blueprintSchema,
   contextManifest: contextManifestSchema,

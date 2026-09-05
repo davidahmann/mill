@@ -54,6 +54,17 @@ import {
 import { commandResult, formatHuman, type CommandResult } from "./result.js";
 import { safeReadText } from "./security/safe-path.js";
 import { MILL_VERSION } from "./version.js";
+import { applyMerge, planMerge, reconcileMerge } from "./runtime/merge.js";
+import {
+  abandonAuthorityPlan,
+  reconcileAuthorityPlans,
+} from "./runtime/authority-plans.js";
+import { planOutcomeClosure } from "./planning/closure.js";
+import { compileChangeTasks, applyChangeTasks } from "./planning/tasks.js";
+import {
+  planNativeAdoption,
+  applyNativeAdoption,
+} from "./repository/native-adoption.js";
 import {
   prepareRepositoryDependencies,
   startNextReadyOutcome,
@@ -468,6 +479,50 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
   const dependencies = program
     .command("dependencies")
     .description("manage exact local verifier dependency snapshots");
+  program
+    .command("adopt-native")
+    .description(
+      "experimentally adopt existing Node ESM/npm native tests without replacing source or oracles",
+    )
+    .requiredOption(
+      "--config <path>",
+      "proposed build-only OCI configuration in the repository",
+    )
+    .option("--apply", "create new Mill controls in an isolated worktree")
+    .option("--approve <digest>", "exact native adoption plan digest")
+    .option("--attended", "the operator approves this exact adoption")
+    .action(
+      async (options: {
+        config: string;
+        apply?: boolean;
+        approve?: string;
+        attended?: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        const data =
+          options.apply === true
+            ? await applyNativeAdoption({
+                root,
+                configPath: options.config,
+                approvalDigest: requiredValue(options.approve, "--approve"),
+                attended: options.attended === true,
+              })
+            : await planNativeAdoption({ root, configPath: options.config });
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command:
+              options.apply === true
+                ? "adopt-native.apply"
+                : "adopt-native.plan",
+            ok: true,
+            data,
+          }),
+        );
+      },
+    );
   dependencies
     .command("prepare")
     .description("prepare one lock-bound snapshot through the exact OCI image")
@@ -568,6 +623,70 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     .command("plan")
     .description(
       "compile and assess product-continuity authority without writes",
+    );
+  plan
+    .command("close-outcome")
+    .description("propose plan closure from an exact provider-finalized run")
+    .requiredOption("--task <path>", "task packet path")
+    .requiredOption("--run <id>", "finalized run identity")
+    .option("--next <outcome-id>", "one already approved successor")
+    .action(async (options: { task: string; run: string; next?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await planOutcomeClosure({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+        ...(options.next === undefined ? {} : { nextOutcomeId: options.next }),
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "plan.close-outcome", ok: true, data }),
+      );
+    });
+  plan
+    .command("tasks")
+    .description(
+      "compile a source-backed PRD, follow-up plan, bug or review into version-2 tasks",
+    )
+    .requiredOption(
+      "--request <path>",
+      "change request with approved outcome and impact references",
+    )
+    .option("--apply", "write the approved files in a new disposable worktree")
+    .option("--approve <digest>", "exact compilation approval digest")
+    .option("--attended", "the operator approves the compiled authority files")
+    .action(
+      async (options: {
+        request: string;
+        apply?: boolean;
+        approve?: string;
+        attended?: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const data =
+          options.apply === true
+            ? await applyChangeTasks({
+                root,
+                requestPath: options.request,
+                approvalDigest: requiredValue(options.approve, "--approve"),
+                attended: options.attended === true,
+              })
+            : await compileChangeTasks({ root, requestPath: options.request });
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: options.apply === true ? "plan.tasks.apply" : "plan.tasks",
+            ok: true,
+            data,
+          }),
+        );
+      },
     );
   plan
     .command("specification")
@@ -1075,44 +1194,65 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     )
     .requiredOption("--task <path>", "approved task packet path")
     .requiredOption("--run <id>", "run identifier")
-    .action(async (options: { task: string; run: string }) => {
-      const global = globals(program);
-      const root = await findRepositoryRoot(global.cwd);
-      await enforceExactVersion(root);
-      const result = await reviewRun({
-        root,
-        taskPath: options.task,
-        runId: options.run,
-      });
-      const ok = result.review.findings.length === 0;
-      emit(
-        io,
-        global.json === true,
-        commandResult({
-          command: "review",
-          ok,
-          status: ok ? "ok" : "blocked",
-          data: result,
-          reasons: ok
-            ? []
-            : [
-                {
-                  code: result.run.blockCode ?? "REVIEW_FINDINGS",
-                  message:
-                    "The exact-candidate review reported actionable findings.",
-                },
-              ],
-        }),
-      );
-      if (!ok) {
-        throw new MillError(
-          result.run.blockCode ?? "REVIEW_FINDINGS",
-          "The exact-candidate review reported actionable findings.",
-          ExitCode.configuration,
-          { resultAlreadyEmitted: true },
+    .option("--refresh", "refresh stale scope before any remote attempt")
+    .option(
+      "--base <commit>",
+      "exact locally available provider-base commit for refresh",
+    )
+    .option("--attended", "confirm attended review-scope selection")
+    .action(
+      async (options: {
+        task: string;
+        run: string;
+        refresh?: boolean;
+        base?: string;
+        attended?: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const result = await reviewRun({
+          root,
+          taskPath: options.task,
+          runId: options.run,
+          ...(options.refresh === undefined
+            ? {}
+            : { refresh: options.refresh }),
+          ...(options.base === undefined ? {} : { baseCommit: options.base }),
+          ...(options.attended === undefined
+            ? {}
+            : { attended: options.attended }),
+        });
+        const ok = result.review.findings.length === 0;
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "review",
+            ok,
+            status: ok ? "ok" : "blocked",
+            data: result,
+            reasons: ok
+              ? []
+              : [
+                  {
+                    code: result.run.blockCode ?? "REVIEW_FINDINGS",
+                    message:
+                      "The exact-candidate review reported actionable findings.",
+                  },
+                ],
+          }),
         );
-      }
-    });
+        if (!ok) {
+          throw new MillError(
+            result.run.blockCode ?? "REVIEW_FINDINGS",
+            "The exact-candidate review reported actionable findings.",
+            ExitCode.configuration,
+            { resultAlreadyEmitted: true },
+          );
+        }
+      },
+    );
 
   program
     .command("resume")
@@ -1138,6 +1278,91 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
   const pr = program
     .command("pr")
     .description("deliver an exact reviewed candidate through a draft PR");
+  pr.command("merge-plan")
+    .description(
+      "plan a distinct human-approved merge, including readiness when needed",
+    )
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .option("--method <method>", "squash or merge", "squash")
+    .action(async (options: { task: string; run: string; method: string }) => {
+      if (options.method !== "squash" && options.method !== "merge")
+        throw new MillError(
+          "MERGE_METHOD_INVALID",
+          "Choose squash or merge.",
+          ExitCode.usage,
+        );
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await planMerge({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+        method: options.method,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "pr.merge-plan", ok: true, data }),
+      );
+    });
+  pr.command("merge")
+    .description(
+      "apply an exact merge plan at the trusted attended operator boundary",
+    )
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .requiredOption("--approve <digest>", "exact displayed merge-plan digest")
+    .requiredOption("--attended", "operator has approved this exact plan")
+    .action(
+      async (options: {
+        task: string;
+        run: string;
+        approve: string;
+        attended: boolean;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const data = await applyMerge({
+          root,
+          taskPath: options.task,
+          runId: options.run,
+          approvalDigest: options.approve,
+          attended: options.attended,
+        });
+        emit(
+          io,
+          global.json === true,
+          commandResult({ command: "pr.merge", ok: true, data }),
+        );
+      },
+    );
+  pr.command("merge-reconcile")
+    .description("read back a possibly started merge without retrying it")
+    .requiredOption("--task <path>", "approved task packet path")
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { task: string; run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await reconcileMerge({
+        root,
+        taskPath: options.task,
+        runId: options.run,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "pr.merge-reconcile",
+          ok: data.state === "merged",
+          status: data.state === "merged" ? "ok" : "blocked",
+          data,
+        }),
+      );
+    });
   pr.command("plan")
     .description("read live GitHub identity and create a local approval plan")
     .requiredOption("--task <path>", "approved task packet path")
@@ -1384,6 +1609,53 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
   const state = program
     .command("state")
     .description("manage local operational state");
+  state
+    .command("reconcile-plans")
+    .description("read back committed generated authority; never retry apply")
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await reconcileAuthorityPlans({ root });
+      const ok = data.plans.every(
+        (plan) => plan.state === "committed" || plan.state === "abandoned",
+      );
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "state.reconcile-plans",
+          ok,
+          status: ok ? "ok" : "blocked",
+          data,
+        }),
+      );
+    });
+  state
+    .command("abandon-plan")
+    .description(
+      "abandon an exact failed plan while retaining its clean committed branch",
+    )
+    .requiredOption(
+      "--approve <digest>",
+      "original authority-plan approval digest",
+    )
+    .option("--attended", "confirm attended local disposition")
+    .action(async (options: { approve: string; attended?: boolean }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await abandonAuthorityPlan({
+        root,
+        approvalDigest: options.approve,
+        attended: options.attended === true,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "state.abandon-plan", ok: true, data }),
+      );
+    });
   state
     .command("backup")
     .description("create a user-only SQLite backup")

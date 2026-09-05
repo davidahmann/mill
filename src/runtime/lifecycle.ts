@@ -7,6 +7,7 @@ import {
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
+import { verifyAuthorityPlanPurge } from "./authority-plans.js";
 import {
   codexWorkerAdapter,
   codexAuthStatus,
@@ -28,6 +29,7 @@ import {
   assertCandidateIdentity,
   assertGitControlState,
   captureGitControlState,
+  captureReviewScope,
   commitCandidate,
   commonGitDirectory,
   createCandidateWorktree,
@@ -35,6 +37,7 @@ import {
   deleteCandidateBranch,
   qualifyRepositoryForBuild,
   removeCandidateWorktree,
+  removeVerifiedAuthorityWorktree,
   resetCandidateWorktree,
   resolveCommit,
   type GitControlSnapshot,
@@ -42,6 +45,7 @@ import {
 import {
   acquireWriterLease,
   isPurgeSafeRun,
+  isSettledAuthorityPlan,
   isTerminalRun,
   purgeRepositoryState,
   publicRunRecord,
@@ -59,6 +63,12 @@ import {
   type ActiveProcess,
 } from "./process.js";
 import { MILL_VERSION } from "../version.js";
+import { validationRepairFindings } from "./repair.js";
+import { summarizeUsage } from "./usage.js";
+import {
+  assertEffectAllowsNewWork,
+  externalEffectBoundary,
+} from "./effect-boundary.js";
 
 interface RunContext {
   inputs: RuntimeInputs;
@@ -313,13 +323,14 @@ function settleFailure(
 ): void {
   try {
     const run = store.getRun(runId);
-    if (isTerminalRun(run.status)) return;
-    if (run.status === "effect_unknown") {
+    const boundary = externalEffectBoundary(run);
+    if (boundary.unresolved || boundary.merged) {
       store.recordEvent(runId, "run.reconciliation_required", {
         code: error.code,
       });
       return;
     }
+    if (isTerminalRun(run.status)) return;
     if (run.cancelRequested) {
       store.transition(runId, "cancelled", "run.cancelled", {
         code: error.code,
@@ -898,6 +909,9 @@ export async function reviewRun(input: {
   root: string;
   taskPath: string;
   runId: string;
+  refresh?: boolean;
+  baseCommit?: string;
+  attended?: boolean;
 }): Promise<{
   run: PublicRunRecord;
   review: ReturnType<typeof reviewResultSchema.parse>;
@@ -907,10 +921,53 @@ export async function reviewRun(input: {
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   const signals = processCancellationScope();
+  let reviewPrepared = false;
   try {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
+    assertEffectAllowsNewWork(run);
     const deadlineMs = persistedRunDeadline(run);
+    if (input.refresh === true) {
+      if (input.attended !== true)
+        throw new MillError(
+          "ATTENDANCE_REQUIRED",
+          "Review refresh requires the attended operator.",
+          ExitCode.configuration,
+        );
+      if (
+        input.baseCommit === undefined ||
+        !/^[a-f0-9]{40}$/u.test(input.baseCommit)
+      )
+        throw new MillError(
+          "REVIEW_BASE_REQUIRED",
+          "Review refresh requires an exact locally available base commit.",
+          ExitCode.configuration,
+        );
+      if (run.reviewJson === undefined)
+        throw new MillError(
+          "REVIEW_REFRESH_UNAVAILABLE",
+          "No completed review exists to refresh; resume an already prepared review without --refresh.",
+          ExitCode.configuration,
+        );
+      const candidate = await assertRunBindings(input.root, run, inputs);
+      const scope = await captureReviewScope(
+        candidate.worktree,
+        input.baseCommit,
+        candidate.commit,
+      );
+      run = store.prepareReviewRefresh(
+        run.id,
+        run.reviewJson,
+        scope,
+        inputs.task.budget.retryCount + 1,
+      );
+      reviewPrepared = true;
+    } else if (input.baseCommit !== undefined)
+      throw new MillError(
+        "REVIEW_REFRESH_REQUIRED",
+        "An explicit review base requires --refresh and --attended.",
+        ExitCode.configuration,
+      );
     const retryableReviewBlocks = new Set([
       "CODEX_CANCELLED",
       "CODEX_DEADLINE_EXCEEDED",
@@ -962,10 +1019,29 @@ export async function reviewRun(input: {
       );
     }
     const candidate = await assertRunBindings(input.root, run, inputs);
+    const refreshedScope = store.reviewRefreshScope(run.id);
+    const reviewScope = await captureReviewScope(
+      candidate.worktree,
+      refreshedScope?.baseCommit ??
+        (inputs.config.propose === undefined
+          ? run.baseCommit
+          : `refs/heads/${inputs.config.propose.baseBranch}`),
+      candidate.commit,
+    );
+    if (
+      refreshedScope !== undefined &&
+      reviewScope.digest !== refreshedScope.digest
+    )
+      throw new MillError(
+        "REVIEW_SCOPE_STALE",
+        "The prepared review scope no longer matches the candidate.",
+        ExitCode.configuration,
+      );
     const reviewAttempt = store.beginReviewAttempt(
       run.id,
       inputs.task.budget.retryCount + 1,
     );
+    reviewPrepared = true;
     const admission = await admitWorker({
       store,
       run,
@@ -984,6 +1060,7 @@ export async function reviewRun(input: {
         task: inputs.task,
         manifest: candidate.manifest,
         candidateCommit: candidate.commit,
+        reviewScope,
         deadlineMs,
         maxOutputBytes: inputs.task.budget.maxOutputBytes,
         signal: signals.signal,
@@ -1015,7 +1092,8 @@ export async function reviewRun(input: {
     }
   } catch (error) {
     const failure = asMillError(error);
-    if (lease !== undefined) settleFailure(store, input.runId, failure);
+    if (lease !== undefined && (input.refresh !== true || reviewPrepared))
+      settleFailure(store, input.runId, failure);
     throw failure;
   } finally {
     signals.dispose();
@@ -1042,13 +1120,7 @@ export async function resumeRun(input: {
     const active = storedActiveProcess(run);
     reconcileMutatingWorkerAdmissions(store, run, active);
     run = store.getRun(run.id);
-    if (run.status === "effect_unknown") {
-      throw new MillError(
-        "GITHUB_RECONCILIATION_REQUIRED",
-        "An unknown GitHub effect must be reconciled before cancellation or local resume.",
-        ExitCode.temporary,
-      );
-    }
+    assertEffectAllowsNewWork(run);
     if (run.cancelRequested && !isTerminalRun(run.status)) {
       return publicRunRecord(
         store.transition(run.id, "cancelled", "run.cancelled", {
@@ -1083,7 +1155,7 @@ export async function resumeRun(input: {
     const manifest = storedManifest(run);
     const gitControl = storedGitControl(run);
     await assertGitControlState(worktreePath, gitControl);
-    const findings = storedReviewFindings(run);
+    const findings = storedReviewFindings(run) ?? validationRepairFindings(run);
     if (findings !== undefined) {
       if (run.repairCount >= 1) {
         throw new MillError(
@@ -1243,15 +1315,16 @@ export async function cancelRun(input: {
       throw error;
     }
     const current = store.getRun(run.id);
-    if (isTerminalRun(current.status)) {
-      return publicRunRecord(current);
-    }
-    if (current.status === "effect_unknown") {
+    const boundary = externalEffectBoundary(current);
+    if (boundary.unresolved || boundary.merged) {
       store.recordEvent(current.id, "run.cancellation_pending", {
-        code: "GITHUB_RECONCILIATION_REQUIRED",
+        code: boundary.unresolved
+          ? "GITHUB_RECONCILIATION_REQUIRED"
+          : "MERGE_FINALIZATION_REQUIRED",
       });
       return publicRunRecord(current);
     }
+    if (isTerminalRun(current.status)) return publicRunRecord(current);
     const active = storedActiveProcess(current);
     try {
       reconcileMutatingWorkerAdmissions(store, current, active);
@@ -1289,6 +1362,7 @@ export async function runStatus(input: {
   run?: PublicRunRecord;
   interrupted?: boolean;
   reconciliationRequired?: boolean;
+  usage?: ReturnType<typeof summarizeUsage>;
 }> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
@@ -1300,7 +1374,7 @@ export async function runStatus(input: {
     if (run === undefined) return {};
     let interrupted = false;
     let reconciliationRequired =
-      run.status === "effect_unknown" ||
+      externalEffectBoundary(run).unresolved ||
       store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
@@ -1331,6 +1405,7 @@ export async function runStatus(input: {
     }
     return {
       run: publicRunRecord(run),
+      usage: summarizeUsage(store.events(run.id)),
       ...(interrupted ? { interrupted: true } : {}),
       ...(reconciliationRequired ? { reconciliationRequired: true } : {}),
     };
@@ -1408,6 +1483,14 @@ export async function statePurge(input: {
   try {
     lease = await acquireWriterLease(store);
     const runs = store.runs();
+    for (const run of runs) assertEffectAllowsNewWork(run);
+    const plans = store.authorityPlans();
+    if (plans.some((plan) => !isSettledAuthorityPlan(plan)))
+      throw new MillError(
+        "AUTHORITY_PLANS_BLOCK_PURGE",
+        "Commit generated authority and run state reconcile-plans before purge.",
+        ExitCode.configuration,
+      );
     if (runs.some((run) => !isPurgeSafeRun(run.status))) {
       throw new MillError(
         "ACTIVE_RUNS_BLOCK_PURGE",
@@ -1415,8 +1498,21 @@ export async function statePurge(input: {
         ExitCode.configuration,
       );
     }
+    for (const plan of plans) {
+      const evidence = await verifyAuthorityPlanPurge(
+        plan,
+        input.root,
+        commonDirectory,
+      );
+      store.beginAuthorityPlanPurge(
+        plan.approvalDigest,
+        evidence.committedCommit,
+      );
+    }
     store.close();
     storeClosed = true;
+    for (const plan of plans)
+      await removeVerifiedAuthorityWorktree(input.root, plan.worktreePath);
     for (const run of runs) {
       if (run.worktreePath !== undefined) {
         await removeCandidateWorktree(input.root, run.worktreePath);

@@ -34,6 +34,8 @@ async function executableScript(
 const {writeFileSync:__writeFileSync}=require("node:fs");
 const __outputIndex=process.argv.indexOf("--output-last-message");
 const __outputPath=__outputIndex>=0?process.argv[__outputIndex+1]:undefined;
+const __schemaIndex=process.argv.indexOf("--output-schema");
+if(__schemaIndex>=0){const schema=JSON.parse(require("node:fs").readFileSync(process.argv[__schemaIndex+1],"utf8"));for(const key of Object.keys(schema.properties)){if(!schema.required.includes(key))throw new Error("strict provider schema contains an optional property");}}
 const __originalLog=console.log.bind(console);
 console.log=(...values)=>{__originalLog(...values);if(__outputPath&&typeof values[0]==="string"){try{const event=JSON.parse(values[0]);if(event?.type==="item.completed"&&event.item?.type==="agent_message"&&typeof event.item.text==="string")__writeFileSync(__outputPath,event.item.text,{encoding:"utf8",mode:0o600});}catch{}}};
 ${body}
@@ -59,6 +61,9 @@ describe("Codex adapter boundaries", () => {
       );
       expect(builder.promptTemplateDigest).not.toBe(
         reviewer.promptTemplateDigest,
+      );
+      expect(codexPromptTemplate("reviewer")).toContain(
+        "Do not execute repository code",
       );
     } finally {
       await fixture.cleanup();

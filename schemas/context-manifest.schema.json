@@ -3,6 +3,56 @@
   "type": "object",
   "properties": {
     "schemaVersion": { "type": "string", "const": "1" },
+    "repositoryContext": {
+      "type": "object",
+      "properties": {
+        "authority": { "type": "string", "const": "derived_read_only" },
+        "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "mapDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "extractorVersion": { "type": "string", "minLength": 1 },
+        "modules": {
+          "maxItems": 24,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "localImports": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "unresolvedImports": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["path", "digest", "localImports", "unresolvedImports"],
+            "additionalProperties": false
+          }
+        },
+        "omittedModules": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unknowns": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": [
+        "authority",
+        "sourceCommit",
+        "mapDigest",
+        "extractorVersion",
+        "modules",
+        "omittedModules",
+        "unknowns"
+      ],
+      "additionalProperties": false
+    },
     "taskDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "provider": { "type": "string", "const": "openai" },

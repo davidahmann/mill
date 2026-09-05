@@ -5,6 +5,7 @@
       "type": "object",
       "properties": {
         "schemaVersion": { "type": "string", "const": "1" },
+        "repositoryIntelligence": { "type": "boolean", "const": true },
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "title": { "type": "string", "minLength": 1 },
         "objective": { "type": "string", "minLength": 1 },
@@ -49,6 +50,11 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 7200
+            },
+            "maxContextBytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 16777216
             },
             "maxOutputBytes": {
               "type": "integer",
@@ -138,6 +144,7 @@
       "type": "object",
       "properties": {
         "schemaVersion": { "type": "string", "const": "2" },
+        "repositoryIntelligence": { "type": "boolean", "const": true },
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "title": { "type": "string", "minLength": 1 },
         "objective": { "type": "string", "minLength": 1 },
@@ -182,6 +189,11 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 7200
+            },
+            "maxContextBytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 16777216
             },
             "maxOutputBytes": {
               "type": "integer",

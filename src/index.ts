@@ -114,3 +114,11 @@ export {
   type NextOutcome,
 } from "./workflows/founder.js";
 export { MILL_PACKAGE, MILL_VERSION } from "./version.js";
+export { planMerge, applyMerge, reconcileMerge } from "./runtime/merge.js";
+export { compileChangeTasks, applyChangeTasks } from "./planning/tasks.js";
+export {
+  planNativeAdoption,
+  applyNativeAdoption,
+} from "./repository/native-adoption.js";
+export { reconcileAuthorityPlans } from "./runtime/authority-plans.js";
+export { planOutcomeClosure } from "./planning/closure.js";

@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { once } from "node:events";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -47,6 +48,64 @@ function startWorkerInvocation(
 }
 
 describe("operational state", () => {
+  it("backs up authority intents, rejects poisoned paths and prevents uncommitted purge", async () => {
+    const temporary = await temporaryDirectory("mill-authority-state-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const digest = `sha256:${"a".repeat(64)}`;
+    const worktreePath = path.join(
+      store.worktreesDirectory,
+      `native-${"a".repeat(64)}`,
+    );
+    const record = {
+      kind: "native_adoption" as const,
+      approvalDigest: digest,
+      baseCommit: "b".repeat(40),
+      worktreePath,
+      state: "intent" as const,
+      branch: "mill/native-adoption-aaaaaaaa",
+      files: [{ path: "mill.yaml", digest }],
+    };
+    try {
+      expect(() =>
+        store.beginAuthorityPlan(
+          { ...record, worktreePath: temporary.path },
+          "DUPLICATE",
+        ),
+      ).toThrow();
+      store.beginAuthorityPlan(record, "DUPLICATE");
+      expect(() => store.beginAuthorityPlan(record, "DUPLICATE")).toThrow();
+      expect(() =>
+        store.settleAuthorityPlan(digest, { branch: "mill/wrong" }),
+      ).toThrow();
+      await mkdir(worktreePath);
+      const backupPath = await store.backup();
+      store.close();
+      expect(
+        (await restoreStateBackup(repositoryId, temporary.path, backupPath))
+          .quarantinedCount,
+      ).toBe(0);
+      await expect(
+        purgeRepositoryState(repositoryId, temporary.path),
+      ).rejects.toMatchObject({ code: "AUTHORITY_PLANS_BLOCK_PURGE" });
+      const poisoned = new DatabaseSync(backupPath);
+      poisoned
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(
+          JSON.stringify({ ...record, worktreePath: temporary.path }),
+          `authority_plan:${digest}`,
+        );
+      poisoned.close();
+      await expect(
+        restoreStateBackup(repositoryId, temporary.path, backupPath),
+      ).rejects.toMatchObject({ code: "INVALID_STATE_BACKUP" });
+      await expect(access(worktreePath)).resolves.toBeUndefined();
+    } finally {
+      store.close();
+      await temporary.cleanup();
+    }
+  });
   it("persists transactional transitions and append-only redacted events with user-only permissions", async () => {
     const temporary = await temporaryDirectory("mill-state-");
     process.env.MILL_STATE_HOME = temporary.path;
