@@ -105,9 +105,10 @@ corrected. The subsequent targeted gate passed 53 tests across delivery, state,
 task compilation and public metadata. Full exact-candidate checks and the next
 independent review remain required; this paragraph does not pre-certify them.
 
-The redesigned working candidate then passed the complete native gate: 247 tests,
-80.90% branch coverage and installed-tarball delivery qualification. The exact
-committed tree still requires fresh host/OCI checks, audit and static review.
+The redesigned working candidate then passed the complete native gate: 247
+tests, 80.90% branch coverage and installed-tarball delivery qualification. The
+exact committed tree still requires fresh host/OCI checks, audit and static
+review.
 
 Native tests and fixed cases are deterministic evidence; a single live model run
 is not an estimate of productivity, reliability or customer acceptance. This
