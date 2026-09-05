@@ -47,6 +47,7 @@ export interface RunContinuationPacket {
   observation: {
     interrupted: boolean;
     reconciliationRequired: boolean;
+    mergeFinalizationRequired: boolean;
     activeWorker: "observed" | "not_observed";
   };
   usage: ContinuationUsage;
@@ -61,6 +62,7 @@ function nextAction(input: {
   status: RunStatus;
   interrupted: boolean;
   reconciliationRequired: boolean;
+  mergeFinalizationRequired: boolean;
   activeWorker: boolean;
 }): RunContinuationPacket["next"] {
   if (input.reconciliationRequired) {
@@ -71,7 +73,15 @@ function nextAction(input: {
       attended: true,
     };
   }
-  if (input.status === "running" && input.activeWorker && !input.interrupted) {
+  if (input.mergeFinalizationRequired) {
+    return {
+      action: "finalize_merge",
+      reason:
+        "Provider-authoritative merge evidence is recorded; resulting-main closure still needs finalization.",
+      attended: true,
+    };
+  }
+  if (input.activeWorker && !input.interrupted) {
     return {
       action: "wait",
       reason:
@@ -195,10 +205,12 @@ export function continuationPacket(input: {
   run: PublicRunRecord;
   interrupted?: boolean;
   reconciliationRequired?: boolean;
+  mergeFinalizationRequired?: boolean;
   usage: ContinuationUsage;
 }): RunContinuationPacket {
   const interrupted = input.interrupted === true;
   const reconciliationRequired = input.reconciliationRequired === true;
+  const mergeFinalizationRequired = input.mergeFinalizationRequired === true;
   const activeWorker = input.run.activePid !== undefined;
   return {
     schemaVersion: "1",
@@ -220,6 +232,7 @@ export function continuationPacket(input: {
     observation: {
       interrupted,
       reconciliationRequired,
+      mergeFinalizationRequired,
       activeWorker: activeWorker ? "observed" : "not_observed",
     },
     usage: input.usage,
@@ -227,6 +240,7 @@ export function continuationPacket(input: {
       status: input.run.status,
       interrupted,
       reconciliationRequired,
+      mergeFinalizationRequired,
       activeWorker,
     }),
   };

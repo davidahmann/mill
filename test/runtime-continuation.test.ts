@@ -122,6 +122,8 @@ describe("read-only continuation packets", () => {
               });
               if (reconciliationRequired) {
                 expect(packet.next.action).toBe("reconcile");
+              } else if (active && !interrupted) {
+                expect(packet.next.action).toBe("wait");
               } else if (status === "running" && active) {
                 expect(packet.next.action).toBe(
                   interrupted ? "resume" : "wait",
@@ -135,5 +137,17 @@ describe("read-only continuation packets", () => {
         }
       }
     }
+  });
+
+  it("routes a provider-confirmed merge to resulting-main finalization", () => {
+    const packet = continuationPacket({
+      run: run("awaiting_human"),
+      usage,
+      mergeFinalizationRequired: true,
+    });
+    expect(packet).toMatchObject({
+      observation: { mergeFinalizationRequired: true },
+      next: { action: "finalize_merge", attended: true },
+    });
   });
 });

@@ -234,6 +234,35 @@ describe("local delivery lifecycle", () => {
     }
   });
 
+  it("retains provider-reported reviewer cache tokens in durable status", async () => {
+    const fixture = await runtimeFixture({ reviewerCacheInputTokens: 8 });
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      await verifyRun(input);
+      await reviewRun(input);
+      await expect(
+        runStatus({ root: fixture.root, runId: started.run.id }),
+      ).resolves.toMatchObject({
+        usage: {
+          cacheInputTokens: 8,
+          cacheSource: "partial",
+        },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("binds approval to one successful baseline, exact base, and command configuration", async () => {
     const changed = await runtimeFixture();
     activate(changed);

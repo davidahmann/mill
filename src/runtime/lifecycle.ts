@@ -1081,6 +1081,7 @@ export async function reviewRun(input: {
           costSource: result.usage.cost,
           inputTokens: result.usage.inputTokens ?? null,
           outputTokens: result.usage.outputTokens ?? null,
+          cacheInputTokens: result.usage.cacheInputTokens ?? null,
         },
       );
       return {
@@ -1376,8 +1377,9 @@ export async function runStatus(input: {
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
     if (run === undefined) return {};
     let interrupted = false;
+    const effectBoundary = externalEffectBoundary(run);
     let reconciliationRequired =
-      externalEffectBoundary(run).unresolved ||
+      effectBoundary.unresolved ||
       store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
@@ -1421,6 +1423,7 @@ export async function runStatus(input: {
         usage,
         ...(interrupted ? { interrupted } : {}),
         ...(reconciliationRequired ? { reconciliationRequired } : {}),
+        ...(effectBoundary.merged ? { mergeFinalizationRequired: true } : {}),
       }),
     };
   } finally {

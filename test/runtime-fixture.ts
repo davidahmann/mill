@@ -35,6 +35,7 @@ export async function runtimeFixture(
     impactExpiresAt?: string;
     nativeRepair?: boolean;
     githubReviewer?: string;
+    reviewerCacheInputTokens?: number;
   } = {},
 ): Promise<{
   root: string;
@@ -305,6 +306,10 @@ budget:
       ? `const source=await readFile(path.join(cwd,"src/value.js"),"utf8");
 const findings=source.includes("value = 2")?[{id:"R1",severity:"P1",class:"correctness",title:"Use the repaired value",body:"Set the value to three.",file:"src/value.js",line:1}]:[];`
       : "const findings=[];";
+  const reviewerUsage =
+    options.reviewerCacheInputTokens === undefined
+      ? "input_tokens:10,output_tokens:5"
+      : `input_tokens:10,output_tokens:5,cached_input_tokens:${options.reviewerCacheInputTokens}`;
   await writeFile(
     codexPath,
     `#!${process.execPath}
@@ -334,7 +339,7 @@ if(args.includes("--output-schema")){
   await writeFile(args[outputIndex+1],text,{mode:0o600});
   console.log(JSON.stringify({type:"thread.started",thread_id:"fake-review"}));
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
-  console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:10,output_tokens:5}}));
+  console.log(JSON.stringify({type:"turn.completed",usage:{${reviewerUsage}}}));
 }else{
   const value=prompt.includes("Repair this complete")?3:2;
   await writeFile(path.join(cwd,"src/value.js"),\`export const value = \${value};\\n\`);
