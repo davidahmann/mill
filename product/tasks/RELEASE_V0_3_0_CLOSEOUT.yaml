@@ -1,0 +1,47 @@
+schemaVersion: "2"
+task_id: mill-release-v0.3.0-closeout
+status: closed
+owner: davidahmann
+base_commit: e8243b2658b8ac421a67b424fe91875099dbda1c
+execution_mode: approved_native_maintainer
+authority: product/release-v0.3.0-closeout.md
+impact_manifest: product/impacts/RELEASE_V0_3_0_CLOSEOUT.yaml
+objective: >-
+  Prevent future release candidates from reaching any subsequent workflow step
+  without an exact tag-bound regular, non-symlink, nonempty release record.
+allowed_paths:
+  - .github/**
+  - scripts/**
+  - test/**
+  - docs/**
+  - product/**
+acceptance_items:
+  - RC-01 exact dispatched-tag regular-file release record
+  - RC-02 immediate checkout-to-preflight ordering
+  - RC-03 regression coverage for malformed or reordered checks
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - read-only local Codex review of the entire committed PR diff
+constraints:
+  - single attended maintainer writer
+  - no retag, rebuild, republish, deployment, protection bypass, or auto-merge
+  - historical v0.3.0 artifacts and provenance are immutable
+stop_conditions:
+  - ambiguous authority, tag identity, artifact identity, or provider effect
+  - unavailable native verification or exact-candidate review
+  - recurring same-subsystem P0 or P1 review findings
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-05
+  disposition: >-
+    The separately frozen authority followed closure of the prior task and
+    preceded implementation. Candidate builds now require the exact dispatched
+    tag's regular, non-symlink, nonempty release record and fixed non-symlink
+    docs and docs/releases parent directories immediately after immutable
+    checkout; structural and shell regressions reject malformed and reordered
+    variants. The control protects future candidates only and did not replay a
+    historical v0.3.0 effect.
+  evidence: docs/releases/v0.3.0.md

@@ -52,6 +52,14 @@ jobs:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Require immutable release notes
+        id: require-release-notes
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          notes_dir="docs/releases"
+          notes_file="${notes_dir}/${RELEASE_TAG}.md"
+          test -d docs && test ! -L docs && test -d "$notes_dir" && test ! -L "$notes_dir" && test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

@@ -4,6 +4,50 @@ export const releaseVerifierPreparation = [
   'docker image inspect "$verifier_image" >/dev/null',
 ].join("\n");
 
+export const releaseNotesCheck = [
+  'notes_dir="docs/releases"',
+  'notes_file="${notes_dir}/${RELEASE_TAG}.md"',
+  'test -d docs && test ! -L docs && test -d "$notes_dir" && test ! -L "$notes_dir" && test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"',
+].join("\n");
+
+const releaseTagInput = "${{ inputs.tag }}";
+
+/** Candidate evidence starts with one exact immutable checkout-to-notes boundary. */
+export function releaseNotesFailures(jobs) {
+  const job = jobs.build;
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const checks = steps
+    .map((step, index) => ({ step, index }))
+    .filter(({ step }) => step?.id === "require-release-notes");
+  const check = checks[0];
+  const checkout = steps[0];
+  const immutableCheckout =
+    checkout?.name === "Checkout immutable tag" &&
+    typeof checkout.uses === "string" &&
+    checkout.uses.startsWith("actions/checkout@") &&
+    checkout.with?.ref === releaseTagInput &&
+    checkout.with?.["fetch-depth"] === 0 &&
+    checkout.with?.["persist-credentials"] === false &&
+    checkout.if === undefined &&
+    [undefined, false].includes(checkout["continue-on-error"]);
+  if (
+    checks.length !== 1 ||
+    typeof check?.step?.run !== "string" ||
+    check.step.run.trim() !== releaseNotesCheck ||
+    check.step.env?.RELEASE_TAG !== releaseTagInput ||
+    check.step.if !== undefined ||
+    ![undefined, false].includes(check.step["continue-on-error"]) ||
+    ![undefined, false].includes(job?.["continue-on-error"]) ||
+    !immutableCheckout ||
+    check.index !== 1
+  ) {
+    return [
+      "build: immutable checkout must be followed immediately by exact tag-bound release notes",
+    ];
+  }
+  return [];
+}
+
 /** Every fresh release runner prepares its own image before dependent effects. */
 export function releaseVerifierPreparationFailures(jobs) {
   const failures = [];

@@ -78,3 +78,16 @@ policy update for that exact tag, release workflow, npm publication, and GitHub
 Release only after the documented candidate, merge, and readback gates pass. It
 does not authorize a wildcard policy, protection bypass, replay of an uncertain
 publication, or a different version.
+
+## Closure
+
+The reviewed candidate tree and resulting `main` tree are
+`ebe2ba513d713a01754d24c88b0d6ea06c1e4f95`; the annotated `v0.3.0` tag targets
+`9d8105100845b306e508538257832d2c13ea31cc`. Candidate run `33975289594` passed
+the two independent builders, source and packed canaries, exact-tag audit, and
+the pinned independent verifier. Publish run `33975771369` published the exact
+preserved tarball and passed npm registry requalification before a missing
+tag-bound release record correctly stopped GitHub Release creation.
+Reconciliation created the release from the same verified artifact; it did not
+rebuild or republish. GitHub Latest and npm `alpha`/`latest` now select `0.3.0`.
+The exact record is [v0.3.0 release evidence](../docs/releases/v0.3.0.md).

@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
 ### Added
 
 - Add a versioned, read-only `millctl continuation` packet that binds durable
@@ -24,6 +26,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Document the bounded future forms for revision-bound symbol-index context and
   advisory governed improvement records. Neither introduces a graph service,
   automatic worker change, or new authority path.
+
+The preserved `0.3.0` artifact passed two independent builds, exact-tag audit,
+packed qualification, the pinned v0.1.5 independent verifier, npm provenance and
+registry-package requalification. Both npm `alpha`/`latest` and GitHub Latest
+point to `0.3.0`. See [release evidence](docs/releases/v0.3.0.md).
 
 ## [0.2.1] - 2026-09-05
 

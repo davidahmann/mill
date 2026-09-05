@@ -57,7 +57,7 @@ configured. It has no CI provenance or GitHub Release and is not the supported
 alpha. The protected GitHub environment and package-specific OIDC trust are
 active. Version `0.1.5` completed the provenance, registry requalification,
 final evidence, and GitHub Release chain and is the qualified trust root for a
-future release. The npm `alpha` and `latest` tags resolve to `0.1.5`;
-bootstrap-only `0.1.4` remains deprecated evidence. The first alpha remains
-attended, single-repository, and limited to its exact qualified recipe and host
-tuple. No autonomous-planner or general stack-support claim is made.
+future release. The current `0.3.0` release is selected by npm `alpha` and
+`latest`; bootstrap-only `0.1.4` remains deprecated evidence. The first alpha
+remains attended, single-repository, and limited to its exact qualified recipe
+and host tuple. No autonomous-planner or general stack-support claim is made.

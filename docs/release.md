@@ -48,6 +48,10 @@ Before tagging:
 
 - merge the reviewed PR only after its required checks and exact-head review
   settle;
+- add the reviewed, regular, non-symlink, nonempty `docs/releases/vX.Y.Z.md`
+  record to the candidate before tagging; candidate builders require its fixed
+  `docs/` and `docs/releases/` directory chain to be real directories too,
+  immediately after immutable checkout, before any other workflow step;
 - prove the reviewed candidate tree equals the resulting squash-merged `main`
   tree;
 - run `npm run check` from a fresh checkout of resulting `main`;
@@ -135,13 +139,15 @@ gh workflow run release.yml --ref "$tag" \
   -f sequence_base64="$sequence_base64"
 ```
 
-The workflow checks out the immutable tag twice, installs with lifecycle scripts
-disabled, verifies tag identity, runs the full native gate, and packs once in
-each independent job. It safely extracts and compares canonical package paths,
-executable bits, and bytes. Any symlink, special entry, unsafe path, excessive
-entry count, package mismatch, or content difference blocks. It copies one
-tarball without replacement and records SHA-256, npm integrity, and canonical
-content digests.
+The workflow checks out the immutable tag twice, then immediately verifies a
+regular, non-symlink, nonempty tag-bound release record whose fixed `docs/` and
+`docs/releases/` parent directories are also non-symlinks before any other step.
+It installs with lifecycle scripts disabled, verifies tag identity, runs the
+full native gate, and packs once in each independent job. It safely extracts and
+compares canonical package paths, executable bits, and bytes. Any symlink,
+special entry, unsafe path, excessive entry count, package mismatch, or content
+difference blocks. It copies one tarball without replacement and records
+SHA-256, npm integrity, and canonical content digests.
 
 The qualification job installs that preserved tarball, runs packed greenfield
 and compatible-adoption canaries in clean temporary repositories, executes the
@@ -196,11 +202,12 @@ not qualify a new stack, host tuple, worker profile, model identity, or forge.
 
 Before creating a new release identity, read back the `npm` environment's
 reviewer and branch/tag admission rules. Protected-branches-only is not the same
-policy as selected release tags. The owner authorized branch `main` plus exact
-tag `v0.2.1` on 2026-09-05; provider readback confirmed both rules and unchanged
-reviewer and main branch protections. A subsequent tag needs its own explicit
-environment-policy authorization. Do not use a wildcard, bypass approval, or
-dispatch a different ref to work around an admission failure.
+policy as selected release tags. The owner authorized `main` plus exact tags
+`v0.2.1` and `v0.3.0` on 2026-09-05; provider readback confirmed all three
+permitted refs and unchanged reviewer and main branch protections. A subsequent
+tag needs its own explicit environment-policy authorization. Do not use a
+wildcard, bypass approval, or dispatch a different ref to work around an
+admission failure.
 
 The `v0.2.0` tag is retained as prepublication evidence. Publication was held
 after source inspection identified that the fresh publish runner lacked explicit
@@ -285,7 +292,7 @@ GitHub Latest and npm dist-tags are separate owner-approved effects after exact
 release qualification and readback. They do not require rebuilding or
 republishing. GitHub Latest cannot designate a prerelease; a separately approved
 normal-release label must still disclose Mill's public-alpha limits. As of
-2026-09-05, GitHub Latest and npm `alpha`/`latest` select `0.2.1`.
+2026-09-05, GitHub Latest and npm `alpha`/`latest` select `0.3.0`.
 
 For an approved npm channel change, use the operator's own npm login and 2FA,
 change only the named dist-tag, and read back the resulting version and

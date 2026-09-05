@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-reliability-brownfield-foundation
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 2a6925dd4bd388573fbfbaa9aa219f103ed84ea2
 execution_mode: approved_native_maintainer
@@ -51,3 +51,20 @@ stop_conditions:
   - ambiguous authority, identity, effect, or provider measurement
   - unavailable required verification, release provenance, or exact policy
   - recurring same-subsystem P0 or P1 review findings
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-05
+  release: v0.3.0
+  qualified_source_commit: 9d8105100845b306e508538257832d2c13ea31cc
+  reviewed_candidate_tree: ebe2ba513d713a01754d24c88b0d6ea06c1e4f95
+  candidate_run: 33975289594
+  publish_run: 33975771369
+  disposition: >-
+    The approved bounded increment, exact-candidate review, PR/main checks,
+    independent candidate qualification, protected OIDC publication, GitHub
+    Release reconciliation, and npm/GitHub Latest readback are complete. The
+    documentation closure preserves the missing-tag-notes failure without
+    modifying the released tarball or tag. A later separately approved task owns
+    any candidate-stage workflow safeguard.
+  evidence: docs/releases/v0.3.0.md
