@@ -5,8 +5,9 @@ export const releaseVerifierPreparation = [
 ].join("\n");
 
 export const releaseNotesCheck = [
-  'notes_file="docs/releases/${RELEASE_TAG}.md"',
-  'test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"',
+  'notes_dir="docs/releases"',
+  'notes_file="${notes_dir}/${RELEASE_TAG}.md"',
+  'test -d docs && test ! -L docs && test -d "$notes_dir" && test ! -L "$notes_dir" && test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"',
 ].join("\n");
 
 const releaseTagInput = "${{ inputs.tag }}";

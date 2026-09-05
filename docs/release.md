@@ -49,7 +49,8 @@ Before tagging:
 - merge the reviewed PR only after its required checks and exact-head review
   settle;
 - add the reviewed, regular, non-symlink, nonempty `docs/releases/vX.Y.Z.md`
-  record to the candidate before tagging; candidate builders require it
+  record to the candidate before tagging; candidate builders require its fixed
+  `docs/` and `docs/releases/` directory chain to be real directories too,
   immediately after immutable checkout, before any other workflow step;
 - prove the reviewed candidate tree equals the resulting squash-merged `main`
   tree;
@@ -139,7 +140,8 @@ gh workflow run release.yml --ref "$tag" \
 ```
 
 The workflow checks out the immutable tag twice, then immediately verifies a
-regular, non-symlink, nonempty tag-bound release record before any other step.
+regular, non-symlink, nonempty tag-bound release record whose fixed `docs/` and
+`docs/releases/` parent directories are also non-symlinks before any other step.
 It installs with lifecycle scripts disabled, verifies tag identity, runs the
 full native gate, and packs once in each independent job. It safely extracts and
 compares canonical package paths, executable bits, and bytes. Any symlink,

@@ -107,7 +107,8 @@ describe("release verifier preparation policy", () => {
     if (!step?.run) throw new Error("missing release-notes fixture");
     const temporary = await temporaryDirectory("mill-release-notes-");
     try {
-      const directory = path.join(temporary.path, "docs/releases");
+      const docs = path.join(temporary.path, "docs");
+      const directory = path.join(docs, "releases");
       const notes = path.join(directory, "v1.2.3.md");
       await mkdir(notes, { recursive: true });
       await expect(
@@ -138,6 +139,38 @@ describe("release verifier preparation policy", () => {
           env: { ...process.env, RELEASE_TAG: "v1.2.3" },
         }),
       ).resolves.toBeDefined();
+
+      await unlink(notes);
+      await rmdir(directory);
+      const releasesTarget = path.join(temporary.path, "releases-target");
+      await mkdir(releasesTarget, { recursive: true });
+      await writeFile(
+        path.join(releasesTarget, "v1.2.3.md"),
+        "release notes\n",
+      );
+      await symlink("../releases-target", directory);
+      await expect(
+        execute("sh", ["-c", step.run], {
+          cwd: temporary.path,
+          env: { ...process.env, RELEASE_TAG: "v1.2.3" },
+        }),
+      ).rejects.toThrow();
+
+      await unlink(directory);
+      await rmdir(docs);
+      const docsTarget = path.join(temporary.path, "docs-target");
+      await mkdir(path.join(docsTarget, "releases"), { recursive: true });
+      await writeFile(
+        path.join(docsTarget, "releases/v1.2.3.md"),
+        "release notes\n",
+      );
+      await symlink("docs-target", docs);
+      await expect(
+        execute("sh", ["-c", step.run], {
+          cwd: temporary.path,
+          env: { ...process.env, RELEASE_TAG: "v1.2.3" },
+        }),
+      ).rejects.toThrow();
     } finally {
       await temporary.cleanup();
     }
