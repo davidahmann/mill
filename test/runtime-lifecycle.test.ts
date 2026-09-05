@@ -219,6 +219,16 @@ describe("local delivery lifecycle", () => {
       });
       expect(status.run).not.toHaveProperty("worktreePath");
       expect(status.run).not.toHaveProperty("contextJson");
+      expect(status.continuation).toMatchObject({
+        schemaVersion: "1",
+        run: {
+          id: started.run.id,
+          status: "reviewed",
+          candidateCommit: started.run.candidateCommit,
+        },
+        next: { action: "plan_draft_pr", attended: true },
+      });
+      expect(status.continuation).not.toHaveProperty("worktreePath");
     } finally {
       await fixture.cleanup();
     }

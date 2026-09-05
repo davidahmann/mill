@@ -101,6 +101,18 @@ export {
   verifyRun,
 } from "./runtime/lifecycle.js";
 export {
+  continuationPacket,
+  type ContinuationAction,
+  type ContinuationUsage,
+  type RunContinuationPacket,
+} from "./runtime/continuation.js";
+export {
+  builderIsolationBoundary,
+  requireBuilderIsolation,
+  type BuilderIsolationBoundary,
+  type BuilderIsolationRequest,
+} from "./runtime/isolation.js";
+export {
   createWorkerInvocation,
   type WorkerAdapter,
   type WorkerInvocation,

@@ -13,11 +13,21 @@ describe("public delivery metadata", () => {
         { type: "worker.admitted" },
         {
           type: "builder.resume_completed",
-          data: { usageSource: "measured", inputTokens: 200, outputTokens: 9 },
+          data: {
+            usageSource: "measured",
+            inputTokens: 200,
+            outputTokens: 9,
+            cacheInputTokens: 150,
+          },
         },
         {
           type: "review.completed",
-          data: { usageSource: "measured", inputTokens: 50, outputTokens: 3 },
+          data: {
+            usageSource: "measured",
+            inputTokens: 50,
+            outputTokens: 3,
+            cacheInputTokens: 10,
+          },
         },
         { type: "worker.settled" },
       ]),
@@ -27,6 +37,8 @@ describe("public delivery metadata", () => {
       completedCalls: 2,
       measuredCalls: 2,
       inputTokens: 250,
+      cacheInputTokens: 160,
+      cacheSource: "partial",
       outputTokens: 12,
       cost: "unavailable",
     });
@@ -35,6 +47,8 @@ describe("public delivery metadata", () => {
     expect(summarizeUsage([])).toMatchObject({
       source: "unavailable",
       inputTokens: null,
+      cacheSource: "unavailable",
+      cacheInputTokens: null,
       cost: "unavailable",
     });
     const completed = {
@@ -44,6 +58,8 @@ describe("public delivery metadata", () => {
     expect(summarizeUsage([completed])).toMatchObject({
       source: "measured",
       inputTokens: 100,
+      cacheSource: "unavailable",
+      cacheInputTokens: null,
       outputTokens: 7,
       completedCalls: 1,
     });

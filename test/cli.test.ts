@@ -34,6 +34,34 @@ function capture(): {
 }
 
 describe("CLI contracts", () => {
+  it("reports the trusted-host boundary and rejects an unqualified isolated builder", async () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    const trusted = capture();
+    expect(
+      await runCli(["--json", "--cwd", root, "isolation"], trusted.io),
+    ).toBe(0);
+    expect(JSON.parse(trusted.stdout.join(""))).toMatchObject({
+      command: "isolation",
+      ok: true,
+      data: {
+        executionBoundary: "trusted-host",
+        status: "supported",
+      },
+    });
+    const isolated = capture();
+    expect(
+      await runCli(
+        ["--json", "--cwd", root, "isolation", "--request", "isolated"],
+        isolated.io,
+      ),
+    ).toBe(78);
+    expect(JSON.parse(isolated.stdout.join(""))).toMatchObject({
+      command: "isolation",
+      ok: false,
+      reasons: [{ code: "BUILDER_ISOLATION_UNQUALIFIED" }],
+    });
+  });
+
   it("keeps published shell-example flags aligned with the CLI without executing examples", async () => {
     const root = path.resolve(import.meta.dirname, "..");
     const program = createProgram(capture().io);

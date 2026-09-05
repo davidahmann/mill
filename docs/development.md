@@ -234,6 +234,17 @@ workflow compares two clean exact-tag builds, preserves one tarball, qualifies
 that file, and publishes the same bytes through trusted npm OIDC only in a
 separately authorized run.
 
+The reliability/brownfield foundation adds deterministic state-routing tests
+over every lifecycle status and generated interruption/reconciliation
+combinations, plus a small local evaluation pack for inherited-repository
+failure modes. The pack evaluates Mill's evidence routing, not a foundation
+model. Provider cache-input tokens are recorded only when the completed event
+provides them, and currency remains unavailable. `continuation` is a read-only
+projection; tests must prove it does not disclose private state or select a
+mutation ahead of reconciliation. An explicit isolated-builder request must fail
+closed until a separately qualified external adapter and negative-boundary tests
+exist.
+
 The exact web recipe's required native commands include `test:browser`. That
 lane is both delivered-surface verification and the recipe's current
 Accessibility hook. It must remain part of `npm run check` for the supported

@@ -65,6 +65,7 @@ import {
 import { MILL_VERSION } from "../version.js";
 import { validationRepairFindings } from "./repair.js";
 import { summarizeUsage } from "./usage.js";
+import { continuationPacket } from "./continuation.js";
 import {
   assertEffectAllowsNewWork,
   externalEffectBoundary,
@@ -542,6 +543,7 @@ function recordProviderUsage(
     costSource: usage.cost,
     inputTokens: usage.inputTokens ?? null,
     outputTokens: usage.outputTokens ?? null,
+    cacheInputTokens: usage.cacheInputTokens ?? null,
   });
 }
 
@@ -1363,6 +1365,7 @@ export async function runStatus(input: {
   interrupted?: boolean;
   reconciliationRequired?: boolean;
   usage?: ReturnType<typeof summarizeUsage>;
+  continuation?: ReturnType<typeof continuationPacket>;
 }> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
@@ -1403,11 +1406,22 @@ export async function runStatus(input: {
         interrupted = true;
       }
     }
-    return {
-      run: publicRunRecord(run),
-      usage: summarizeUsage(store.events(run.id)),
+    const publicRun = publicRunRecord(run);
+    const usage = summarizeUsage(store.events(run.id));
+    const status = {
+      run: publicRun,
+      usage,
       ...(interrupted ? { interrupted: true } : {}),
       ...(reconciliationRequired ? { reconciliationRequired: true } : {}),
+    };
+    return {
+      ...status,
+      continuation: continuationPacket({
+        run: publicRun,
+        usage,
+        ...(interrupted ? { interrupted } : {}),
+        ...(reconciliationRequired ? { reconciliationRequired } : {}),
+      }),
     };
   } finally {
     try {

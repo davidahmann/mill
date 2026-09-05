@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1",
+  "kind": "deterministic_harness_evaluation",
+  "scope": "Mill harness behavior; not a benchmark or a customer-repository qualification.",
+  "cases": [
+    {
+      "id": "stale-candidate-identity",
+      "condition": "The committed candidate has not yet passed native validation.",
+      "status": "committed",
+      "interrupted": false,
+      "reconciliationRequired": false,
+      "expectedAction": "verify"
+    },
+    {
+      "id": "native-validation-failure",
+      "condition": "A native repository command retained a blocked result.",
+      "status": "blocked",
+      "interrupted": false,
+      "reconciliationRequired": false,
+      "expectedAction": "attended_disposition"
+    },
+    {
+      "id": "missing-worker-settlement",
+      "condition": "A mutating worker may have started without durable settlement evidence.",
+      "status": "running",
+      "interrupted": true,
+      "reconciliationRequired": true,
+      "expectedAction": "reconcile"
+    },
+    {
+      "id": "uncertain-draft-delivery",
+      "condition": "GitHub delivery began but authoritative readback is incomplete.",
+      "status": "effect_unknown",
+      "interrupted": false,
+      "reconciliationRequired": true,
+      "expectedAction": "reconcile"
+    },
+    {
+      "id": "human-merge-boundary",
+      "condition": "The exact draft head is ready, but merge remains a human effect.",
+      "status": "awaiting_human",
+      "interrupted": false,
+      "reconciliationRequired": false,
+      "expectedAction": "plan_merge"
+    }
+  ]
+}

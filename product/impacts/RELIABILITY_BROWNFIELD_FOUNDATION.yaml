@@ -1,0 +1,39 @@
+schemaVersion: "2"
+id: mill-reliability-brownfield-foundation
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-05: "ok plan 1-5 and what possible form
+  6 and 7 at this stage execute test validate update docs ship incl latest
+  release and npm".
+source_base: 2a6925dd4bd388573fbfbaa9aa219f103ed84ea2
+authority: product/reliability-brownfield-foundation.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Durable state may be projected into a read-only continuation packet.
+  - Provider-reported cache-token fields may be recorded when present; cost is
+    still unavailable without a provider settlement.
+  - The present trusted-host builder boundary is made explicit; isolated builder
+    execution is rejected until separately qualified.
+  - Deterministic brownfield evaluation fixtures add regression evidence but do
+    not grant authority over a customer repository.
+affected_surfaces:
+  - local CLI public JSON output
+  - durable lifecycle evidence and resource summaries
+  - worker event decoding
+  - runtime schemas, test fixtures, documentation, and release evidence
+verification:
+  - exhaustive lifecycle routing and generated recovery regressions
+  - provider usage present, absent, and partial-field regressions
+  - native check, exact-candidate audit, packed-package exercise, and read-only
+    complete-diff review
+  - green PR and resulting-main checks plus release and npm readback
+exceptions:
+  - This approved native-maintainer task may alter command-controlled source,
+    tests, schemas, docs, and package metadata within its allowed paths.
+  - This impact brief does not qualify an external sandbox or authorize
+    automated provider, GitHub, or npm effects.

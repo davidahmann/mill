@@ -4,11 +4,26 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
-### Documentation
+### Added
 
-- Synchronize installation, release status, operating guidance and acceptance
-  closure with the verified `0.2.1` release. Preserve historical failures and
-  the v0.1.5 trust root. No runtime, package or workflow bytes change.
+- Add a versioned, read-only `millctl continuation` packet that binds durable
+  run identity, recovery observations, provider-measured resource fields, and
+  one attended next action without advancing the lifecycle.
+- Add deterministic brownfield harness evaluation fixtures for stale identity,
+  failed native validation, missing worker settlement, uncertain draft delivery,
+  and the human merge boundary.
+- Add an explicit builder-isolation boundary command and reject unqualified
+  isolated execution rather than silently treating a disposable worktree as
+  hostile-host containment.
+
+### Changed
+
+- Preserve provider-reported cache-input tokens when a completed Codex event
+  supplies them, while keeping missing measurements partial/unavailable and
+  currency cost unavailable.
+- Document the bounded future forms for revision-bound symbol-index context and
+  advisory governed improvement records. Neither introduces a graph service,
+  automatic worker change, or new authority path.
 
 ## [0.2.1] - 2026-09-05
 

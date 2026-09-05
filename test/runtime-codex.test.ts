@@ -103,6 +103,23 @@ describe("Codex adapter boundaries", () => {
       decodeCodexEvents(`${message}\n${message}\n${terminal}\n`, "reviewer"),
     ).toThrow(expect.objectContaining({ code: "WORKER_RESULT_CONFLICT" }));
   });
+  it("records provider-reported cache tokens without inferring a currency cost", () => {
+    const output = JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 101,
+        output_tokens: 7,
+        cached_input_tokens: 80,
+      },
+    });
+    expect(decodeCodexEvents(output, "builder").usage).toEqual({
+      source: "measured",
+      inputTokens: 101,
+      outputTokens: 7,
+      cacheInputTokens: 80,
+      cost: "unavailable",
+    });
+  });
   it("reports unavailable auth without falling back from an explicit override", async () => {
     const fixture = await runtimeFixture();
     process.env.MILL_CODEX_PATH = path.join(fixture.stateHome, "missing-codex");

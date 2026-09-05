@@ -24,6 +24,38 @@ Status reports provider-measured token totals where available, partial totals
 when some calls lack usage, and unavailable currency costs rather than
 estimates.
 
+`millctl continuation --run <run-id>` gives an attended operator a compact,
+versioned handoff packet. It binds the task, base, candidate, configuration, and
+observed recovery state, then names a safe next action such as verify, review,
+draft-PR observation, merge planning, or reconciliation. The command is
+read-only: an uncertain worker admission or GitHub effect is never converted
+into a retry, and the packet does not include a worktree path, prompt, raw
+review, or delivery receipt.
+
+## Evidence, not an autonomous graph
+
+The deterministic brownfield evaluation pack covers stale candidate identity,
+native validation failure, missing worker settlement, uncertain draft delivery,
+and the human merge boundary. It is local regression evidence for Mill's
+harness, not a promise that a model understands every inherited codebase. Use a
+customer repository's native tests, approved acceptance scenarios, and an
+independent exact-candidate review for that decision.
+
+The current Codex builder is a trusted-host process. A disposable worktree does
+not isolate the host, credentials, or network.
+`millctl isolation --request isolated` therefore blocks until a separately
+qualified adapter proves its filesystem, credential, egress, identity, resource,
+cancellation, and negative security boundaries. Mill will not silently downgrade
+an isolated request to the trusted host.
+
+A later repository-context adapter may import a revision- and extractor-bound
+symbol index such as SCIP, with strict limits and a deterministic frozen
+projection. It must remain optional derived evidence, never execute source or
+become a graph/Graphiti service. A later governed-improvement record may bind an
+operator-owned proposal to evaluation evidence, but it cannot self-modify a
+prompt, policy, model, or tool route; those changes need new approval and
+release qualification.
+
 ## Experimental native Node adoption
 
 `adopt` retains the exact qualified web-recipe compatibility contract.
