@@ -59,6 +59,25 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+### Approved exact-tag publication environment
+
+On 2026-09-05, after the maintainer reported the protected-branch versus
+exact-tag dispatch mismatch, David Ahmann explicitly approved the proposed
+four-step completion plan with "ok do it" in the attended conversation. This
+separate approval permits the GitHub `npm` environment to allow only branch
+`main` and tag `v0.2.1`, retaining its required reviewer and all main branch
+protections. It supersedes the preflight repair's unchanged-environment
+restriction only for that exact policy change; no wildcard tags, review bypass,
+branch-protection change or premature publication is authorized.
+
+Provider readback confirmed the exact two rules and unchanged non-branch-policy
+environment controls and main branch protections before further release work.
+The native effect journal preserves the before/after responses. The maintainer
+may record the actual release evidence and mechanical task closure in one
+documentation PR after the remaining qualification and npm/GitHub readback
+gates pass. This record is an account of the owner's approval, not a generated
+authentication receipt or Factory-profile exception.
+
 ### Publication preflight repair
 
 The existing approved AF-04/release scope includes the publication preflight
