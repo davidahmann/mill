@@ -334,6 +334,12 @@ export async function applyChangeTasks(input: {
       ExitCode.configuration,
     );
   const config = await loadMillConfig(input.root);
+  if (config.trustCeiling === "inspect")
+    throw new MillError(
+      "TRUST_CEILING_EXCEEDED",
+      "Inspect-only policy permits task planning, not authority writes.",
+      ExitCode.configuration,
+    );
   const store = await StateStore.open(
     config.repositoryId,
     await commonGitDirectory(input.root),

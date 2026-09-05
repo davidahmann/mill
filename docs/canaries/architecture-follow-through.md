@@ -79,6 +79,21 @@ Its command trace contains static reads and Git identity/diff queries only.
 
 ## Promotion and operating limits
 
+The first complete static review examined candidate
+`2d9d3a9d10a3ebe94f9a4eedf053a4283995badd`, including its authority preparation
+commit. That candidate passed the host gate, offline OCI gate and nine clean
+structural audits but was **not promoted**: the review found three P1 and two P2
+issues. The repair addresses all five together: authoritative provider-base
+comparison, enforced producer-bound protection, effect-time authority expiry,
+inspect-only apply denial, and journaled interrupted-purge recovery. The
+targeted regressions retain those failure paths. Earlier passing gates do not
+certify these subsequent repaired bytes.
+
+The repair's native suite passed 243 tests, 80.60% branch coverage and the
+installed-tarball draft-PR lifecycle. This is local check evidence, not the
+independent review or external release receipt. The boundary/recovery matrix is
+in `architecture/ARCHITECTURE.md`; required checks and review remain unchanged.
+
 Native tests and fixed cases are deterministic evidence; a single live model run
 is not an estimate of productivity, reliability or customer acceptance. This
 canary does not qualify a new public support tuple. Read-only Codex sandboxing

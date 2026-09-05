@@ -66,7 +66,7 @@ else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{id:101,name:"validate",status:"completed",conclusion:"success",app:{id:15368},head_sha:"${sha}",details_url:"https://github.com/example/app/actions/runs/50/job/101",...mode.check}]}]));
 else if(endpoint.endsWith("/actions/jobs/101"))console.log(JSON.stringify({run_id:50,head_sha:"${sha}",check_run_url:"https://api.github.com/repos/example/app/check-runs/101",...mode.job}));
 else if(endpoint.endsWith("/actions/runs/50"))console.log(JSON.stringify({head_sha:"${sha}",repository:{node_id:"R_example"},path:".github/workflows/ci.yml",event:"pull_request",...mode.run}));
-else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({required_status_checks:{strict:mode.strict??true}}));
+else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({enforce_admins:{enabled:mode.admins??true},required_status_checks:{strict:mode.strict??true,checks:mode.protectedChecks??[{context:"validate",app_id:15368}]}}));
 else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markPullRequestReadyForReview:{pullRequest:{id:"PR_example",isDraft:false}}}}));
 else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
@@ -201,8 +201,29 @@ else process.exit(2);
       )
         throw new Error("merge adapter missing");
       expect(
-        await adapter.strictChecks({ config, deadlineMs: Date.now() + 10_000 }),
+        await adapter.strictChecks({
+          config: producerConfig,
+          deadlineMs: Date.now() + 10_000,
+        }),
       ).toBe(true);
+      for (const mode of [
+        { admins: false },
+        { protectedChecks: [] },
+        { protectedChecks: [{ context: "validate", app_id: null }] },
+        { protectedChecks: [{ context: "validate", app_id: 99 }] },
+      ]) {
+        await writeFile(
+          path.join(tools.path, "mode.json"),
+          JSON.stringify(mode),
+        );
+        expect(
+          await adapter.strictChecks({
+            config: producerConfig,
+            deadlineMs: Date.now() + 10_000,
+          }),
+        ).toBe(false);
+      }
+      await writeFile(path.join(tools.path, "mode.json"), "{}");
       await adapter.markReady({
         config,
         pullRequestNodeId: "PR_example",

@@ -286,6 +286,42 @@ async function assertReviewedCandidate(
   return { commit: candidate.commit, tree: candidate.tree };
 }
 
+async function assertProviderReviewScope(
+  run: RunRecord,
+  config: ProposeConfig,
+  adapter: GitHubAdapter,
+  deadlineMs: number,
+): Promise<void> {
+  const base = await adapter.readBranch({
+    config,
+    branch: config.baseBranch,
+    deadlineMs,
+  });
+  if (
+    base === null ||
+    run.candidateCommit === undefined ||
+    run.worktreePath === undefined
+  )
+    throw new MillError(
+      "REVIEW_BASE_UNAVAILABLE",
+      "The authoritative PR base and local candidate must be available.",
+      ExitCode.configuration,
+    );
+  const review = reviewResultSchema.parse(JSON.parse(run.reviewJson ?? "null"));
+  const scope = await captureReviewScope(
+    run.worktreePath,
+    base,
+    run.candidateCommit,
+  );
+  if (review.scope?.digest !== scope.digest)
+    throw new MillError(
+      "REVIEW_SCOPE_STALE",
+      "The reviewed diff differs from GitHub's actual PR base. Synchronize the local base and obtain fresh complete-diff review before delivery.",
+      ExitCode.configuration,
+    );
+  // Reading the provider SHA never fetches or changes local refs implicitly.
+}
+
 function expectedRemoteUrls(
   config: ProposeConfig,
   cloneUrl: string,
@@ -783,6 +819,12 @@ export async function planDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
+    await assertProviderReviewScope(
+      run,
+      config,
+      adapter,
+      operationDeadline(config),
+    );
     const plannedBranch = branchName(config, run);
     const approvalExpiresAt = new Date(
       Date.now() + config.approvalTtlSeconds * 1000,
@@ -951,6 +993,7 @@ export async function openDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
+    await assertProviderReviewScope(run, config, adapter, deadlineMs);
     const liveDigest = proposalDigest({
       run,
       candidate,
@@ -1054,6 +1097,7 @@ export async function openDraftPr(input: {
         delivery,
         push.expectedOldCommit,
       );
+      await assertProviderReviewScope(run, config, adapter, deadlineMs);
       push = {
         ...push,
         status: "call_started",
@@ -1212,6 +1256,7 @@ export async function openDraftPr(input: {
         "delivery.pull_request_intent",
         { effectId: prEffect.id },
       );
+      await assertProviderReviewScope(run, config, adapter, deadlineMs);
       prEffect = {
         ...prEffect,
         status: "call_started",

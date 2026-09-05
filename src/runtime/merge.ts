@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { canonicalDigest } from "../contracts/canonical.js";
+import { assessImpactManifest } from "../planning/impact.js";
 import {
   deliveryRecordSchema,
   mergeApprovalPlanSchema,
@@ -43,6 +44,37 @@ interface MergeContext {
   inputs: RuntimeInputs;
   config: ProposeConfig;
   save(value: Approval): void;
+}
+
+function authorityDeadline(inputs: RuntimeInputs): number {
+  return Math.min(
+    Infinity,
+    ...(inputs.continuity?.impact.exceptions ?? []).map((item) =>
+      Date.parse(item.expiresAt),
+    ),
+    ...(inputs.task.schemaVersion === "2" ? inputs.task.attestations : []).map(
+      (item) => Date.parse(item.expiresAt),
+    ),
+  );
+}
+
+function assertCurrentAuthority(inputs: RuntimeInputs): void {
+  const continuity = inputs.continuity;
+  if (
+    Date.now() >= authorityDeadline(inputs) ||
+    (continuity !== undefined &&
+      !assessImpactManifest({
+        manifest: continuity.impact,
+        product: continuity.product,
+        scenarios: continuity.scenarios,
+        authorityMode: "authorize",
+      }).approved)
+  )
+    throw new MillError(
+      "MERGE_AUTHORITY_EXPIRED",
+      "Current task and impact authority must remain valid before each merge effect.",
+      ExitCode.configuration,
+    );
 }
 
 async function withMergeContext<T>(
@@ -139,9 +171,11 @@ async function preflight(
   limit?: number,
 ) {
   const { inputs, config, delivery, adapter, store } = context;
+  assertCurrentAuthority(inputs);
   const deadlineMs = Math.min(
     Date.now() + config.pollTimeoutSeconds * 1000,
     limit ?? Infinity,
+    authorityDeadline(inputs),
   );
   const binding = await adapter.inspect({ config, deadlineMs });
   const remote = await repositoryRemoteUrl(input.root, config.remoteName);
@@ -183,17 +217,11 @@ async function preflight(
     JSON.parse(run.validationJson ?? "null"),
   );
   const review = reviewResultSchema.parse(JSON.parse(run.reviewJson ?? "null"));
-  const scope = await captureReviewScope(
-    candidate.worktree,
-    `refs/heads/${config.baseBranch}`,
-    candidate.commit,
-  );
   if (
     !validation.passed ||
     validation.candidateCommit !== candidate.commit ||
     review.candidateCommit !== candidate.commit ||
     review.findings.length !== 0 ||
-    review.scope?.digest !== scope.digest ||
     candidate.commit !== delivery.candidateCommit ||
     candidate.tree !== delivery.candidateTree
   )
@@ -214,6 +242,17 @@ async function preflight(
     deadlineMs,
   });
   const pull = observation.pullRequest;
+  const scope = await captureReviewScope(
+    candidate.worktree,
+    observation.defaultBranchHead,
+    candidate.commit,
+  );
+  if (review.scope?.digest !== scope.digest)
+    throw new MillError(
+      "MERGE_EVIDENCE_STALE",
+      "The reviewed diff differs from GitHub's authoritative merge base.",
+      ExitCode.configuration,
+    );
   if (
     pull.nodeId !== delivery.pullRequest.nodeId ||
     pull.number !== delivery.pullRequest.number ||
@@ -289,7 +328,10 @@ export async function planMerge(
       method: input.method,
       markReady: current.observation.pullRequest.draft,
       expiresAt: new Date(
-        Date.now() + current.config.approvalTtlSeconds * 1000,
+        Math.min(
+          Date.now() + current.config.approvalTtlSeconds * 1000,
+          authorityDeadline(context.inputs),
+        ),
       ).toISOString(),
     });
     const approval = {
@@ -339,6 +381,7 @@ export async function applyMerge(
     const effectDeadline = Math.min(
       Date.now() + context.config.pollTimeoutSeconds * 1000,
       Date.parse(plan.expiresAt),
+      authorityDeadline(context.inputs),
     );
     const current = await preflight(input, context, effectDeadline);
     if (
@@ -382,6 +425,7 @@ export async function applyMerge(
         deadlineMs: current.deadlineMs,
       });
     try {
+      assertCurrentAuthority(context.inputs);
       if (Date.now() >= effectDeadline)
         throw new MillError(
           "MERGE_APPROVAL_INVALID",
@@ -428,6 +472,7 @@ export async function applyMerge(
           "Base changed or cancellation was requested before merge.",
           ExitCode.configuration,
         );
+      assertCurrentAuthority(context.inputs);
       save("merge_started");
       await context.adapter.mergeExact({
         config: current.config,

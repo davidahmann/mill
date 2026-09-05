@@ -934,9 +934,30 @@ class GhGitHubAdapter implements GitHubAdapter {
       ),
       "branch protection",
     );
+    const required = object(
+      value.required_status_checks,
+      "required status checks",
+    );
+    const admins = object(value.enforce_admins, "administrator enforcement");
+    if (
+      required.strict !== true ||
+      admins.enabled !== true ||
+      !Array.isArray(required.checks)
+    )
+      return false;
+    const checks = required.checks;
     return (
-      object(value.required_status_checks, "required status checks").strict ===
-      true
+      input.config.requiredChecks.length > 0 &&
+      input.config.requiredChecks.every((name) => {
+        const producer = input.config.checkProducers?.[name];
+        return (
+          producer !== undefined &&
+          checks.filter((item: unknown) => {
+            const check = object(item, "protected check");
+            return check.context === name && check.app_id === producer.appId;
+          }).length === 1
+        );
+      })
     );
   }
 

@@ -24,7 +24,11 @@ Use the actual producer for your repository. A same-name status from another
 App, workflow, event or head cannot satisfy this policy. Mill verifies Actions
 job/run relationships through GitHub readback. Missing, pending, failed or
 skipped required results do not pass. Strict up-to-date required checks must be
-enabled in branch protection; Mill never configures protection itself.
+enabled in branch protection, with each required context bound to its configured
+App ID and administrator/bypass-role enforcement enabled. Missing or weaker
+protection fails closed even if the current checks are green. Mill never
+configures protection itself. GitHub documents this setting as
+[Do not allow bypassing the above settings](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#do-not-allow-bypassing-the-above-settings).
 
 ## Plan, approve, verify
 
@@ -53,6 +57,18 @@ review, feedback and CI before effects. GitHub's merge API compares the exact PR
 head; it does not offer an atomic base-SHA comparison. Strict branch protection
 and fresh base checks constrain that race, and exact merged-tree readback is
 still required. Do not interpret an API success as verified lifecycle closure.
+
+Draft planning, push and PR creation compare the locally reviewed merge-base
+diff with GitHub's authoritative base SHA. An unpushed preparation commit on
+local `main` cannot hide from that gate. If the base is unavailable locally or
+the diff differs, synchronize the base deliberately and obtain fresh full-diff
+review; Mill does not fetch or rewrite refs implicitly. Merge repeats that
+comparison against its live observation.
+
+The earliest task-attestation or impact-exception expiry caps the merge plan and
+effect deadline. Current impact authority is reassessed immediately before
+readiness and merge; expiry after readiness leaves the PR ready but prevents
+merge. Expired authority still permits read-only reconciliation.
 
 ## Interruptions
 

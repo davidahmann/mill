@@ -35,6 +35,10 @@ const authorityPlanSchema = z
       .string()
       .regex(/^[a-f0-9]{40}$/u)
       .optional(),
+    purgeCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
     files: z
       .array(
         z
@@ -66,7 +70,8 @@ function parseAuthorityPlan(
   if (
     record.worktreePath !== expected ||
     (record.state !== "intent" && record.branch === undefined) ||
-    (record.state === "committed" && record.committedCommit === undefined)
+    (record.state === "committed" && record.committedCommit === undefined) ||
+    (record.purgeCommit !== undefined && record.state !== "committed")
   )
     throw new MillError(
       "INVALID_AUTHORITY_PLAN",
@@ -1210,6 +1215,33 @@ export class StateStore {
     });
   }
 
+  beginAuthorityPlanPurge(
+    approvalDigest: string,
+    committedCommit: string,
+  ): void {
+    this.#transaction(() => {
+      const plan = this.authorityPlans().find(
+        (item) => item.approvalDigest === approvalDigest,
+      );
+      if (
+        plan?.state !== "committed" ||
+        (plan.purgeCommit !== undefined && plan.purgeCommit !== committedCommit)
+      )
+        throw new MillError(
+          "INVALID_AUTHORITY_PLAN",
+          "Purge must bind a reconciled exact authority commit.",
+          ExitCode.data,
+        );
+      const checked = parseAuthorityPlan(
+        { ...plan, purgeCommit: committedCommit },
+        this.directory,
+      );
+      this.#database
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(JSON.stringify(checked), `authority_plan:${approvalDigest}`);
+    });
+  }
+
   async backup(): Promise<string> {
     const destination = path.join(
       this.directory,
@@ -1781,6 +1813,12 @@ export async function purgeRepositoryState(
         ExitCode.configuration,
       );
     for (const plan of store.authorityPlans()) {
+      if (plan.purgeCommit === undefined)
+        throw new MillError(
+          "AUTHORITY_PLANS_BLOCK_PURGE",
+          "Authority cleanup requires a durable exact-commit purge intent.",
+          ExitCode.configuration,
+        );
       try {
         await lstat(plan.worktreePath);
       } catch (error) {

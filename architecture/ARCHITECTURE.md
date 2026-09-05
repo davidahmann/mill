@@ -366,6 +366,35 @@ credential access.
 
 ## Release trust
 
+### Attended action authority and recovery
+
+The maintainer owns these trusted CLI boundaries. Model output proposes work; it
+cannot establish approval or completion. Repository UUID/common Git identity
+scopes local state; repository node ID, actor and exact PR identity scope forge
+effects. Public output is minimized, while private evidence remains local.
+
+| Effect                   | Authority at execution                                                                                                              | Denial and recovery                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Compile/apply authority  | Exact source/base/file digest, attendance, build-or-propose ceiling, writer lease                                                   | Inspect-only cannot apply; durable intent prevents duplicate writes; committed-file readback settles                      |
+| Push/open draft          | Exact verified/reviewed candidate and approved delivery plan; reviewed diff equals provider-base diff                               | Changed base scope blocks before each effect; unknown effects require GitHub readback                                     |
+| Ready/merge              | Opt-in exact plan, allowed live actor, producer-bound checks, protection enforced for administrators, current task/impact authority | Expiry is checked at each effect; readiness and merge have separate journal states; ambiguous merge never retries blindly |
+| Purge authority worktree | Confirmed repository UUID, safe runs, reconciled clean files, durable exact-commit deletion intent                                  | An absent worktree requires matching retained Git branch/file evidence; changed or missing evidence blocks                |
+
+These controls apply the Field Guide's typed-action, current-authority, readback
+and recovery patterns (TOL-001/003/004, IAM-002/003, SEC-004/005,
+REL-001/003/005) through Mill-native contracts. They do not claim a hosted
+credential broker, signed chat identity, enterprise tenant service, or full
+Field Guide conformance. Worker profile/context digests and release
+artifact/provenance evidence remain the capability-admission records; no
+self-declared replacement manifest grants authority.
+
+GitHub provides head-SHA compare-and-swap but no atomic requested-base-SHA
+comparison for merges. Required strict checks, matching check App IDs and
+administrator/bypass-role enforcement are mandatory compensating controls. The
+trusted operator must not concurrently change repository policy or refs.
+Post-effect tree readback verifies completion; it is not a substitute for those
+pre-effect controls. Mill never weakens or configures provider protection.
+
 Wave 5 adds three bounded modules without creating another orchestrator. The
 audit module reads repository contracts and exact Git identity and emits a
 schema-valid report; it has no write or effect capability. The qualification

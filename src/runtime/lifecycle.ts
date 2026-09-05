@@ -8,7 +8,7 @@ import {
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
-import { verifyAuthorityPlanCommit } from "./authority-plans.js";
+import { verifyAuthorityPlanPurge } from "./authority-plans.js";
 import {
   codexWorkerAdapter,
   codexAuthStatus,
@@ -1448,8 +1448,17 @@ export async function statePurge(input: {
         ExitCode.configuration,
       );
     }
-    for (const plan of plans)
-      await verifyAuthorityPlanCommit(plan, commonDirectory);
+    for (const plan of plans) {
+      const evidence = await verifyAuthorityPlanPurge(
+        plan,
+        input.root,
+        commonDirectory,
+      );
+      store.beginAuthorityPlanPurge(
+        plan.approvalDigest,
+        evidence.committedCommit,
+      );
+    }
     store.close();
     storeClosed = true;
     for (const plan of plans)

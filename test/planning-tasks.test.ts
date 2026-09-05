@@ -11,6 +11,7 @@ import {
   startLocalRun,
   verifyRun,
   reviewRun,
+  statePurge,
 } from "../src/runtime/lifecycle.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 import { reconcileAuthorityPlans } from "../src/runtime/authority-plans.js";
@@ -97,6 +98,95 @@ async function requestFixture(kind = "prd", allowedPaths = ["src/value.js"]) {
 }
 
 describe("change-plan task compilation", () => {
+  it("keeps inspect-only task apply free of authority writes", async () => {
+    const { fixture, input } = await requestFixture();
+    try {
+      const configPath = path.join(fixture.root, "mill.yaml");
+      await writeFile(
+        configPath,
+        (await readFile(configPath, "utf8")).replace(
+          "trustCeiling: build",
+          "trustCeiling: inspect",
+        ),
+      );
+      await git(fixture.root, ["add", "mill.yaml"]);
+      await git(fixture.root, ["commit", "-m", "test: inspect-only policy"]);
+      const plan = await compileChangeTasks(input);
+      await expect(
+        applyChangeTasks({
+          ...input,
+          approvalDigest: plan.approvalDigest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "TRUST_CEILING_EXCEEDED" });
+      expect(
+        (
+          await git(fixture.root, ["worktree", "list", "--porcelain"])
+        ).stdout.match(/^worktree /gm),
+      ).toHaveLength(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("resumes an interrupted authority-worktree purge only from durable exact-branch evidence", async () => {
+    const { fixture, input } = await requestFixture();
+    try {
+      const plan = await compileChangeTasks(input);
+      const applied = await applyChangeTasks({
+        ...input,
+        approvalDigest: plan.approvalDigest,
+        attended: true,
+      });
+      await git(applied.worktree, ["add", "product"]);
+      await git(applied.worktree, [
+        "commit",
+        "-m",
+        "test: commit generated authority",
+      ]);
+      await reconcileAuthorityPlans({ root: fixture.root });
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const common = await commonGitDirectory(fixture.root);
+      const store = await StateStore.open(inputs.config.repositoryId, common);
+      const record = store.authorityPlans()[0];
+      if (record?.committedCommit === undefined || record.branch === undefined)
+        throw new Error("missing committed plan");
+      store.beginAuthorityPlanPurge(
+        record.approvalDigest,
+        record.committedCommit,
+      );
+      store.close();
+      await git(fixture.root, ["worktree", "remove", applied.worktree]);
+      // Simulate interruption after removal but before database deletion.
+      await git(fixture.root, [
+        "update-ref",
+        `refs/heads/${record.branch}`,
+        record.baseCommit,
+      ]);
+      await expect(
+        statePurge({
+          root: fixture.root,
+          confirmation: inputs.config.repositoryId,
+        }),
+      ).rejects.toMatchObject({ code: "AUTHORITY_PLAN_IDENTITY_MISMATCH" });
+      await git(fixture.root, [
+        "update-ref",
+        `refs/heads/${record.branch}`,
+        record.committedCommit,
+      ]);
+      await statePurge({
+        root: fixture.root,
+        confirmation: inputs.config.repositoryId,
+      });
+      expect(
+        (
+          await git(fixture.root, ["rev-parse", `refs/heads/${record.branch}`])
+        ).stdout.trim(),
+      ).toBe(record.committedCommit);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
   it.each(["prd", "plan", "bug", "review", "maintenance"])(
     "compiles %s through the same deterministic authority path",
     async (kind) => {

@@ -575,6 +575,7 @@ process.stdout.write(result.stdout??"");process.stderr.write(result.stderr??"");
     gh,
     `#!${process.execPath}
 import {readFileSync,writeFileSync} from "node:fs";
+import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
 const read=(name)=>{try{return readFileSync(new URL(name,import.meta.url),"utf8").trim()}catch{return null}};
 const remoteHead=()=>read("./remote-head");
@@ -587,7 +588,7 @@ else if(args.includes("--method")&&endpoint==="repos/example/app/pulls"){
   const value={number:41,node_id:"PR_package_canary",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:field("body")??"",head:{ref:field("head")??"",sha:remoteHead()},base:{ref:field("base")??"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
   writeFileSync(pullPath,JSON.stringify(value),{mode:0o600});console.log(JSON.stringify(value));
 }
-else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${"d".repeat(40)}"}}));
+else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:execFileSync("/usr/bin/git",["rev-parse","main"],{encoding:"utf8"}).trim()}}));
 else if(endpoint.includes("/git/ref/heads/")){const head=remoteHead();if(head===null){console.error("HTTP 404");process.exit(1)}console.log(JSON.stringify({object:{sha:head}}))}
 else if(endpoint.includes("/pulls?")){const value=pull();console.log(JSON.stringify(value===null?[[]]:[[value]]))}
 else if(endpoint.endsWith("/pulls/41")){const value=pull();if(value===null)process.exit(2);console.log(JSON.stringify(value))}

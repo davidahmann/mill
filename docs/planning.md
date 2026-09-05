@@ -46,6 +46,9 @@ approved execution, native verification and read-only review for its selected
 task. Compilation or committing authority does not grant model spend or
 delivery.
 
+`inspect` permits compilation only. Apply requires `build` or `propose` trust at
+the exported runtime boundary, not merely an attended CLI flag.
+
 ## Recovery
 
 Apply intent and exact generated-file digests are stored in repository SQLite
@@ -62,6 +65,10 @@ millctl --json state reconcile-plans
 Readback verifies the recorded repository, branch, clean commit and exact file
 digests. It never writes Git files, approves a task or reruns a failed effect.
 Purge blocks unresolved plans and rechecks committed worktrees before removal.
+It journals each exact retained commit before deletion. After an interrupted
+purge, an absent worktree is accepted only with that journal and matching Git
+branch/file readback. Missing intent or changed branch blocks cleanup; do not
+erase the database to bypass recovery. Purge retains the committed Git branch.
 Restore preserves referenced plan worktrees and quarantines newer unreferenced
 ones. Back up and inspect recovery evidence before any manual disposition.
 

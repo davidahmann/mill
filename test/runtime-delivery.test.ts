@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { stringify as yaml, parse as parseYaml } from "yaml";
 import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { planOutcomeClosure } from "../src/planning/closure.js";
@@ -63,6 +63,7 @@ const git = (root: string, args: string[]) =>
   );
 
 afterEach(() => {
+  vi.restoreAllMocks();
   if (original.state === undefined) delete process.env.MILL_STATE_HOME;
   else process.env.MILL_STATE_HOME = original.state;
   if (original.codex === undefined) delete process.env.MILL_CODEX_PATH;
@@ -82,6 +83,7 @@ function completedCheck(conclusion: string, name = "validate"): GitHubCheck {
 }
 
 class FakeGitHub implements GitHubAdapter {
+  constructor(public defaultBranchHead: string) {}
   binding: GitHubBinding = {
     actorLogin: "operator",
     actorId: 7,
@@ -99,7 +101,6 @@ class FakeGitHub implements GitHubAdapter {
   feedback: GitHubFeedback[] = [];
   mergeCommit: GitHubCommit | null = null;
   mergeIsOnDefaultBranch = false;
-  defaultBranchHead = "d".repeat(40);
   pushFailure: "before" | "after" | null = null;
   prFailure: "before" | "after" | null = null;
   pushCalls = 0;
@@ -116,9 +117,9 @@ class FakeGitHub implements GitHubAdapter {
     return this.binding;
   }
 
-  async readBranch(): Promise<string | null> {
+  async readBranch(input: { branch: string }): Promise<string | null> {
     await Promise.resolve();
-    return this.branchSha;
+    return input.branch === "main" ? this.defaultBranchHead : this.branchSha;
   }
 
   async pushExact(input: {
@@ -366,6 +367,7 @@ async function seedLegacyPostMergeDelivery(
 async function reviewedFixture(
   options: {
     attendedMerge?: boolean;
+    impactExpiresAt?: string;
     githubReviewer?: string;
     requiredChecks?: readonly string[];
     postMergeRequiredChecks?: readonly string[];
@@ -378,6 +380,9 @@ async function reviewedFixture(
 }> {
   const fixture = await runtimeFixture({
     propose: true,
+    ...(options.impactExpiresAt === undefined
+      ? {}
+      : { impactExpiresAt: options.impactExpiresAt }),
     ...(options.attendedMerge === true ? { attendedMerge: true } : {}),
     ...(options.githubReviewer === undefined
       ? {}
@@ -455,11 +460,22 @@ async function planAndOpen(input: {
 }
 
 describe("exact-candidate GitHub draft delivery", () => {
-  it.each(["merge_receipt_lost", "ready_receipt_lost", "success"])(
+  it.each([
+    "merge_receipt_lost",
+    "ready_receipt_lost",
+    "success",
+    "authority_expires_after_ready",
+  ])(
     "requires exact attended merge approval and reconciles %s",
     async (scenario) => {
+      const impactExpiresAt = new Date(Date.now() + 300_000).toISOString();
       const { fixture, runId, candidateCommit, candidateTree } =
-        await reviewedFixture({ attendedMerge: true });
+        await reviewedFixture({
+          attendedMerge: true,
+          ...(scenario === "authority_expires_after_ready"
+            ? { impactExpiresAt }
+            : {}),
+        });
       class MergeGitHub extends FakeGitHub {
         strict = true;
         readyCalls = 0;
@@ -475,6 +491,10 @@ describe("exact-candidate GitHub draft delivery", () => {
           this.readyCalls++;
           if (this.pullRequest === null) throw new Error("missing fake PR");
           this.pullRequest = { ...this.pullRequest, draft: false };
+          if (scenario === "authority_expires_after_ready")
+            vi.spyOn(Date, "now").mockReturnValue(
+              Date.parse(impactExpiresAt) + 1,
+            );
           if (this.loseReadyReceipt) throw new Error("ready receipt lost");
         }
         async mergeExact(input: { headSha: string }) {
@@ -485,7 +505,9 @@ describe("exact-candidate GitHub draft delivery", () => {
           if (this.loseReceipt) throw new Error("merge receipt lost");
         }
       }
-      const adapter = new MergeGitHub();
+      const adapter = new MergeGitHub(
+        (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+      );
       const input = {
         root: fixture.root,
         taskPath: fixture.taskPath,
@@ -541,7 +563,19 @@ describe("exact-candidate GitHub draft delivery", () => {
           }),
         ).rejects.toMatchObject({ code: "MERGE_CHECKS_NOT_GREEN" });
         adapter.checks = [check];
-        adapter.defaultBranchHead = "e".repeat(40);
+        const baseTree = (
+          await git(fixture.root, ["rev-parse", "HEAD^{tree}"])
+        ).stdout.trim();
+        adapter.defaultBranchHead = (
+          await git(fixture.root, [
+            "commit-tree",
+            baseTree,
+            "-p",
+            adapter.defaultBranchHead,
+            "-m",
+            "test: provider base advances",
+          ])
+        ).stdout.trim();
         await expect(
           applyMerge({
             ...input,
@@ -552,6 +586,19 @@ describe("exact-candidate GitHub draft delivery", () => {
         expect(adapter.readyCalls).toBe(0);
         expect(adapter.mergeCalls).toBe(0);
         let fresh = await planMerge({ ...input, method: "squash" });
+        if (scenario === "authority_expires_after_ready") {
+          await expect(
+            applyMerge({
+              ...input,
+              approvalDigest: fresh.digest,
+              attended: true,
+            }),
+          ).rejects.toMatchObject({ code: "MERGE_AUTHORITY_EXPIRED" });
+          expect(adapter.readyCalls).toBe(1);
+          expect(adapter.mergeCalls).toBe(0);
+          expect((await reconcileMerge(input)).state).toBe("ready_verified");
+          return;
+        }
         if (scenario === "ready_receipt_lost") {
           adapter.loseReadyReceipt = true;
           await expect(
@@ -622,7 +669,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("does not enable merge through an existing draft-only grant", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       await planAndOpen({ fixture, runId, adapter });
       await expect(
@@ -639,9 +688,45 @@ describe("exact-candidate GitHub draft delivery", () => {
     }
   });
 
+  it("rejects a local review that omits preparation present in GitHub's actual PR diff", async () => {
+    const { fixture, runId } = await reviewedFixture({
+      postMergeRequiredChecks: ["validate"],
+    });
+    const base = (await git(fixture.root, ["rev-parse", "main"])).stdout.trim();
+    const adapter = new FakeGitHub(base);
+    const input = {
+      root: fixture.root,
+      taskPath: fixture.taskPath,
+      runId,
+      adapter,
+    };
+    try {
+      const plan = await planDraftPr(input);
+      adapter.defaultBranchHead = (
+        await git(fixture.root, ["rev-parse", "main^"])
+      ).stdout.trim();
+      await expect(
+        openDraftPr({
+          ...input,
+          approvalDigest: plan.delivery.proposalDigest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "REVIEW_SCOPE_STALE" });
+      await expect(planDraftPr(input)).rejects.toMatchObject({
+        code: "REVIEW_SCOPE_STALE",
+      });
+      expect(adapter.pushCalls).toBe(0);
+      expect(adapter.createCalls).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("requires an exact attended proposal and closes only after merge readback", async () => {
     const { fixture, runId, candidateTree } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       const planned = await planDraftPr({
         root: fixture.root,
@@ -811,7 +896,9 @@ describe("exact-candidate GitHub draft delivery", () => {
       requiredChecks: ["validate", "dependency-review", "codeql"],
       postMergeRequiredChecks: ["validate", "codeql"],
     });
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       const planned = await planDraftPr({
         root: fixture.root,
@@ -864,7 +951,9 @@ describe("exact-candidate GitHub draft delivery", () => {
     const { fixture, runId, candidateTree } = await reviewedFixture({
       requiredChecks: ["validate", "dependency-review", "codeql"],
     });
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       await planAndOpen({ fixture, runId, adapter });
       await seedLegacyPostMergeDelivery(fixture, runId);
@@ -921,7 +1010,9 @@ describe("exact-candidate GitHub draft delivery", () => {
     const { fixture, runId, candidateTree } = await reviewedFixture({
       requiredChecks: ["validate", "dependency-review", "codeql"],
     });
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       const planned = await planDraftPr({
         root: fixture.root,
@@ -1001,7 +1092,9 @@ describe("exact-candidate GitHub draft delivery", () => {
       requiredChecks: ["validate", "dependency-review", "codeql"],
       postMergeRequiredChecks: ["validate", "dependency-review", "codeql"],
     });
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       await planAndOpen({ fixture, runId, adapter });
       adapter.checks = [
@@ -1034,7 +1127,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("enforces attendance inside the exported mutation boundary", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       const planned = await planDraftPr({
         root: fixture.root,
@@ -1064,7 +1159,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("makes cancellation durable before proposal planning", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       const cancelled = await cancelRun({ root: fixture.root, runId });
       expect(cancelled).toMatchObject({
@@ -1087,7 +1184,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("honors durable cancellation before a subsequent remote effect", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       const planned = await planDraftPr({
         root: fixture.root,
@@ -1121,7 +1220,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("reconciles an unknown effect before making cancellation terminal", async () => {
     const { fixture, runId, candidateCommit } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     adapter.pushFailure = "before";
     try {
       const planned = await planDraftPr({
@@ -1175,7 +1276,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("recovers effects completed before their receipts without duplication", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     adapter.pushFailure = "after";
     adapter.prFailure = "after";
     try {
@@ -1198,7 +1301,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("authorizes one retry only after readback proves the effect absent", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     adapter.pushFailure = "before";
     try {
       const planned = await planDraftPr({
@@ -1252,7 +1357,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("retries one pull-request call only after readback proves absence", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     adapter.prFailure = "before";
     try {
       const planned = await planDraftPr({
@@ -1296,7 +1403,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("blocks after the single readback-authorized remote retry is exhausted", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     adapter.pushFailure = "before";
     try {
       const planned = await planDraftPr({
@@ -1354,7 +1463,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("fails closed for identity drift and every non-success required check", async () => {
     const { fixture, runId } = await reviewedFixture();
-    const changedActor = new FakeGitHub();
+    const changedActor = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     changedActor.binding = { ...changedActor.binding, actorLogin: "intruder" };
     try {
       await expect(
@@ -1367,7 +1478,9 @@ describe("exact-candidate GitHub draft delivery", () => {
       ).rejects.toMatchObject({ code: "GITHUB_BINDING_MISMATCH" });
       expect(changedActor).toMatchObject({ pushCalls: 0, createCalls: 0 });
 
-      const fork = new FakeGitHub();
+      const fork = new FakeGitHub(
+        (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+      );
       fork.binding = { ...fork.binding, fork: true };
       await expect(
         planDraftPr({
@@ -1379,7 +1492,9 @@ describe("exact-candidate GitHub draft delivery", () => {
       ).rejects.toMatchObject({ code: "GITHUB_BINDING_MISMATCH" });
       expect(fork).toMatchObject({ pushCalls: 0, createCalls: 0 });
 
-      const adapter = new FakeGitHub();
+      const adapter = new FakeGitHub(
+        (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+      );
       await planAndOpen({ fixture, runId, adapter });
       for (const conclusion of [
         "failure",
@@ -1442,7 +1557,9 @@ describe("exact-candidate GitHub draft delivery", () => {
     const { fixture, runId, candidateCommit } = await reviewedFixture({
       githubReviewer: "codex-review",
     });
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       await planAndOpen({ fixture, runId, adapter });
       adapter.checks = [completedCheck("failure")];
@@ -1500,7 +1617,9 @@ describe("exact-candidate GitHub draft delivery", () => {
     const { fixture, runId, candidateCommit } = await reviewedFixture({
       githubReviewer: "codex-review",
     });
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       await planAndOpen({ fixture, runId, adapter });
       adapter.checks = [completedCheck("success")];
@@ -1735,7 +1854,9 @@ describe("exact-candidate GitHub draft delivery", () => {
   it("fails closed on PR drift and post-merge evidence until every identity settles", async () => {
     const { fixture, runId, candidateCommit, candidateTree } =
       await reviewedFixture();
-    const adapter = new FakeGitHub();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
     try {
       await planAndOpen({ fixture, runId, adapter });
       if (adapter.pullRequest === null) throw new Error("fake PR missing");

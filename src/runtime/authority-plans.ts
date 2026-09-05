@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { ExitCode, MillError } from "../errors.js";
 import { loadMillConfig, textDigest } from "./inputs.js";
 import {
@@ -6,6 +7,7 @@ import {
   commonGitDirectory,
   readCandidateIdentity,
   readCommittedFile,
+  resolveCommit,
 } from "./repository.js";
 import {
   acquireWriterLease,
@@ -60,6 +62,58 @@ export async function verifyAuthorityPlanCommit(
       ExitCode.configuration,
     );
   return { branch: plan.branch, committedCommit: identity.commit };
+}
+
+/** A deletion intent is recoverable only while Git retains the exact branch and files. */
+export async function verifyAuthorityPlanPurge(
+  plan: AuthorityPlanRecord,
+  root: string,
+  commonDirectory: string,
+) {
+  let present = true;
+  try {
+    await lstat(plan.worktreePath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      present = false;
+    else throw error;
+  }
+  if (present) {
+    const evidence = await verifyAuthorityPlanCommit(plan, commonDirectory);
+    if (
+      plan.purgeCommit !== undefined &&
+      plan.purgeCommit !== evidence.committedCommit
+    )
+      throw new MillError(
+        "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+        "Authority changed after purge intent.",
+        ExitCode.configuration,
+      );
+    return evidence;
+  }
+  if (
+    plan.purgeCommit === undefined ||
+    plan.branch === undefined ||
+    (await resolveCommit(root, `refs/heads/${plan.branch}`)) !==
+      plan.purgeCommit
+  )
+    throw new MillError(
+      "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+      "Missing worktree requires a recorded purge intent and exact retained branch.",
+      ExitCode.configuration,
+    );
+  for (const file of plan.files) {
+    if (
+      textDigest(await readCommittedFile(root, plan.purgeCommit, file.path)) !==
+      file.digest
+    )
+      throw new MillError(
+        "AUTHORITY_PLAN_FILES_CHANGED",
+        "Retained purge commit differs from approved authority.",
+        ExitCode.configuration,
+      );
+  }
+  return { branch: plan.branch, committedCommit: plan.purgeCommit };
 }
 
 /** Readback only: never commits, rewrites files, retries apply, or grants execution. */

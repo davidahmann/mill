@@ -32,6 +32,7 @@ export async function runtimeFixture(
     repositoryPrefix?: string;
     propose?: boolean;
     attendedMerge?: boolean;
+    impactExpiresAt?: string;
     nativeRepair?: boolean;
     githubReviewer?: string;
   } = {},
@@ -122,7 +123,19 @@ scenarios:
     commandIds: ["test"],
     materialDecisions: [],
     unresolved: [],
-    exceptions: [],
+    exceptions:
+      options.impactExpiresAt === undefined
+        ? []
+        : [
+            {
+              id: "temporary-authority",
+              scopeRefs: ["INV-POSITIVE"],
+              reason: "Test bounded authority",
+              approvedBy: "mill-test",
+              approvedAt: "2026-09-02T00:00:00.000Z",
+              expiresAt: options.impactExpiresAt,
+            },
+          ],
     approval: null,
   } as const;
   const impact = stringifyYaml({
