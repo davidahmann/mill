@@ -263,6 +263,47 @@ describe("local delivery lifecycle", () => {
     }
   });
 
+  it("recovers a stale verifier binding instead of indefinitely waiting", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const store = await StateStore.open(
+        "11111111-1111-4111-8111-111111111111",
+        await commonGitDirectory(fixture.root),
+      );
+      store.setActiveProcess(started.run.id, {
+        id: randomUUID(),
+        pid: 99_999_999,
+        processGroup: 99_999_999,
+        identity: `sha256:${"0".repeat(64)}`,
+      });
+      store.close();
+      await expect(
+        runStatus({ root: fixture.root, runId: started.run.id }),
+      ).resolves.toMatchObject({
+        interrupted: true,
+        continuation: {
+          observation: { activeWorker: "not_observed" },
+          next: { action: "verify", attended: true },
+        },
+      });
+      await expect(
+        verifyRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId: started.run.id,
+        }),
+      ).resolves.toMatchObject({ run: { status: "verified" } });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("binds approval to one successful baseline, exact base, and command configuration", async () => {
     const changed = await runtimeFixture();
     activate(changed);

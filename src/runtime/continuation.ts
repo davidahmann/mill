@@ -89,7 +89,7 @@ function nextAction(input: {
       attended: true,
     };
   }
-  if (input.status === "running" || input.interrupted) {
+  if (input.status === "running") {
     return {
       action: "resume",
       reason:
@@ -206,12 +206,13 @@ export function continuationPacket(input: {
   interrupted?: boolean;
   reconciliationRequired?: boolean;
   mergeFinalizationRequired?: boolean;
+  activeWorker?: boolean;
   usage: ContinuationUsage;
 }): RunContinuationPacket {
   const interrupted = input.interrupted === true;
   const reconciliationRequired = input.reconciliationRequired === true;
   const mergeFinalizationRequired = input.mergeFinalizationRequired === true;
-  const activeWorker = input.run.activePid !== undefined;
+  const activeWorker = input.activeWorker ?? input.run.activePid !== undefined;
   return {
     schemaVersion: "1",
     run: {

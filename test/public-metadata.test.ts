@@ -78,6 +78,22 @@ describe("public delivery metadata", () => {
         },
       ]).source,
     ).toBe("unavailable");
+    expect(
+      summarizeUsage([
+        {
+          type: "review.completed",
+          data: {
+            usageSource: "measured",
+            inputTokens: 100,
+            cacheInputTokens: 70,
+          },
+        },
+      ]),
+    ).toMatchObject({
+      source: "unavailable",
+      cacheSource: "measured",
+      cacheInputTokens: 70,
+    });
   });
   it("does not copy multiline or folded commit trailers into PR titles", () => {
     for (const separator of ["\n\n", "\r\n", " "]) {

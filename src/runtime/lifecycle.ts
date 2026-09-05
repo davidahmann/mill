@@ -529,7 +529,7 @@ function reconcileMutatingWorkerAdmissions(
       );
     }
   }
-  store.setActiveProcess(run.id, null);
+  if (active !== undefined) store.setActiveProcess(run.id, null);
 }
 
 function recordProviderUsage(
@@ -846,7 +846,9 @@ export async function verifyRun(input: {
   const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
-    const run = store.getRun(input.runId);
+    let run = store.getRun(input.runId);
+    reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
+    run = store.getRun(run.id);
     if (run.status !== "committed") {
       throw new MillError(
         "RUN_NOT_COMMITTED",
@@ -927,6 +929,8 @@ export async function reviewRun(input: {
   try {
     lease = await acquireWriterLease(store);
     let run = store.getRun(input.runId);
+    reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
+    run = store.getRun(run.id);
     assertEffectAllowsNewWork(run);
     const deadlineMs = persistedRunDeadline(run);
     if (input.refresh === true) {
@@ -1398,11 +1402,14 @@ export async function runStatus(input: {
         }
       }
     }
+    let activeWorker = active !== undefined;
     if (controllerAbsent) {
-      if (
-        active !== undefined &&
-        processIdentityStatus(active) !== "mismatch"
-      ) {
+      const activeStatus =
+        active === undefined ? undefined : processIdentityStatus(active);
+      if (activeStatus === "mismatch") {
+        interrupted = true;
+        activeWorker = false;
+      } else if (active !== undefined) {
         reconciliationRequired = true;
       } else if (run.status === "running") {
         interrupted = true;
@@ -1424,6 +1431,7 @@ export async function runStatus(input: {
         ...(interrupted ? { interrupted } : {}),
         ...(reconciliationRequired ? { reconciliationRequired } : {}),
         ...(effectBoundary.merged ? { mergeFinalizationRequired: true } : {}),
+        activeWorker,
       }),
     };
   } finally {

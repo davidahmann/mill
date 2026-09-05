@@ -26,6 +26,14 @@ export function summarizeUsage(
       continue;
     const value = data as Record<string, unknown>;
     if (
+      value.usageSource === "measured" &&
+      Number.isSafeInteger(value.cacheInputTokens) &&
+      (value.cacheInputTokens as number) >= 0
+    ) {
+      cacheMeasuredCalls++;
+      cacheInputTokens += value.cacheInputTokens as number;
+    }
+    if (
       value.usageSource !== "measured" ||
       !Number.isSafeInteger(value.inputTokens) ||
       !Number.isSafeInteger(value.outputTokens) ||
@@ -36,13 +44,6 @@ export function summarizeUsage(
     measuredCalls++;
     inputTokens += value.inputTokens as number;
     outputTokens += value.outputTokens as number;
-    if (
-      Number.isSafeInteger(value.cacheInputTokens) &&
-      (value.cacheInputTokens as number) >= 0
-    ) {
-      cacheMeasuredCalls++;
-      cacheInputTokens += value.cacheInputTokens as number;
-    }
   }
   return {
     source:
