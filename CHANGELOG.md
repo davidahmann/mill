@@ -1,14 +1,32 @@
 # Changelog
 
-## 0.2.1 — candidate
+All notable changes follow Keep a Changelog and Semantic Versioning.
+
+## [Unreleased]
+
+### Documentation
+
+- Synchronize installation, release status, operating guidance and acceptance
+  closure with the verified `0.2.1` release. Preserve historical failures and
+  the v0.1.5 trust root. No runtime, package or workflow bytes change.
+
+## [0.2.1] - 2026-09-05
 
 Retain the architecture follow-through below and explicitly prepare the pinned
 verifier image on each fresh full-canary runner, including before immutable npm
 publication. Native workflow policy rejects missing, late, conditional,
 failure-ignored or noncanonical preparation. The `v0.2.0` tag remains unchanged
-as prepublication evidence; no npm version or GitHub Release was published.
+as prepublication evidence; no `0.2.0` npm version or GitHub Release was
+published.
 
-## 0.2.0 — publication held
+The preserved `0.2.1` artifact passed independent qualification, OIDC
+publication, npm signatures/provenance and registry-canary checks. GitHub
+finalization was recovered by exact release ID after a duplicate draft/public
+tag lookup selected an empty release. The failed workflow is retained, not
+replayed. Separately approved promotion makes both npm `alpha`/`latest` and
+GitHub Latest point to `0.2.1`. See [release evidence](docs/releases/v0.2.1.md).
+
+### Architecture follow-through
 
 - Add opt-in, exact-plan attended readiness/merge with producer-bound CI,
   strict-protection checks, separate intent journals and readback recovery.
@@ -35,17 +53,8 @@ as prepublication evidence; no npm version or GitHub Release was published.
 - Qualify later releases with the independently pinned v0.1.5 verifier before
   publishing one preserved artifact through the existing OIDC boundary.
 
-Candidate status is not a publication or expanded support claim. Release
-qualification and npm/GitHub readback are separate gates.
-
-All notable changes follow Keep a Changelog and Semantic Versioning.
-
-## [Unreleased]
-
-The follow-through implementation initially prepared `0.2.0`. Release
-qualification, tagging, npm publication, and GitHub Release creation remain
-outstanding and separately authorized; `0.1.5` remains the qualified
-public-alpha trust root.
+These changes retain the bounded public-alpha support claim. The v0.1.5 genesis
+release remains the independently pinned historical trust root.
 
 ### Added
 
@@ -83,6 +92,14 @@ public-alpha trust root.
   while still failing closed when the budget is exhausted.
 - Record the durable tag URL in final GitHub Release evidence instead of the
   temporary URL returned while a release is still a draft.
+
+## 0.2.0 — publication held
+
+The architecture changes listed under `0.2.1` were initially prepared as
+`0.2.0`. Its annotated tag and successful candidate qualification are retained;
+publication was held before npm or GitHub Release creation because the fresh
+publish runner lacked explicit verifier-image preparation. Version `0.2.1`
+contains the repair and fresh qualification. No tag was moved or reused.
 
 ## [0.1.5] - 2026-09-03
 

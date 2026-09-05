@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-architecture-follow-through
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 75a9d65e22414ab274d0a476c456673c1e1c5b9d
 execution_mode: approved_native_maintainer
@@ -56,5 +56,14 @@ stop_conditions:
   - unavailable required verification or release provenance
   - recurring same-subsystem P0 or P1 review findings
 closure:
-  status: pending
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-05
+  release: v0.2.1
+  qualified_source_commit: a2dcd27fa01df9a609b3d057d14dca25c0895262
+  disposition: >-
+    Implementation and release evidence are complete. The containing
+    documentation PR still requires fresh native checks, exact audit and
+    full-diff review, PR CI and resulting-main checks before promotion. This
+    historical task grants no new implementation authority.
   evidence: docs/canaries/architecture-follow-through.md

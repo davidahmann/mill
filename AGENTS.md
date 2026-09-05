@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.0
+Version: 2.1
 
 Status: normative
 
@@ -112,6 +112,23 @@ two-step plan/apply wrapper, never as implicit push authority.
 
 ## Execution boundaries
 
+### Planning and repository context
+
+- `plan tasks --request <path>` compiles an operator-supplied change request and
+  approved impacts into dependency-checked version-2 tasks; prose is not
+  approval. Inspect the proposal before separately approved attended apply.
+  Generated authority needs committed-file reconciliation before task execution
+  or cleanup.
+- `discover` and opt-in repository-map context are bounded, revision-bound
+  derived evidence, not executed test coverage or permission to change scope.
+- `adopt-native` is experimental Node ESM/npm adoption preserving existing
+  source and native commands. It is not the qualified web-recipe adoption path
+  and does not establish arbitrary-stack or pnpm support.
+- Report measured, partial and unavailable usage truthfully. Routine output must
+  not expose private emails, commit trailers, raw worker context or logs.
+
+### Build, verify, review and deliver
+
 - The builder may write only approved paths in its disposable worktree.
 - The builder never receives GitHub mutation tools or forge credentials.
 - Codex uses the operator's existing login and billing. Its workspace sandbox is
@@ -138,10 +155,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   only when every other delivery binding still matches and the subset was
   already required before merge; it never relaxes pre-merge evidence.
 - Readiness and merge require `propose.attendedMerge: true`, producer-bound
-  checks, strict up-to-date protection and exact attended merge-plan approval.
-  Draft delivery alone never grants them. Mill never auto-merges, deploys,
-  provisions a repository or changes branch protection. Read `docs/approvals.md`
-  before operating the optional merge path.
+  checks, strict up-to-date protection enforced for administrators, no
+  bypass-role grants and exact attended merge-plan approval. Draft delivery
+  alone never grants them. Mill never auto-merges, deploys, provisions a
+  repository or changes branch protection. Read `docs/approvals.md` before
+  operating the optional merge path.
 
 ## Native validation
 
@@ -198,7 +216,9 @@ millctl --json support-bundle --run <run-id>
   retains evidence and is not successful apply. Neither reconciliation nor
   abandonment grants new authority or performs the original effect.
 - Restore validates the database and quarantines newer unreferenced worktrees.
-  Purge is allowed only after all runs are reviewed or terminal.
+  Purge is allowed only after all runs are reviewed or terminal. Run purge from
+  a surviving original checkout, never a worktree scheduled for deletion.
+  Preserve an external state backup and candidate branches first.
 - Nested unresolved effects override enclosing run status: no repair, new
   delivery, terminal cancellation, purge or restore may supersede their journal.
   Confirmed merge freezes the candidate until exact post-merge finalization.
@@ -220,6 +240,26 @@ prepare its own digest-pinned verifier image. Publication preparation must
 precede the immutable npm effect; a prior job's Docker cache is not evidence.
 Native workflow policy guards this order. Mill runtime validation still never
 pulls an image implicitly.
+
+The owner-approved GitHub `npm` environment admits only branch `main` and exact
+tag `v0.2.1`, with its required reviewer retained. Routine release dispatch uses
+the exact tag, not an unbound main ref. A future tag requires a separate exact
+environment-policy authorization; never widen to wildcard tags or bypass the
+reviewer gate. Main branch protections remain unchanged.
+
+The current published public alpha is `0.2.1`; both npm `alpha` and `latest` and
+GitHub Latest point to it. Its exact support tuple and expiry are in
+`docs/releases/v0.2.1.md`. This distribution status does not broaden supported
+stacks or autonomy. The v0.1.5 verifier remains the workflow's independently
+pinned policy; do not silently replace it with the newest version.
+
+Publication and channel promotion are distinct effects. Never rerun a publish
+job to recover an already-published npm version. Inventory GitHub releases by
+numeric ID when a tag has both a draft and a public release; do not trust a tag
+lookup to choose the intended record. Reconcile exact assets and obtain owner
+disposition before changing an existing release. Preserve failed runs, tags and
+artifact bytes. Changing npm dist-tags or GitHub Latest requires separate owner
+approval and authoritative readback, not a rebuild.
 
 ## Engineering rules
 

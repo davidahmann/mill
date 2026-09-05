@@ -59,6 +59,23 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+### Approved documentation and release closure
+
+On 2026-09-05 the owner explicitly approved recovery into the existing public
+GitHub release, promotion as GitHub Latest, and then npm `latest` promotion in
+separate attended exchanges. Provider readback confirmed the preserved artifact
+and both distribution channels at `0.2.1`. The duplicate draft, original tags,
+package bytes and failed workflow history remain unchanged.
+
+The owner's subsequent "ok do it ship merge" approval authorizes one coherent
+source-only documentation closure PR, including an overall README/AGENTS check
+against the released code. It includes truthful release/settings/canary notes
+and mechanical closure of the completed increment. The containing PR requires
+fresh native host/OCI checks, exact audit and full-diff static review, green PR
+checks, normal protected merge and resulting-main checks. This grants no new
+runtime implementation, package publication or protection changes. No check is
+waived and no generated text authenticates a human decision.
+
 ### Approved exact-tag publication environment
 
 On 2026-09-05, after the maintainer reported the protected-branch versus
@@ -74,8 +91,8 @@ Provider readback confirmed the exact two rules and unchanged non-branch-policy
 environment controls and main branch protections before further release work.
 The native effect journal preserves the before/after responses. The maintainer
 may record the actual release evidence and mechanical task closure in one
-documentation PR after the remaining qualification and npm/GitHub readback
-gates pass. This record is an account of the owner's approval, not a generated
+documentation PR after the remaining qualification and npm/GitHub readback gates
+pass. This record is an account of the owner's approval, not a generated
 authentication receipt or Factory-profile exception.
 
 ### Publication preflight repair
