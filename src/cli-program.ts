@@ -55,7 +55,10 @@ import { commandResult, formatHuman, type CommandResult } from "./result.js";
 import { safeReadText } from "./security/safe-path.js";
 import { MILL_VERSION } from "./version.js";
 import { applyMerge, planMerge, reconcileMerge } from "./runtime/merge.js";
-import { reconcileAuthorityPlans } from "./runtime/authority-plans.js";
+import {
+  abandonAuthorityPlan,
+  reconcileAuthorityPlans,
+} from "./runtime/authority-plans.js";
 import { planOutcomeClosure } from "./planning/closure.js";
 import { compileChangeTasks, applyChangeTasks } from "./planning/tasks.js";
 import {
@@ -1593,7 +1596,9 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);
       const data = await reconcileAuthorityPlans({ root });
-      const ok = data.plans.every((plan) => plan.state === "committed");
+      const ok = data.plans.every(
+        (plan) => plan.state === "committed" || plan.state === "abandoned",
+      );
       emit(
         io,
         global.json === true,
@@ -1603,6 +1608,31 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           status: ok ? "ok" : "blocked",
           data,
         }),
+      );
+    });
+  state
+    .command("abandon-plan")
+    .description(
+      "abandon an exact failed plan while retaining its clean committed branch",
+    )
+    .requiredOption(
+      "--approve <digest>",
+      "original authority-plan approval digest",
+    )
+    .option("--attended", "confirm attended local disposition")
+    .action(async (options: { approve: string; attended?: boolean }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await abandonAuthorityPlan({
+        root,
+        approvalDigest: options.approve,
+        attended: options.attended === true,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({ command: "state.abandon-plan", ok: true, data }),
       );
     });
   state

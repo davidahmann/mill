@@ -74,8 +74,19 @@ merge. Expired authority still permits read-only reconciliation.
 
 ```sh
 millctl --json status --run RUN
+millctl --json pr reconcile --task product/tasks/TASK.yaml --run RUN
 millctl --json pr merge-reconcile --task product/tasks/TASK.yaml --run RUN
 ```
+
+Use `pr reconcile` for a push or draft-PR journal in `call_started` or
+`effect_unknown`, including when the enclosing run still says `proposing` or
+`blocked`. Readback does not repeat the external call. It classifies that exact
+effect and updates its journal and run status in one transaction. Unavailable or
+conflicting readback leaves the pending evidence intact. Verified absence
+retains the original bounded retry count and approval expiry. Cancellation
+becomes terminal only after the pending effect is classified; reconciliation
+cannot revive an already terminal run. `pr open` never doubles as this recovery
+entry point.
 
 Intent is durable before readiness and merge calls. Never rerun an uncertain
 merge. Readback can establish an exact merged PR, authorized merger and matching

@@ -235,6 +235,16 @@ try {
     }
   }
 
+  const abandonmentHelp = command(
+    bin,
+    ["state", "abandon-plan", "--help"],
+    temporary,
+  );
+  for (const option of ["--approve <digest>", "--attended"]) {
+    if (!abandonmentHelp.includes(option))
+      throw new Error(`Packed abandonment contract is missing ${option}`);
+  }
+
   await Promise.all([
     mkdir(path.join(consumer, "product", "impacts"), { recursive: true }),
     mkdir(path.join(consumer, "product", "tasks"), { recursive: true }),

@@ -29,6 +29,9 @@ Existing closed outcomes are preserved; follow-up work needs a new outcome ID.
 Unmentioned outcomes remain in the plan. Replacing a nonclosed outcome requires
 `supersedesTaskDigest` matching its exact prior task-file bytes. Review that
 supersession in the generated plan before approval; the old task is preserved.
+The replacement must use a fresh task ID and output path. Compilation rejects
+existing task paths with `CHANGE_OUTPUT_EXISTS`, before it offers an approval
+digest or records apply intent; supersession does not authorize overwriting.
 
 ## Apply and execute
 
@@ -71,6 +74,24 @@ branch/file readback. Missing intent or changed branch blocks cleanup; do not
 erase the database to bypass recovery. Purge retains the committed Git branch.
 Restore preserves referenced plan worktrees and quarantines newer unreferenced
 ones. Back up and inspect recovery evidence before any manual disposition.
+
+If a failed plan should not be completed, preserve its partial output in a clean
+commit on its recorded branch, then explicitly abandon that exact plan:
+
+```sh
+millctl --json state abandon-plan --approve sha256:ORIGINAL_PLAN --attended
+```
+
+This records `abandoned`, not successful application or approved authority. It
+does not commit, alter files, replay apply or remove the original plan. The
+receipt binds the retained commit; backups retain the disposition. Purge can
+later remove the disposable worktree only while that exact clean branch is
+retained. Dirty or changed worktrees, a different branch, an active run or an
+unresolved external effect block abandonment. Repeating abandonment is readback
+only; repeating the original apply remains blocked. Use a newly reviewed plan
+for further work. If the worktree was never created or its Git metadata is
+missing, preserve the journal and restore its recorded worktree/branch identity
+before disposition; Mill does not guess ownership or create a recovery branch.
 
 ## Evidence-based closure
 

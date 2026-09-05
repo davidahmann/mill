@@ -59,6 +59,11 @@ describe an unsigned local declaration as authenticated external approval.
 
 ## Verification and operating ownership
 
+The owner's subsequent explicit "fix systemically" request authorizes the
+journal-driven atomic reconciliation and attended failed-plan abandonment
+amendment in `architecture/effect-recovery.md` after review of `83d34b1`.
+Repeated-P1 stops and all independent promotion gates remain in force.
+
 The attended follow-up approval on 2026-09-05 authorizes the focused recovery
 redesign in `architecture/effect-recovery.md` after the second review's
 recurring P1 stop. Its state boundary and four regression groups are part of

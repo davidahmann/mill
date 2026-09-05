@@ -235,6 +235,21 @@ export async function compileChangeTasks(input: {
       budget: request.budget,
     });
     const taskPath = `product/tasks/${draft.id}.yaml`;
+    try {
+      await lstat(path.join(input.root, taskPath));
+      throw new MillError(
+        "CHANGE_OUTPUT_EXISTS",
+        "Generated tasks require fresh IDs; existing task files are never replaced, including during supersession.",
+        ExitCode.configuration,
+      );
+    } catch (error) {
+      if (!(
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ))
+        throw error;
+    }
     files.push({ path: taskPath, content: yaml(task) });
     outcomes.push({
       id: draft.outcomeId,

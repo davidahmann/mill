@@ -110,6 +110,22 @@ tests, 80.90% branch coverage and installed-tarball delivery qualification. The
 exact committed tree still requires fresh host/OCI checks, audit and static
 review.
 
+Candidate `83d34b1` subsequently passed exact host/OCI checks and the structural
+audit, but its independent full-diff review still blocked promotion: a P1 made
+`call_started` push/PR recovery unreachable, and a P2 approved same-ID task
+collisions before apply failed. The owner's "fix systemically" approval
+authorized the next design correction, not release. Red-first tests reproduced
+both findings. The first repaired targeted run passed 46 tests, including hard
+interruptions before/after provider calls, atomic settlement rollback,
+cancellation, collision rejection and preserved failed-plan abandonment. Later
+CLI and malformed-journal cases still require the complete final-candidate gate.
+These receipts are local fixtures, not live GitHub recovery evidence.
+
+The systemic repair then passed the full native gate: 258 tests in 32 files,
+81.26% branch coverage, and installed-tarball draft-PR lifecycle qualification.
+The exact committed host/OCI checks, audit and independent review still gate
+promotion; this working-tree result is not their substitute.
+
 Native tests and fixed cases are deterministic evidence; a single live model run
 is not an estimate of productivity, reliability or customer acceptance. This
 canary does not qualify a new public support tuple. Read-only Codex sandboxing

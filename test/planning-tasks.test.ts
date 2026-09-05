@@ -2,9 +2,10 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { stringify as yaml, parse as parseYaml } from "yaml";
 import { outcomePlanSchema } from "../src/contracts/schemas.js";
+import { runCli } from "../src/cli-program.js";
 import { compileChangeTasks, applyChangeTasks } from "../src/planning/tasks.js";
 import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import {
@@ -15,7 +16,10 @@ import {
   statePurge,
 } from "../src/runtime/lifecycle.js";
 import { runtimeFixture } from "./runtime-fixture.js";
-import { reconcileAuthorityPlans } from "../src/runtime/authority-plans.js";
+import {
+  abandonAuthorityPlan,
+  reconcileAuthorityPlans,
+} from "../src/runtime/authority-plans.js";
 import { commonGitDirectory } from "../src/runtime/repository.js";
 import {
   StateStore,
@@ -99,6 +103,224 @@ async function requestFixture(kind = "prd", allowedPaths = ["src/value.js"]) {
 }
 
 describe("change-plan task compilation", () => {
+  it.each(["intent", "applied"])(
+    "abandons %s only after preserving partial output on its exact clean branch",
+    async (state) => {
+      const { fixture, input } = await requestFixture();
+      try {
+        const plan = await compileChangeTasks(input);
+        const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+        const common = await commonGitDirectory(fixture.root);
+        if (state === "intent") {
+          const interrupted = vi
+            .spyOn(StateStore.prototype, "settleAuthorityPlan")
+            .mockImplementation(() => {
+              throw new Error("interrupted apply");
+            });
+          try {
+            await expect(
+              applyChangeTasks({
+                ...input,
+                approvalDigest: plan.approvalDigest,
+                attended: true,
+              }),
+            ).rejects.toThrow("interrupted apply");
+          } finally {
+            interrupted.mockRestore();
+          }
+        } else
+          await applyChangeTasks({
+            ...input,
+            approvalDigest: plan.approvalDigest,
+            attended: true,
+          });
+        const store = await StateStore.open(inputs.config.repositoryId, common);
+        const record = store.authorityPlans()[0];
+        store.close();
+        if (!record?.branch) throw new Error("missing plan");
+        expect(record.state).toBe(state);
+        // A failed apply may not have written every approved file. It must not
+        // manufacture successful completion just to unlock recovery.
+        await rm(
+          path.join(record.worktreePath, "product/tasks/compiled-value.yaml"),
+        );
+        const abandon = {
+          root: fixture.root,
+          approvalDigest: plan.approvalDigest,
+          attended: true,
+        };
+        await expect(
+          abandonAuthorityPlan({ ...abandon, attended: false }),
+        ).rejects.toMatchObject({ code: "ATTENDANCE_REQUIRED" });
+        await expect(
+          abandonAuthorityPlan({
+            ...abandon,
+            approvalDigest: `sha256:${"0".repeat(64)}`,
+          }),
+        ).rejects.toMatchObject({ code: "INVALID_AUTHORITY_PLAN" });
+        await expect(abandonAuthorityPlan(abandon)).rejects.toMatchObject({
+          code: "DIRTY_CHECKOUT",
+        });
+        await git(record.worktreePath, ["add", "product"]);
+        await git(record.worktreePath, [
+          "commit",
+          "-m",
+          "test: preserve partial failed apply",
+        ]);
+        const retained = (
+          await git(record.worktreePath, ["rev-parse", "HEAD"])
+        ).stdout.trim();
+        await git(record.worktreePath, ["switch", "-c", "test-wrong-branch"]);
+        await expect(abandonAuthorityPlan(abandon)).rejects.toMatchObject({
+          code: "AUTHORITY_PLAN_IDENTITY_MISMATCH",
+        });
+        await git(record.worktreePath, ["switch", record.branch]);
+        const output: string[] = [];
+        const errors: string[] = [];
+        expect(
+          await runCli(
+            [
+              "--json",
+              "--cwd",
+              fixture.root,
+              "state",
+              "abandon-plan",
+              "--approve",
+              plan.approvalDigest,
+              "--attended",
+            ],
+            {
+              stdout: { write: (value) => void output.push(value) },
+              stderr: { write: (value) => void errors.push(value) },
+            },
+          ),
+        ).toBe(0);
+        expect(errors).toEqual([]);
+        const envelope = JSON.parse(output.join("")) as { data: unknown };
+        expect(envelope).toMatchObject({
+          command: "state.abandon-plan",
+          ok: true,
+        });
+        const result = envelope.data;
+        expect(result).toMatchObject({
+          state: "abandoned",
+          retainedCommit: retained,
+          branch: record.branch,
+        });
+        expect(await abandonAuthorityPlan(abandon)).toEqual(result);
+        const preserved = await StateStore.open(
+          inputs.config.repositoryId,
+          common,
+        );
+        const backup = await preserved.backup();
+        expect(preserved.authorityPlans()[0]).toEqual({
+          ...record,
+          state: "abandoned",
+          abandonedCommit: retained,
+        });
+        const retainedBranch = record.branch;
+        expect(() =>
+          preserved.settleAuthorityPlan(plan.approvalDigest, {
+            branch: retainedBranch,
+            committedCommit: retained,
+          }),
+        ).toThrow();
+        preserved.close();
+        await restoreStateBackup(inputs.config.repositoryId, common, backup);
+        expect(
+          (await reconcileAuthorityPlans({ root: fixture.root })).plans[0],
+        ).toMatchObject({ state: "abandoned" });
+        await expect(
+          applyChangeTasks({
+            ...input,
+            approvalDigest: plan.approvalDigest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({
+          code: "CHANGE_APPLY_RECONCILIATION_REQUIRED",
+        });
+        await writeFile(
+          path.join(record.worktreePath, "unexpected.txt"),
+          "retain me",
+        );
+        await expect(
+          statePurge({
+            root: fixture.root,
+            confirmation: inputs.config.repositoryId,
+          }),
+        ).rejects.toMatchObject({ code: "DIRTY_CHECKOUT" });
+        await rm(path.join(record.worktreePath, "unexpected.txt"));
+        await statePurge({
+          root: fixture.root,
+          confirmation: inputs.config.repositoryId,
+        });
+        expect(
+          (
+            await git(fixture.root, [
+              "rev-parse",
+              `refs/heads/${record.branch}`,
+            ])
+          ).stdout.trim(),
+        ).toBe(retained);
+        await expect(
+          readFile(
+            path.join(fixture.root, "product/tasks/compiled-value.yaml"),
+          ),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+  it("rejects existing output paths before approval or apply intent", async () => {
+    const { fixture, request, input } = await requestFixture();
+    try {
+      const prior = await compileChangeTasks(input);
+      for (const file of prior.files)
+        await writeFile(path.join(fixture.root, file.path), file.content);
+      const taskFile = prior.files.find(
+        (file) => file.path === "product/tasks/compiled-value.yaml",
+      );
+      if (!taskFile) throw new Error("missing task");
+      await writeFile(
+        path.join(fixture.root, "change.yaml"),
+        yaml({
+          ...request,
+          tasks: request.tasks.map((task) => ({
+            ...task,
+            supersedesTaskDigest: textDigest(taskFile.content),
+          })),
+        }),
+      );
+      await git(fixture.root, ["add", "product", "change.yaml"]);
+      await git(fixture.root, ["commit", "-m", "test: same-ID supersession"]);
+      await expect(compileChangeTasks(input)).rejects.toMatchObject({
+        code: "CHANGE_OUTPUT_EXISTS",
+      });
+      await expect(
+        applyChangeTasks({
+          ...input,
+          approvalDigest: prior.approvalDigest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "CHANGE_OUTPUT_EXISTS" });
+      expect(
+        await readFile(path.join(fixture.root, taskFile.path), "utf8"),
+      ).toBe(taskFile.content);
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      try {
+        expect(store.authorityPlans()).toEqual([]);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
   it("rejects a missing superseded task instead of dropping closed history", async () => {
     const { fixture, request, input } = await requestFixture();
     try {

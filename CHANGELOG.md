@@ -11,7 +11,12 @@
 - Add bounded repository-map context and experimental native Node ESM/npm
   adoption without replacing existing source or native oracles.
 - Back up generated authority-plan receipts in SQLite and require committed
-  readback before purge; preserve partial apply worktrees.
+  readback before purge; preserve partial apply worktrees. Reject existing task
+  output paths before approval; add attended exact-plan abandonment retaining
+  the original plan and partial-output commit without claiming successful apply.
+- Reconcile interrupted push/PR intent independently of enclosing run status;
+  settle the effect journal and lifecycle atomically without losing cancellation
+  or the original retry budget.
 - Sanitize public PR subjects, omit raw evidence from routine status,
   distinguish structural audits and report measured/partial/unavailable usage
   honestly.

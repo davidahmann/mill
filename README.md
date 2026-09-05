@@ -343,10 +343,10 @@ uncertain external effect without authoritative readback. Use explicit local
 recovery for state and diagnostics:
 
 ```sh
-millctl --json state backup --output /absolute/path/backup.sqlite
-millctl --json state restore --input /absolute/path/backup.sqlite --attended
-millctl --json state purge --attended
-millctl --json support-bundle --output /absolute/path/support.json
+millctl --json state backup
+millctl --json state restore --from /absolute/path/returned-backup.sqlite3
+millctl --json state purge --confirm <repository-uuid>
+millctl --json support-bundle --run <run-id>
 millctl --json detach plan
 ```
 
@@ -356,6 +356,13 @@ Cancellation records intent without discarding the receipt. Use
 `pr merge-reconcile` for readiness/merge; a confirmed merge then requires
 `pr finalize` and green main checks before cleanup. See
 [approval recovery](docs/approvals.md#interruptions).
+
+For generated authority, `state reconcile-plans` verifies the exact committed
+files. A failed plan can instead be explicitly discontinued with
+`state abandon-plan --approve <original-plan-digest> --attended`, after
+preserving partial output in a clean commit on its recorded branch. Abandonment
+retains evidence and does not certify successful apply. See
+[plan recovery](docs/planning.md#recovery).
 
 Restore validates the database before atomic replacement and quarantines newer
 unreferenced worktrees. Detach is plan-only; the operator performs the reviewed

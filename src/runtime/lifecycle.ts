@@ -45,6 +45,7 @@ import {
 import {
   acquireWriterLease,
   isPurgeSafeRun,
+  isSettledAuthorityPlan,
   isTerminalRun,
   purgeRepositoryState,
   publicRunRecord,
@@ -1424,7 +1425,7 @@ export async function statePurge(input: {
     const runs = store.runs();
     for (const run of runs) assertEffectAllowsNewWork(run);
     const plans = store.authorityPlans();
-    if (plans.some((plan) => plan.state !== "committed"))
+    if (plans.some((plan) => !isSettledAuthorityPlan(plan)))
       throw new MillError(
         "AUTHORITY_PLANS_BLOCK_PURGE",
         "Commit generated authority and run state reconcile-plans before purge.",

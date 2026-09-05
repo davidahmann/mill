@@ -2,6 +2,8 @@ import type { z } from "zod";
 import {
   assertEffectAllowsNewWork,
   assertNoUnresolvedEffect,
+  reconcilableDraftEffect,
+  maximumRemoteEffectAttempts,
 } from "./effect-boundary.js";
 import { parse as parseYaml } from "yaml";
 
@@ -42,7 +44,6 @@ import {
 
 export type DeliveryRecord = z.infer<typeof deliveryRecordSchema>;
 type RemoteEffect = DeliveryRecord["effects"][number];
-const maximumRemoteEffectAttempts = 2;
 
 interface DeliveryContext {
   inputs: RuntimeInputs;
@@ -176,56 +177,44 @@ function reconcileAbsentEffect(
   delivery: DeliveryRecord,
   effectValue: RemoteEffect,
 ): { run: PublicRunRecord; delivery: DeliveryRecord } {
-  if (cancellationRequested(store, run.id)) {
-    stopCancelledDelivery(store, run.id, delivery);
-  }
-  if (effectValue.attemptCount >= maximumRemoteEffectAttempts) {
-    const blocked = persistDelivery(
-      store,
-      run.id,
-      {
-        ...upsertEffect(delivery, {
-          ...effectValue,
-          status: "blocked",
-          errorCode: "REMOTE_EFFECT_RETRY_EXHAUSTED",
-          updatedAt: new Date().toISOString(),
-        }),
-        state: "blocked",
-        lastErrorCode: "REMOTE_EFFECT_RETRY_EXHAUSTED",
-      },
-      "delivery.retry_exhausted",
-      { effectId: effectValue.id },
+  const exhausted = effectValue.attemptCount >= maximumRemoteEffectAttempts;
+  const errorCode = exhausted ? "REMOTE_EFFECT_RETRY_EXHAUSTED" : null;
+  return completeDraftReconciliation(store, run, {
+    ...upsertEffect(delivery, {
+      ...effectValue,
+      status: exhausted ? "blocked" : "retryable_absent",
+      errorCode,
+      updatedAt: new Date().toISOString(),
+    }),
+    state: exhausted ? "blocked" : "proposing",
+    lastErrorCode: errorCode,
+  });
+}
+
+function completeDraftReconciliation(
+  store: StateStore,
+  run: RunRecord,
+  delivery: DeliveryRecord,
+) {
+  if (run.deliveryJson === undefined)
+    throw new MillError(
+      "DELIVERY_PLAN_MISSING",
+      "The journal disappeared during readback.",
+      ExitCode.data,
     );
-    const blockedRun = setRunBlocker(
-      store,
-      run,
-      "REMOTE_EFFECT_RETRY_EXHAUSTED",
-      "delivery.blocked",
+  const settled = store.settleDraftEffect(
+    run.id,
+    run.deliveryJson,
+    JSON.stringify(deliveryRecordSchema.parse(delivery)),
+  );
+  const journal = storedDelivery(settled);
+  if (journal.state === "cancelled")
+    throw new MillError(
+      "OPERATOR_CANCELLED",
+      "The effect was reconciled; cancellation prevents further mutation.",
+      ExitCode.temporary,
     );
-    return { run: publicRunRecord(blockedRun), delivery: blocked };
-  }
-  const retryable = persistDelivery(
-    store,
-    run.id,
-    {
-      ...upsertEffect(delivery, {
-        ...effectValue,
-        status: "retryable_absent",
-        errorCode: null,
-        updatedAt: new Date().toISOString(),
-      }),
-      state: "proposing",
-      lastErrorCode: null,
-    },
-    "delivery.effect_absent",
-    { effectId: effectValue.id, attemptCount: effectValue.attemptCount },
-  );
-  const retryableRun = store.transition(
-    run.id,
-    "proposing",
-    "delivery.retry_authorized",
-  );
-  return { run: publicRunRecord(retryableRun), delivery: retryable };
+  return { run: publicRunRecord(settled), delivery: journal };
 }
 
 async function assertReviewedCandidate(
@@ -1045,12 +1034,6 @@ export async function openDraftPr(input: {
           ExitCode.configuration,
         );
       }
-      if (
-        push !== undefined &&
-        (push.status === "call_started" || push.status === "effect_unknown")
-      ) {
-        markUnknown(store, run, delivery, push, "GITHUB_PUSH_OUTCOME_UNKNOWN");
-      }
       if (push?.status === "verified") {
         throw new MillError(
           "REMOTE_BRANCH_CONFLICT",
@@ -1216,19 +1199,6 @@ export async function openDraftPr(input: {
       );
     }
     if (pullRequest === null) {
-      if (
-        prEffect !== undefined &&
-        (prEffect.status === "call_started" ||
-          prEffect.status === "effect_unknown")
-      ) {
-        markUnknown(
-          store,
-          run,
-          delivery,
-          prEffect,
-          "GITHUB_PR_OUTCOME_UNKNOWN",
-        );
-      }
       if (prEffect?.status === "verified" || delivery.pullRequest !== null) {
         throw new MillError(
           "PULL_REQUEST_DISAPPEARED",
@@ -1377,15 +1347,9 @@ export async function reconcileDraftPr(input: {
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   try {
     lease = await acquireWriterLease(store);
-    let run = store.getRun(input.runId);
-    if (run.status !== "effect_unknown") {
-      throw new MillError(
-        "RECONCILIATION_NOT_REQUIRED",
-        "The run has no unknown GitHub effect to reconcile.",
-        ExitCode.configuration,
-      );
-    }
-    let delivery = storedDelivery(run);
+    const run = store.getRun(input.runId);
+    const unknownEffect = reconcilableDraftEffect(run);
+    const delivery = storedDelivery(run);
     const adapter = input.adapter ?? createGitHubAdapter(input.root);
     const deadlineMs = operationDeadline(config);
     const binding = await adapter.inspect({
@@ -1409,24 +1373,6 @@ export async function reconcileDraftPr(input: {
       deadlineMs,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
-    const unknownEffects = delivery.effects.filter(
-      (item) => item.status === "effect_unknown",
-    );
-    if (unknownEffects.length !== 1) {
-      throw new MillError(
-        "GITHUB_RECONCILIATION_STATE_INVALID",
-        "Exactly one external effect must be unknown before reconciliation.",
-        ExitCode.data,
-      );
-    }
-    const unknownEffect = unknownEffects[0];
-    if (unknownEffect === undefined) {
-      throw new MillError(
-        "GITHUB_RECONCILIATION_STATE_INVALID",
-        "The unknown external effect could not be identified.",
-        ExitCode.data,
-      );
-    }
     if (
       unknownEffect.kind === "push" &&
       (readback.branchSha === unknownEffect.expectedOldCommit ||
@@ -1454,26 +1400,17 @@ export async function reconcileDraftPr(input: {
       readback.branchSha === delivery.candidateCommit &&
       readback.pullRequest === null
     ) {
-      delivery = persistDelivery(
-        store,
-        run.id,
-        {
-          ...upsertEffect(delivery, {
-            ...unknownEffect,
-            status: "verified",
-            errorCode: null,
-            updatedAt: new Date().toISOString(),
-          }),
-          state: "proposing",
-          remoteHeadCommit: readback.branchSha,
-          lastErrorCode: null,
-        },
-        "delivery.push_reconciled",
-        { effectId: unknownEffect.id },
-      );
-      assertRemoteMutationNotCancelled(store, run.id, delivery);
-      run = store.transition(run.id, "proposing", "delivery.reconciled");
-      return { run: publicRunRecord(run), delivery };
+      return completeDraftReconciliation(store, run, {
+        ...upsertEffect(delivery, {
+          ...unknownEffect,
+          status: "verified",
+          errorCode: null,
+          updatedAt: new Date().toISOString(),
+        }),
+        state: "proposing",
+        remoteHeadCommit: readback.branchSha,
+        lastErrorCode: null,
+      });
     }
     if (readback.branchSha !== delivery.candidateCommit) {
       throw new MillError(
@@ -1490,36 +1427,27 @@ export async function reconcileDraftPr(input: {
       );
     }
     assertExactPullRequest(readback.pullRequest, delivery, true);
-    delivery = persistDelivery(
-      store,
-      run.id,
-      {
-        ...delivery,
-        state: "awaiting_ci",
-        remoteHeadCommit: readback.branchSha,
-        pullRequest: {
-          number: readback.pullRequest.number,
-          nodeId: readback.pullRequest.nodeId,
-          url: readback.pullRequest.url,
-        },
-        effects: delivery.effects.map((item) =>
-          item.id === unknownEffect.id
-            ? {
-                ...item,
-                status: "verified" as const,
-                errorCode: null,
-                updatedAt: new Date().toISOString(),
-              }
-            : item,
-        ),
-        lastErrorCode: null,
+    return completeDraftReconciliation(store, run, {
+      ...delivery,
+      state: "awaiting_ci",
+      remoteHeadCommit: readback.branchSha,
+      pullRequest: {
+        number: readback.pullRequest.number,
+        nodeId: readback.pullRequest.nodeId,
+        url: readback.pullRequest.url,
       },
-      "delivery.reconciled",
-      { pullRequestNumber: readback.pullRequest.number },
-    );
-    assertRemoteMutationNotCancelled(store, run.id, delivery);
-    run = store.transition(run.id, "awaiting_ci", "delivery.awaiting_ci");
-    return { run: publicRunRecord(run), delivery };
+      effects: delivery.effects.map((item) =>
+        item.id === unknownEffect.id
+          ? {
+              ...item,
+              status: "verified" as const,
+              errorCode: null,
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+      lastErrorCode: null,
+    });
   } finally {
     try {
       await lease?.release();

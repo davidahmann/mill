@@ -12,6 +12,58 @@ supersession, partial authority purge recovery and resumed-usage gaps.
 
 ## Decision and sources of truth
 
+### Approved systemic correction after review of 83d34b1
+
+The owner's subsequent "fix systemically" request authorizes this correction
+after review exposed unreachable interrupted-call recovery and task collisions.
+Earlier green checks remain insufficient evidence, not promotion permission. The
+same deterministic mechanism, owner, trust ceiling and release gates apply.
+
+Blocking and recovery MUST share one typed journal classifier. Push/PR
+`call_started` and `effect_unknown` are equally eligible for readback,
+independent of enclosing run status. Missing, multiple, wrong-candidate or
+merge-owned pending effects block draft reconciliation. Failed or conflicting
+readback leaves the original journal intact; cancellation cannot erase it.
+
+| Authoritative readback                | Atomic local settlement                             |
+| ------------------------------------- | --------------------------------------------------- |
+| Exact old branch / absent PR          | Retryable absent, or blocked at the attempt ceiling |
+| Exact pushed candidate without PR     | Push verified; continue proposing                   |
+| Exact candidate and matching draft PR | Effect verified; await CI                           |
+| Unavailable, conflicting or ambiguous | No settlement and no retry                          |
+
+Effect and run-status settlement MUST share one SQLite transaction, compare the
+original journal bytes and recheck cancellation. This prevents another crash
+between journal and status writes from recreating an unreachable state. Terminal
+runs and pending cancellation cannot be resurrected. Readback never increments
+attempts or calls a provider mutation. New effects still require the original
+unexpired approval, fresh provider preconditions and the two-attempt ceiling.
+`pr open` owns new effects only; `pr reconcile` exclusively owns interrupted
+push/PR recovery. No event-name string grants settlement authority.
+
+Compilation MUST reject existing generated task paths before approval, including
+same-ID supersession. Apply recompiles under the writer lease before intent.
+Require a fresh task ID and preserve old tasks and closed history. Exclusive
+writes remain a final safeguard, not the primary collision detector.
+
+Already-recorded failed local plans get an explicit attended abandonment path,
+not an inferred successful apply or destructive rollback. `state abandon-plan`
+binds the original plan digest and a clean exact commit on its recorded branch.
+The operator first commits partial work they want retained. Abandonment
+preserves the original plan and branch, never replays apply, and grants no task
+or delivery authority. Only this verified terminal disposition permits later
+purge, retaining the same branch/commit. Dirty worktrees, wrong branches, active
+runs and unresolved effects block abandonment; backup/restore must preserve the
+disposition.
+
+Regressions cover push and PR hard interruption before invocation and after
+provider success, absent/conflicting readback, outage, cancellation, mismatched
+enclosing states, bounded retry and atomic settlement rollback. Compiler cases
+cover same-ID supersession, unchanged old bytes, no intent on rejection, partial
+old intents, attended abandonment, backup/restore and retained-branch purge.
+These supplement the unchanged full native, OCI, package and independent review
+gates; a new candidate cannot certify itself with only new tests.
+
 Use deterministic typed policy over the existing durable journal, not a second
 mutable recovery flag. Business-flow pattern: none; vertical profile: none;
 horizontal foundation: none. This is an existing local CLI control boundary, not

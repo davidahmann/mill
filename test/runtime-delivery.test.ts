@@ -2,12 +2,16 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stringify as yaml, parse as parseYaml } from "yaml";
 import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { planOutcomeClosure } from "../src/planning/closure.js";
-import { outcomePlanSchema } from "../src/contracts/schemas.js";
+import {
+  deliveryRecordSchema,
+  outcomePlanSchema,
+} from "../src/contracts/schemas.js";
 
 import { MillError, ExitCode } from "../src/errors.js";
 import {
@@ -50,6 +54,7 @@ import { applyMerge, planMerge, reconcileMerge } from "../src/runtime/merge.js";
 import {
   assertEffectAllowsNewWork,
   externalEffectBoundary,
+  reconcilableDraftEffect,
 } from "../src/runtime/effect-boundary.js";
 
 const original = {
@@ -469,6 +474,245 @@ async function planAndOpen(input: {
 }
 
 describe("exact-candidate GitHub draft delivery", () => {
+  it.each([
+    ["push", "before", false],
+    ["push", "after", false],
+    ["pull_request", "before", false],
+    ["pull_request", "after", false],
+    ["push", "before", true],
+    ["push", "after", true],
+    ["pull_request", "before", true],
+    ["pull_request", "after", true],
+  ] as const)(
+    "recovers a hard interruption of %s %s invocation atomically (cancel=%s)",
+    async (kind, point, cancel) => {
+      const { fixture, runId } = await reviewedFixture();
+      const adapter = new FakeGitHub(
+        (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+      );
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      };
+      try {
+        const planned = await planDraftPr(input);
+        // Invoked below with .call(this, ...) to preserve the real store binding.
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        const original = StateStore.prototype.setDelivery;
+        const start =
+          kind === "push"
+            ? "delivery.push_started"
+            : "delivery.pull_request_started";
+        const done =
+          kind === "push"
+            ? "delivery.push_verified"
+            : "delivery.pull_request_verified";
+        const interruption = vi
+          .spyOn(StateStore.prototype, "setDelivery")
+          .mockImplementation(function (
+            this: StateStore,
+            id,
+            json,
+            event,
+            details,
+          ) {
+            if (point === "after" && event === done)
+              throw new Error("hard interruption");
+            const result = original.call(this, id, json, event, details);
+            if (point === "before" && event === start)
+              throw new Error("hard interruption");
+            return result;
+          });
+        await expect(
+          openDraftPr({
+            ...input,
+            approvalDigest: planned.delivery.proposalDigest,
+            attended: true,
+          }),
+        ).rejects.toThrow("hard interruption");
+        interruption.mockRestore();
+        const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+        const store = await StateStore.open(
+          inputs.config.repositoryId,
+          await commonGitDirectory(fixture.root),
+        );
+        try {
+          const initial = store.getRun(runId);
+          expect(initial.status).toBe("proposing");
+          expect((await fixtureDelivery(fixture, runId)).effects).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                kind,
+                status: "call_started",
+                attemptCount: 1,
+              }),
+            ]),
+          );
+          const counts = { push: adapter.pushCalls, pr: adapter.createCalls };
+          if (kind === "push" && point === "before" && !cancel) {
+            if (initial.deliveryJson === undefined)
+              throw new Error("missing journal");
+            const originalJournal = initial.deliveryJson;
+            const journal = deliveryRecordSchema.parse(
+              JSON.parse(initial.deliveryJson),
+            );
+            const pending = reconcilableDraftEffect(initial);
+            const next = {
+              ...journal,
+              state: "proposing",
+              effects: journal.effects.map((effect) =>
+                effect.id === pending.id
+                  ? { ...effect, status: "retryable_absent" }
+                  : effect,
+              ),
+            };
+            expect(() =>
+              store.settleDraftEffect(runId, "{}", JSON.stringify(next)),
+            ).toThrow("journal changed");
+            for (const altered of [
+              { ...next, candidateCommit: "a".repeat(40) },
+              { ...next, effects: [] },
+              {
+                ...next,
+                effects: next.effects.map((effect) => ({
+                  ...effect,
+                  attemptCount: 2,
+                })),
+              },
+              { ...next, state: "awaiting_ci" },
+              {
+                ...next,
+                state: "blocked",
+                effects: next.effects.map((effect) => ({
+                  ...effect,
+                  status: "blocked",
+                })),
+              },
+            ])
+              expect(() =>
+                store.settleDraftEffect(
+                  runId,
+                  originalJournal,
+                  JSON.stringify(altered),
+                ),
+              ).toThrow();
+            const variants = [
+              {
+                ...journal,
+                effects: [
+                  ...journal.effects,
+                  { ...pending, id: `${pending.id}-duplicate` },
+                ],
+              },
+              { ...journal, candidateCommit: "a".repeat(40) },
+              { ...journal, candidateTree: "a".repeat(40) },
+              { ...journal, runId: "another-run" },
+              {
+                ...journal,
+                effects: journal.effects.map((effect) => ({
+                  ...effect,
+                  attemptCount: 0,
+                })),
+              },
+            ];
+            for (const invalid of variants)
+              expect(() =>
+                reconcilableDraftEffect({
+                  ...initial,
+                  deliveryJson: JSON.stringify(invalid),
+                }),
+              ).toThrow();
+            const withoutJournal = { ...initial };
+            delete withoutJournal.deliveryJson;
+            expect(() => reconcilableDraftEffect(withoutJournal)).toThrow(
+              "No delivery journal",
+            );
+            expect(() =>
+              reconcilableDraftEffect({
+                ...initial,
+                status: "effect_unknown",
+                deliveryJson: JSON.stringify({ ...journal, effects: [] }),
+              }),
+            ).toThrow("Exactly one interrupted effect");
+            expect(store.getRun(runId)).toEqual(initial);
+          }
+          await expect(
+            openDraftPr({
+              ...input,
+              approvalDigest: planned.delivery.proposalDigest,
+              attended: true,
+            }),
+          ).rejects.toMatchObject({ code: "GITHUB_RECONCILIATION_REQUIRED" });
+          const outage = vi
+            .spyOn(adapter, "readBranch")
+            .mockRejectedValue(new Error("readback unavailable"));
+          await expect(reconcileDraftPr(input)).rejects.toThrow(
+            "readback unavailable",
+          );
+          expect(store.getRun(runId).deliveryJson).toBe(initial.deliveryJson);
+          outage.mockRestore();
+          // Prove a database failure cannot settle only the journal or only status.
+          const db = new DatabaseSync(
+            path.join(store.directory, "state.sqlite3"),
+          );
+          try {
+            db.exec(
+              "CREATE TRIGGER test_fail_settlement BEFORE INSERT ON run_events WHEN NEW.type = 'delivery.effect_reconciled' BEGIN SELECT RAISE(ABORT, 'settlement fault'); END;",
+            );
+            await expect(reconcileDraftPr(input)).rejects.toMatchObject({
+              code: "STATE_WRITE_FAILED",
+            });
+            expect(store.getRun(runId)).toEqual(initial);
+            db.exec("DROP TRIGGER test_fail_settlement;");
+            if (kind === "push")
+              db.prepare("UPDATE runs SET status = 'blocked' WHERE id = ?").run(
+                runId,
+              );
+          } finally {
+            db.close();
+          }
+          if (cancel) {
+            await cancelRun({ root: fixture.root, runId });
+            await expect(reconcileDraftPr(input)).rejects.toMatchObject({
+              code: "OPERATOR_CANCELLED",
+            });
+            expect(store.getRun(runId).status).toBe("cancelled");
+          } else {
+            const result = await reconcileDraftPr(input);
+            expect(result.run.status).toBe(
+              kind === "pull_request" && point === "after"
+                ? "awaiting_ci"
+                : "proposing",
+            );
+          }
+          expect((await fixtureDelivery(fixture, runId)).effects).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                kind,
+                status: point === "before" ? "retryable_absent" : "verified",
+                attemptCount: 1,
+              }),
+            ]),
+          );
+          expect({ push: adapter.pushCalls, pr: adapter.createCalls }).toEqual(
+            counts,
+          );
+          expect(
+            (await runStatus(input)).reconciliationRequired,
+          ).toBeUndefined();
+          await expect(reconcileDraftPr(input)).rejects.toMatchObject({
+            code: "RECONCILIATION_NOT_REQUIRED",
+          });
+        } finally {
+          store.close();
+        }
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
   it.each([
     "merge_receipt_lost",
     "ready_receipt_lost",

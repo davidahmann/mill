@@ -174,8 +174,8 @@ millctl --json status --run <run-id>
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id> --attended
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
-millctl --json state backup --output <absolute-path>
-millctl --json support-bundle --output <absolute-path>
+millctl --json state backup
+millctl --json support-bundle --run <run-id>
 ```
 
 - `resume` is permitted only when Mill can prove no prior worker still owns the
@@ -187,8 +187,11 @@ millctl --json support-bundle --output <absolute-path>
 - For uncertain readiness/merge, use `pr merge-reconcile`; never repeat a
   possibly started merge. Generated task/native-adoption worktrees use durable
   authority-plan records; commit their exact approved files and use
-  `state reconcile-plans` before purge. Neither reconciliation grants new
-  authority or performs the original effect.
+  `state reconcile-plans` before purge. For an intentionally discontinued plan,
+  preserve partial output in a clean commit on the recorded branch and use
+  `state abandon-plan --approve <original-plan-digest> --attended`. Abandonment
+  retains evidence and is not successful apply. Neither reconciliation nor
+  abandonment grants new authority or performs the original effect.
 - Restore validates the database and quarantines newer unreferenced worktrees.
   Purge is allowed only after all runs are reviewed or terminal.
 - Nested unresolved effects override enclosing run status: no repair, new

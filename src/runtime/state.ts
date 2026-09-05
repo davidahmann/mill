@@ -15,6 +15,8 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { z } from "zod";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
+import { deliveryRecordSchema } from "../contracts/schemas.js";
 
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
@@ -22,6 +24,8 @@ import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
 import {
   assertEffectAllowsNewWork,
   externalEffectBoundary,
+  reconcilableDraftEffect,
+  maximumRemoteEffectAttempts,
 } from "./effect-boundary.js";
 
 const authorityPlanSchema = z
@@ -30,7 +34,7 @@ const authorityPlanSchema = z
     approvalDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
     worktreePath: z.string(),
-    state: z.enum(["intent", "applied", "committed"]),
+    state: z.enum(["intent", "applied", "committed", "abandoned"]),
     branch: z
       .string()
       .regex(/^mill\/[a-zA-Z0-9._-]+$/u)
@@ -40,6 +44,10 @@ const authorityPlanSchema = z
       .regex(/^[a-f0-9]{40}$/u)
       .optional(),
     purgeCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    abandonedCommit: z
       .string()
       .regex(/^[a-f0-9]{40}$/u)
       .optional(),
@@ -60,6 +68,10 @@ const authorityPlanSchema = z
 
 export type AuthorityPlanRecord = z.infer<typeof authorityPlanSchema>;
 
+export function isSettledAuthorityPlan(plan: AuthorityPlanRecord): boolean {
+  return plan.state === "committed" || plan.state === "abandoned";
+}
+
 function parseAuthorityPlan(
   value: unknown,
   directory: string,
@@ -75,7 +87,9 @@ function parseAuthorityPlan(
     record.worktreePath !== expected ||
     (record.state !== "intent" && record.branch === undefined) ||
     (record.state === "committed" && record.committedCommit === undefined) ||
-    (record.purgeCommit !== undefined && record.state !== "committed")
+    (record.state === "abandoned" && record.abandonedCommit === undefined) ||
+    (record.abandonedCommit !== undefined && record.state !== "abandoned") ||
+    (record.purgeCommit !== undefined && !isSettledAuthorityPlan(record))
   )
     throw new MillError(
       "INVALID_AUTHORITY_PLAN",
@@ -857,6 +871,96 @@ export class StateStore {
     return this.getRun(id);
   }
 
+  /** The effect-specific controller supplies authoritative readback; publish its
+   * journal and lifecycle disposition together, never as two crashable writes. */
+  settleDraftEffect(
+    id: string,
+    expectedDeliveryJson: string,
+    nextDeliveryJson: string,
+  ): RunRecord {
+    this.#transaction(() => {
+      const run = this.getRun(id);
+      if (run.deliveryJson !== expectedDeliveryJson)
+        throw new MillError(
+          "GITHUB_RECONCILIATION_STATE_INVALID",
+          "The journal changed during readback.",
+          ExitCode.data,
+        );
+      const pending = reconcilableDraftEffect(run);
+      const previous = deliveryRecordSchema.parse(
+        JSON.parse(expectedDeliveryJson),
+      );
+      const next = deliveryRecordSchema.parse(JSON.parse(nextDeliveryJson));
+      const settled = next.effects.find((effect) => effect.id === pending.id);
+      const immutable = {
+        ...next,
+        effects: previous.effects,
+        state: previous.state,
+        remoteHeadCommit: previous.remoteHeadCommit,
+        pullRequest: previous.pullRequest,
+        lastErrorCode: previous.lastErrorCode,
+        updatedAt: previous.updatedAt,
+      };
+      if (
+        settled === undefined ||
+        canonicalDigest(immutable as JsonValue) !==
+          canonicalDigest(previous as JsonValue) ||
+        next.effects.length !== previous.effects.length ||
+        canonicalDigest(
+          next.effects.map((effect) =>
+            effect.id === pending.id ? pending : effect,
+          ),
+        ) !== canonicalDigest(previous.effects) ||
+        canonicalDigest({
+          ...settled,
+          status: pending.status,
+          errorCode: pending.errorCode,
+          updatedAt: pending.updatedAt,
+        }) !== canonicalDigest(pending) ||
+        !(
+          (next.state === "proposing" &&
+            (settled.status === "verified" ||
+              (settled.status === "retryable_absent" &&
+                pending.attemptCount < maximumRemoteEffectAttempts))) ||
+          (next.state === "awaiting_ci" &&
+            settled.status === "verified" &&
+            next.pullRequest !== null &&
+            next.remoteHeadCommit === next.candidateCommit) ||
+          (next.state === "blocked" &&
+            settled.status === "blocked" &&
+            pending.attemptCount >= maximumRemoteEffectAttempts)
+        )
+      )
+        throw new MillError(
+          "GITHUB_RECONCILIATION_STATE_INVALID",
+          "Settlement may only classify the exact pending effect and its lifecycle.",
+          ExitCode.data,
+        );
+      let status: RunStatus = next.state;
+      if (run.cancelRequested || isTerminalRun(run.status)) {
+        status = isTerminalRun(run.status) ? run.status : "cancelled";
+        next.state = "cancelled";
+        next.lastErrorCode = "OPERATOR_CANCELLED";
+      }
+      const now = new Date().toISOString();
+      next.updatedAt = now;
+      this.#database
+        .prepare(
+          "UPDATE runs SET delivery_json = ?, status = ?, block_code = ?, updated_at = ? WHERE id = ?",
+        )
+        .run(JSON.stringify(next), status, next.lastErrorCode, now, id);
+      this.#event(id, "delivery.effect_reconciled", {
+        effectId: pending.id,
+        from: run.status,
+        to: status,
+        effectFrom: pending.status,
+        effectTo: settled.status,
+        attemptCount: settled.attemptCount,
+      });
+    });
+    return this.getRun(id);
+  }
+
   setRemoteFeedback(id: string, feedbackJson: string): RunRecord {
     this.#transaction(() => {
       assertEffectAllowsNewWork(this.getRun(id));
@@ -1221,7 +1325,7 @@ export class StateStore {
       );
       if (
         previous === undefined ||
-        previous.state === "committed" ||
+        isSettledAuthorityPlan(previous) ||
         (previous.branch !== undefined && previous.branch !== evidence.branch)
       )
         throw new MillError(
@@ -1244,6 +1348,35 @@ export class StateStore {
     });
   }
 
+  abandonAuthorityPlan(
+    approvalDigest: string,
+    branch: string,
+    abandonedCommit: string,
+  ): void {
+    this.#transaction(() => {
+      const plan = this.authorityPlans().find(
+        (item) => item.approvalDigest === approvalDigest,
+      );
+      if (
+        plan === undefined ||
+        isSettledAuthorityPlan(plan) ||
+        plan.branch !== branch
+      )
+        throw new MillError(
+          "INVALID_AUTHORITY_PLAN",
+          "Only an unfinished plan on its recorded branch can be abandoned.",
+          ExitCode.configuration,
+        );
+      const record = parseAuthorityPlan(
+        { ...plan, state: "abandoned", abandonedCommit },
+        this.directory,
+      );
+      this.#database
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(JSON.stringify(record), `authority_plan:${approvalDigest}`);
+    });
+  }
+
   beginAuthorityPlanPurge(
     approvalDigest: string,
     committedCommit: string,
@@ -1253,7 +1386,10 @@ export class StateStore {
         (item) => item.approvalDigest === approvalDigest,
       );
       if (
-        plan?.state !== "committed" ||
+        plan === undefined ||
+        !isSettledAuthorityPlan(plan) ||
+        (plan.state === "abandoned" &&
+          plan.abandonedCommit !== committedCommit) ||
         (plan.purgeCommit !== undefined && plan.purgeCommit !== committedCommit)
       )
         throw new MillError(
@@ -1842,7 +1978,7 @@ export async function purgeRepositoryState(
   const store = await StateStore.open(repositoryId, commonDirectory);
   try {
     for (const run of store.runs()) assertEffectAllowsNewWork(run);
-    if (store.authorityPlans().some((plan) => plan.state !== "committed"))
+    if (store.authorityPlans().some((plan) => !isSettledAuthorityPlan(plan)))
       throw new MillError(
         "AUTHORITY_PLANS_BLOCK_PURGE",
         "Commit and reconcile generated authority worktrees before purging state.",
