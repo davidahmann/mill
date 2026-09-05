@@ -215,6 +215,12 @@ contents, one preserved tarball, longitudinal and packed-artifact qualification,
 protected OIDC publication, and npm/GitHub readback. Tag, package, and release
 effects remain separately human authorized.
 
+Every fresh release job that executes the full artifact canary must explicitly
+prepare its own digest-pinned verifier image. Publication preparation must
+precede the immutable npm effect; a prior job's Docker cache is not evidence.
+Native workflow policy guards this order. Mill runtime validation still never
+pulls an image implicitly.
+
 ## Engineering rules
 
 - Node.js 24.20.0, TypeScript, ESM, strict types, and exact dependency pins.

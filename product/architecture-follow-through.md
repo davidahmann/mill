@@ -66,8 +66,8 @@ repair discovered after PR #22 merged as
 `dbed247f19e115866dc828f55b9198a2c4789e21`. The publish job starts on a fresh
 runner but did not explicitly prepare the pinned image required by its registry
 canary, which forbids implicit pulls. Publication of `0.2.0` is held; its pushed
-annotated tag is retained, never moved. This is a bounded maintainer repair under
-the existing attended owner approval, not a new approval receipt.
+annotated tag is retained, never moved. This is a bounded maintainer repair
+under the existing attended owner approval, not a new approval receipt.
 
 The repair may add explicit digest-pinned image preparation before publication,
 require preparation in every release job that executes the full canary, add

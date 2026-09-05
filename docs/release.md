@@ -187,6 +187,17 @@ not qualify a new stack, host tuple, worker profile, model identity, or forge.
 
 ## Routine releases after genesis
 
+The `v0.2.0` tag is retained as prepublication evidence. Publication was held
+after source inspection identified that the fresh publish runner lacked explicit
+preparation of the image required by its registry canary (`--pull never`). No
+`0.2.0` npm publication or GitHub Release was attempted. The `0.2.1` repair
+prepares and inspects the digest-pinned image before the irreversible publish
+step. Every full-canary job must have its own unconditional preparation; jobs do
+not share a Docker cache. Native workflow policy rejects missing, duplicate,
+late, conditional, failure-ignored or noncanonical preparation. This explicit
+release preparation does not authorize implicit image pulls during Mill runtime
+validation. Fresh exact-source and artifact qualification still apply.
+
 Trusted release N must qualify candidate N+1 from outside the candidate's
 control. Preserve the same exact-artifact and readback chain. Any change to the
 worker harness/profile, verifier image, support tuple, schema compatibility, or

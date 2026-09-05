@@ -174,3 +174,44 @@ clean builds, the pinned trusted verifier, one preserved artifact, protected
 OIDC and npm/GitHub readback. No pending or unavailable gate counts as success.
 Recover uncertain effects before retry; rollback uses a new corrective version,
 not rewritten history or moved tags.
+
+## Publication preflight follow-through
+
+PR #22 merged as `dbed247f19e115866dc828f55b9198a2c4789e21`. Its tree
+`2e25bc8453949b023f999b8434b0552281d26c6a` equals reviewed candidate `8ef6791`.
+The candidate and fresh resulting-main native gates passed 260 tests with 81.31%
+branch coverage and the packed-package lifecycle. Exact host/OCI, structural
+audit, full-diff static review, PR and resulting-main checks passed. The sole
+final local P2 was explicitly deferred by the owner: run purge from a surviving
+original checkout, not a worktree scheduled for deletion. This did not change
+downstream runtime review policy.
+
+A new local-only v0.2.0 canary accepted five dependent commits, ending at
+`fb0f61271a51c8ec0265f3bac0c75b6f0550394e`. Every step executed the required
+offline native gate, separate frozen browser checks for its new and all prior
+facts, and fresh static review. Step 3 initially failed exact owner-text
+acceptance; an independent P1 finding admitted one bounded repair without scope,
+oracle, deadline or task changes. The repaired candidate passed every gate. The
+separate seeded health fault `6717753` failed its frozen oracle, remained
+outside accepted history, and the unchanged accepted base passed recovery.
+Provider measurements total 2,421,992 input and 12,479 output tokens, including
+repair; currency cost is unavailable. External state backups and candidate
+branches are retained. This is qualification evidence, not a productivity
+estimate.
+
+The annotated `v0.2.0` tag remains immutable. Candidate run
+[33943691393](https://github.com/davidahmann/mill/actions/runs/33943691393)
+passed both clean builds, preserved-artifact qualification and the pinned v0.1.5
+verifier. Publication was nevertheless held before any npm or GitHub Release
+effect: source inspection found no explicit image preparation in the fresh
+publish job, while its registry canary requires `--pull never`. Candidate jobs
+cannot supply another runner's image cache.
+
+The bounded `0.2.1` repair adds explicit pinned-image preparation before
+publication and a native guard for every full-canary job, including future added
+jobs. Missing, duplicate, late, conditional, failure-ignored or noncanonical
+preparation rejects the workflow. New negative guard cases failed before the
+repair; the targeted guard and independent-artifact tests then passed. Earlier
+lint and version-alignment failures are retained and corrected without changing
+their acceptance tests. Exact candidate checks/review, a fresh matched canary,
+PR/main readback and the complete immutable release chain still gate promotion.
