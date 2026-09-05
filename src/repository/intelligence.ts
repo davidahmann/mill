@@ -14,7 +14,7 @@ import { scanRepository } from "./scan.js";
 const execFileAsync = promisify(execFile);
 
 const extractorId = "mill.repository-intelligence";
-const extractorVersion = "2";
+const extractorVersion = "3";
 const sourceExtensions = new Set([
   ".cjs",
   ".cts",
@@ -776,15 +776,20 @@ export async function discoverRepository(
   }
   const sourceFiles = listed.files;
   const sourceSet = new Set(sourceFiles);
-  const modules = await Promise.all(
-    sourceFiles.map(async (file) =>
-      inspectModule(
-        file,
-        await readCapturedSource(root, file, committed),
-        sourceSet,
-      ),
-    ),
-  );
+  const modules: ModuleObservation[] = [];
+  let totalSourceBytes = 0;
+  for (const file of sourceFiles) {
+    const source = await readCapturedSource(root, file, committed);
+    totalSourceBytes += Buffer.byteLength(source, "utf8");
+    if (totalSourceBytes > 32 * 1024 * 1024) {
+      throw new MillError(
+        "DISCOVERY_BYTE_BUDGET_EXCEEDED",
+        "Discovery exceeds its 32 MiB aggregate source budget; no complete map was produced.",
+        ExitCode.data,
+      );
+    }
+    modules.push(inspectModule(file, source, sourceSet));
+  }
   const inventory = sourceFiles
     .filter(isTestPath)
     .map((file) => ({ path: file, source: "filename" as const }));

@@ -14,10 +14,67 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
+import { z } from "zod";
 
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
 import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
+
+const authorityPlanSchema = z
+  .object({
+    kind: z.enum(["tasks", "native_adoption"]),
+    approvalDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    worktreePath: z.string(),
+    state: z.enum(["intent", "applied", "committed"]),
+    branch: z
+      .string()
+      .regex(/^mill\/[a-zA-Z0-9._-]+$/u)
+      .optional(),
+    committedCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    files: z
+      .array(
+        z
+          .object({
+            path: z
+              .string()
+              .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[a-zA-Z0-9_./-]+$/u),
+            digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
+export type AuthorityPlanRecord = z.infer<typeof authorityPlanSchema>;
+
+function parseAuthorityPlan(
+  value: unknown,
+  directory: string,
+): AuthorityPlanRecord {
+  const record = authorityPlanSchema.parse(value);
+  const prefix = record.kind === "tasks" ? "plan-" : "native-";
+  const expected = path.join(
+    directory,
+    "worktrees",
+    `${prefix}${record.approvalDigest.slice(7)}`,
+  );
+  if (
+    record.worktreePath !== expected ||
+    (record.state !== "intent" && record.branch === undefined) ||
+    (record.state === "committed" && record.committedCommit === undefined)
+  )
+    throw new MillError(
+      "INVALID_AUTHORITY_PLAN",
+      "Authority plan identity or worktree binding is invalid.",
+      ExitCode.data,
+    );
+  return record;
+}
 
 export type RunStatus =
   | "approved"
@@ -79,6 +136,8 @@ export type PublicRunRecord = Omit<
   | "activeProcessIdentity"
   | "deliveryJson"
   | "remoteFeedbackJson"
+  | "validationJson"
+  | "reviewJson"
 >;
 
 export function publicRunRecord(run: RunRecord): PublicRunRecord {
@@ -91,6 +150,8 @@ export function publicRunRecord(run: RunRecord): PublicRunRecord {
   delete publicRun.activeProcessIdentity;
   delete publicRun.deliveryJson;
   delete publicRun.remoteFeedbackJson;
+  delete publicRun.validationJson;
+  delete publicRun.reviewJson;
   return publicRun;
 }
 
@@ -829,6 +890,11 @@ export class StateStore {
         from: current.status,
         to: "running",
         repairCount: current.repairCount + 1,
+        candidateCommit: current.candidateCommit ?? null,
+        failureCode: current.blockCode ?? null,
+        validationJson: current.validationJson ?? null,
+        reviewJson: current.reviewJson ?? null,
+        remoteFeedbackJson: current.remoteFeedbackJson ?? null,
       });
     });
     return this.getRun(id);
@@ -1069,6 +1135,79 @@ export class StateStore {
       this.#event(id, "run.cancellation_requested", {});
     });
     return this.getRun(id);
+  }
+
+  authorityPlans(): AuthorityPlanRecord[] {
+    return this.#database
+      .prepare(
+        "SELECT key, value FROM metadata WHERE key GLOB 'authority_plan:*'",
+      )
+      .all()
+      .map((row) => {
+        const record = parseAuthorityPlan(
+          JSON.parse(String(row.value)),
+          this.directory,
+        );
+        if (row.key !== `authority_plan:${record.approvalDigest}`)
+          throw new MillError(
+            "INVALID_AUTHORITY_PLAN",
+            "Authority plan key does not match its digest.",
+            ExitCode.data,
+          );
+        return record;
+      });
+  }
+
+  beginAuthorityPlan(record: AuthorityPlanRecord, duplicateCode: string): void {
+    const checked = parseAuthorityPlan(record, this.directory);
+    if (checked.state !== "intent")
+      throw new MillError(
+        "INVALID_AUTHORITY_PLAN",
+        "A plan must begin with durable intent.",
+        ExitCode.data,
+      );
+    const result = this.#database
+      .prepare("INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)")
+      .run(`authority_plan:${checked.approvalDigest}`, JSON.stringify(checked));
+    if (result.changes !== 1)
+      throw new MillError(
+        duplicateCode,
+        "This exact plan already has an apply intent. Reconcile its preserved worktree; do not replay it.",
+        ExitCode.configuration,
+      );
+  }
+
+  settleAuthorityPlan(
+    approvalDigest: string,
+    evidence: { branch: string; committedCommit?: string },
+  ): void {
+    this.#transaction(() => {
+      const previous = this.authorityPlans().find(
+        (item) => item.approvalDigest === approvalDigest,
+      );
+      if (
+        previous === undefined ||
+        previous.state === "committed" ||
+        (previous.branch !== undefined && previous.branch !== evidence.branch)
+      )
+        throw new MillError(
+          "INVALID_AUTHORITY_PLAN",
+          "Authority plan cannot accept this settlement.",
+          ExitCode.data,
+        );
+      const record = parseAuthorityPlan(
+        {
+          ...previous,
+          ...evidence,
+          state:
+            evidence.committedCommit === undefined ? "applied" : "committed",
+        },
+        this.directory,
+      );
+      this.#database
+        .prepare("UPDATE metadata SET value = ? WHERE key = ?")
+        .run(JSON.stringify(record), `authority_plan:${approvalDigest}`);
+    });
   }
 
   async backup(): Promise<string> {
@@ -1510,6 +1649,20 @@ export async function restoreStateBackup(
         throw new Error("backup integrity, schema version, or objects invalid");
       }
       const worktreesDirectory = path.join(directory, "worktrees");
+      const plans = candidate
+        .prepare(
+          "SELECT key, value FROM metadata WHERE key GLOB 'authority_plan:*'",
+        )
+        .all();
+      for (const row of plans) {
+        const record = parseAuthorityPlan(
+          JSON.parse(String(row.value)),
+          directory,
+        );
+        if (row.key !== `authority_plan:${record.approvalDigest}`)
+          throw new Error("authority plan key mismatch");
+        expectedWorktrees.add(record.worktreePath);
+      }
       for (const row of worktrees) {
         const resolved = path.resolve(row.worktree_path);
         if (!isWithin(worktreesDirectory, resolved)) {
@@ -1618,6 +1771,35 @@ export async function purgeRepositoryState(
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return;
     throw error;
+  }
+  const store = await StateStore.open(repositoryId, commonDirectory);
+  try {
+    if (store.authorityPlans().some((plan) => plan.state !== "committed"))
+      throw new MillError(
+        "AUTHORITY_PLANS_BLOCK_PURGE",
+        "Commit and reconcile generated authority worktrees before purging state.",
+        ExitCode.configuration,
+      );
+    for (const plan of store.authorityPlans()) {
+      try {
+        await lstat(plan.worktreePath);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          continue;
+        throw error;
+      }
+      throw new MillError(
+        "AUTHORITY_PLANS_BLOCK_PURGE",
+        "Authority worktrees must be verified and removed through the attended state purge boundary.",
+        ExitCode.configuration,
+      );
+    }
+  } finally {
+    store.close();
   }
   await rm(directory, { recursive: true });
 }

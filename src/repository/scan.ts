@@ -310,6 +310,10 @@ function isAllowedStaticGitConfig(
   key: string,
   value: string,
 ): boolean {
+  // Author identity is inert data. Lifecycle commits still use the approved task's identity.
+  if (section === "user" && ["name", "email"].includes(key)) {
+    return value.length > 0 && value.length <= 320 && !/\p{C}/u.test(value);
+  }
   if (section === "gc") {
     // actions/checkout disables automatic maintenance in the ephemeral runner
     // checkout. This exact static value neither names nor executes a helper.

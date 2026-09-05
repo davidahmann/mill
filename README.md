@@ -8,12 +8,13 @@ without handing one agent an open-ended ticket, production credentials, and the
 power to judge its own work. Product truth stays in the repository. Codex writes
 inside a disposable worktree. Native tests and scenarios verify the committed
 candidate. A separate read-only pass reviews that exact commit. Only the
-attended shipper can use your GitHub identity, and it stops at a draft PR.
+attended shipper can use your GitHub identity. Draft-only is the default;
+repositories may explicitly enable a separately approved, exact-plan merge.
 
 Mill `0.1.5` is the first qualified public alpha. It is available from npm and
 as a GitHub prerelease with provenance, an SBOM, exact-artifact qualification,
 and registry and GitHub readback evidence. The source package identity is now
-prepared as `0.1.6`; this task does not establish release qualification or
+prepared as `0.2.0`; source changes do not establish release qualification or
 publication for that version.
 
 ## Why Mill
@@ -235,13 +236,45 @@ millctl --json pr plan --task product/tasks/TASK.yaml --run <run-id>
 millctl --json pr open --task product/tasks/TASK.yaml --run <run-id> \
   --approve sha256:<delivery-plan> --attended
 millctl --json pr observe --task product/tasks/TASK.yaml --run <run-id>
-# A human marks ready and merges in GitHub.
+# By default, a human marks ready and merges in GitHub.
 millctl --json pr finalize --task product/tasks/TASK.yaml --run <run-id>
 ```
 
 Or use `millctl ship --draft` twice: first to return the proposal, then with its
-exact digest and `--attended` to perform it. `millctl` never marks ready or
-merges.
+exact digest and `--attended` to perform it. Draft delivery never implicitly
+authorizes readiness or merge.
+
+### Approve a merge from your work surface
+
+With `propose.attendedMerge: true`, producer-bound required checks, and strict
+up-to-date branch protection, the attending operator can inspect and approve:
+
+```sh
+millctl --json pr merge-plan --task product/tasks/TASK.yaml --run <run-id> --method squash
+millctl --json pr merge --task product/tasks/TASK.yaml --run <run-id> \
+  --approve sha256:<merge-plan> --attended
+millctl --json pr finalize --task product/tasks/TASK.yaml --run <run-id>
+```
+
+The plan binds PR/head/base, exact tree, actor, method, policy and expiry. A
+chat host can submit the operator's approval through this CLI; Mill does not
+authenticate arbitrary chat messages or let the builder approve its own work.
+See [attended approvals and recovery](docs/approvals.md).
+
+### Compile follow-up work and adopt native brownfield commands
+
+`plan tasks --request product/change.yaml` deterministically compiles an
+operator-supplied PRD/plan/bug/review change request and approved impact
+manifests into version-2 tasks and a dependency-checked outcome plan. Its
+separate `--apply --approve sha256:<plan> --attended` step writes an isolated
+worktree. It does not infer approval or acceptance tests from prose. See
+[planning](docs/planning.md).
+
+`adopt-native --config adoption.yaml` offers experimental Node ESM/npm adoption
+that adds only `mill.yaml` and `mill.lock`, preserving existing code and native
+scripts. Apply requires the exact digest and attendance; dependency preparation,
+baseline qualification and task execution remain separate. See
+[brownfield scope and qualification](docs/brownfield.md).
 
 ### Pull-request and resulting-main checks
 
@@ -274,12 +307,12 @@ exact candidate/tree checks remain required.
 
 Mill separates four principals:
 
-| Principal        | May do                                             | Cannot do                                          |
-| ---------------- | -------------------------------------------------- | -------------------------------------------------- |
-| Builder          | Edit approved paths in a disposable worktree       | Push, merge, deploy, change authority or oracles   |
-| Verifier         | Run declared commands in bounded no-network OCI    | Write candidate source or use forge credentials    |
-| Reviewer         | Read the exact committed candidate                 | Execute or edit code                               |
-| Attended shipper | Push the unchanged candidate and open its draft PR | Change the candidate, mark ready, merge, or deploy |
+| Principal        | May do                                                        | Cannot do                                                        |
+| ---------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Builder          | Edit approved paths in a disposable worktree                  | Push, merge, deploy, change authority or oracles                 |
+| Verifier         | Run declared commands in bounded no-network OCI               | Write candidate source or use forge credentials                  |
+| Reviewer         | Read the exact committed candidate                            | Execute or edit code                                             |
+| Attended shipper | Push/open a draft; separately approved opt-in readiness/merge | Change the candidate, self-approve, bypass protection, or deploy |
 
 Codex uses your existing Codex CLI session and therefore your own provider
 billing. GitHub operations use your existing `gh` session. Another maintainer
@@ -327,7 +360,10 @@ Mill is removed.
 `millctl audit` is a bounded, read-only milestone check for Mill's selected
 recipe and release path. It requires a clean exact Git candidate and reports
 product, code, UX, accessibility, security, dependency, architecture,
-operations, and release checks in a schema-valid JSON envelope.
+operations, and release checks in a schema-valid JSON envelope. These checks are
+labelled `assurance: structural`: they inspect contracts and hooks, not executed
+security, accessibility or business behavior. Native command results, realistic
+scenarios and release canaries are separate evidence.
 
 ```sh
 millctl --json --cwd . audit

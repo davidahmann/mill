@@ -4,6 +4,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { stringify as yaml, parse as parseYaml } from "yaml";
+import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
+import { planOutcomeClosure } from "../src/planning/closure.js";
+import { outcomePlanSchema } from "../src/contracts/schemas.js";
 
 import { MillError, ExitCode } from "../src/errors.js";
 import {
@@ -37,6 +41,7 @@ import { loadRuntimeInputs } from "../src/runtime/inputs.js";
 import { commonGitDirectory } from "../src/runtime/repository.js";
 import { StateStore } from "../src/runtime/state.js";
 import { runtimeFixture } from "./runtime-fixture.js";
+import { applyMerge, planMerge, reconcileMerge } from "../src/runtime/merge.js";
 
 const original = {
   state: process.env.MILL_STATE_HOME,
@@ -44,6 +49,18 @@ const original = {
   docker: process.env.MILL_DOCKER_PATH,
 };
 const execFileAsync = promisify(execFile);
+const git = (root: string, args: string[]) =>
+  execFileAsync(
+    "/usr/bin/git",
+    [
+      "-c",
+      "user.name=Mill Test",
+      "-c",
+      "user.email=mill-test@example.invalid",
+      ...args,
+    ],
+    { cwd: root },
+  );
 
 afterEach(() => {
   if (original.state === undefined) delete process.env.MILL_STATE_HOME;
@@ -348,6 +365,7 @@ async function seedLegacyPostMergeDelivery(
 
 async function reviewedFixture(
   options: {
+    attendedMerge?: boolean;
     githubReviewer?: string;
     requiredChecks?: readonly string[];
     postMergeRequiredChecks?: readonly string[];
@@ -360,6 +378,7 @@ async function reviewedFixture(
 }> {
   const fixture = await runtimeFixture({
     propose: true,
+    ...(options.attendedMerge === true ? { attendedMerge: true } : {}),
     ...(options.githubReviewer === undefined
       ? {}
       : { githubReviewer: options.githubReviewer }),
@@ -436,6 +455,190 @@ async function planAndOpen(input: {
 }
 
 describe("exact-candidate GitHub draft delivery", () => {
+  it.each(["merge_receipt_lost", "ready_receipt_lost", "success"])(
+    "requires exact attended merge approval and reconciles %s",
+    async (scenario) => {
+      const { fixture, runId, candidateCommit, candidateTree } =
+        await reviewedFixture({ attendedMerge: true });
+      class MergeGitHub extends FakeGitHub {
+        strict = true;
+        readyCalls = 0;
+        mergeCalls = 0;
+        loseReceipt = false;
+        loseReadyReceipt = false;
+        async strictChecks() {
+          await Promise.resolve();
+          return this.strict;
+        }
+        async markReady() {
+          await Promise.resolve();
+          this.readyCalls++;
+          if (this.pullRequest === null) throw new Error("missing fake PR");
+          this.pullRequest = { ...this.pullRequest, draft: false };
+          if (this.loseReadyReceipt) throw new Error("ready receipt lost");
+        }
+        async mergeExact(input: { headSha: string }) {
+          await Promise.resolve();
+          expect(input.headSha).toBe(candidateCommit);
+          this.mergeCalls++;
+          this.merge(candidateTree);
+          if (this.loseReceipt) throw new Error("merge receipt lost");
+        }
+      }
+      const adapter = new MergeGitHub();
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      };
+      const check = {
+        ...completedCheck("success"),
+        appId: 15368,
+        workflowPath: ".github/workflows/ci.yml",
+        event: "pull_request",
+        headSha: candidateCommit,
+      };
+      try {
+        await planAndOpen({ fixture, runId, adapter });
+        adapter.checks = [check];
+        await observeDraftPr(input);
+        adapter.strict = false;
+        await expect(
+          planMerge({ ...input, method: "squash" }),
+        ).rejects.toMatchObject({ code: "MERGE_PROTECTION_REQUIRED" });
+        adapter.strict = true;
+        await expect(
+          planMerge({ ...input, method: "merge" }),
+        ).rejects.toMatchObject({ code: "MERGE_METHOD_FORBIDDEN" });
+        const planned = await planMerge({ ...input, method: "squash" });
+        expect(planned.plan).toMatchObject({
+          markReady: true,
+          actorLogin: "operator",
+          headCommit: candidateCommit,
+          candidateTree,
+        });
+        await expect(
+          applyMerge({
+            ...input,
+            approvalDigest: planned.digest,
+            attended: false,
+          }),
+        ).rejects.toMatchObject({ code: "ATTENDANCE_REQUIRED" });
+        await expect(
+          applyMerge({
+            ...input,
+            approvalDigest: `sha256:${"0".repeat(64)}`,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "MERGE_APPROVAL_INVALID" });
+        adapter.checks = [{ ...check, event: "push" }];
+        await expect(
+          applyMerge({
+            ...input,
+            approvalDigest: planned.digest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "MERGE_CHECKS_NOT_GREEN" });
+        adapter.checks = [check];
+        adapter.defaultBranchHead = "e".repeat(40);
+        await expect(
+          applyMerge({
+            ...input,
+            approvalDigest: planned.digest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "MERGE_PLAN_STALE" });
+        expect(adapter.readyCalls).toBe(0);
+        expect(adapter.mergeCalls).toBe(0);
+        let fresh = await planMerge({ ...input, method: "squash" });
+        if (scenario === "ready_receipt_lost") {
+          adapter.loseReadyReceipt = true;
+          await expect(
+            applyMerge({
+              ...input,
+              approvalDigest: fresh.digest,
+              attended: true,
+            }),
+          ).rejects.toThrow("ready receipt lost");
+          expect(
+            (await runStatus({ root: fixture.root, runId }))
+              .reconciliationRequired,
+          ).toBe(true);
+          expect(adapter.mergeCalls).toBe(0);
+          await expect(
+            planMerge({ ...input, method: "squash" }),
+          ).rejects.toMatchObject({ code: "MERGE_RECONCILIATION_REQUIRED" });
+          expect((await reconcileMerge(input)).state).toBe("ready_verified");
+          fresh = await planMerge({ ...input, method: "squash" });
+          expect(fresh.plan.markReady).toBe(false);
+        }
+        adapter.loseReceipt = scenario === "merge_receipt_lost";
+        if (adapter.loseReceipt) {
+          await expect(
+            applyMerge({
+              ...input,
+              approvalDigest: fresh.digest,
+              attended: true,
+            }),
+          ).rejects.toThrow("merge receipt lost");
+          expect(
+            (await fixtureDelivery(fixture, runId)).mergeApproval,
+          ).toMatchObject({ state: "effect_unknown" });
+          expect(
+            (await runStatus({ root: fixture.root, runId }))
+              .reconciliationRequired,
+          ).toBe(true);
+        } else {
+          expect(
+            (
+              await applyMerge({
+                ...input,
+                approvalDigest: fresh.digest,
+                attended: true,
+              })
+            ).state,
+          ).toBe("merged");
+        }
+        await expect(
+          applyMerge({
+            ...input,
+            approvalDigest: fresh.digest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "MERGE_APPROVAL_INVALID" });
+        expect((await reconcileMerge(input)).state).toBe("merged");
+        expect(adapter.readyCalls).toBe(1);
+        expect(adapter.mergeCalls).toBe(1);
+        adapter.mergeChecks = [
+          { ...check, event: "push", headSha: "c".repeat(40) },
+        ];
+        expect((await finalizeDraftPr(input)).run.status).toBe("closed");
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+
+  it("does not enable merge through an existing draft-only grant", async () => {
+    const { fixture, runId } = await reviewedFixture();
+    const adapter = new FakeGitHub();
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      await expect(
+        planMerge({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          adapter,
+          method: "squash",
+        }),
+      ).rejects.toMatchObject({ code: "ATTENDED_MERGE_DISABLED" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("requires an exact attended proposal and closes only after merge readback", async () => {
     const { fixture, runId, candidateTree } = await reviewedFixture();
     const adapter = new FakeGitHub();
@@ -537,6 +740,67 @@ describe("exact-candidate GitHub draft delivery", () => {
           tree: candidateTree,
         },
       });
+      const loaded = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      if (loaded.continuity === undefined)
+        throw new Error("missing continuity");
+      const closurePlan = {
+        schemaVersion: "1",
+        productContractDigest: canonicalDigest(
+          loaded.continuity.product as JsonValue,
+        ),
+        outcomes: [
+          {
+            id: loaded.continuity.impact.outcomeId,
+            title: "Value outcome",
+            acceptance: ["value remains positive"],
+            dependsOn: [],
+            status: "ready",
+            taskRef: fixture.taskPath,
+          },
+          {
+            id: "OUT-NEXT",
+            title: "Next approved outcome",
+            acceptance: ["next behavior"],
+            dependsOn: [loaded.continuity.impact.outcomeId],
+            status: "approved",
+          },
+        ],
+      };
+      await writeFile(
+        path.join(fixture.root, "product/plan.yaml"),
+        yaml(closurePlan),
+      );
+      await git(fixture.root, ["add", "product/plan.yaml"]);
+      await git(fixture.root, [
+        "commit",
+        "-m",
+        "test: record approved outcome plan",
+      ]);
+      const closure = await planOutcomeClosure({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        nextOutcomeId: "OUT-NEXT",
+      });
+      expect(closure.authority).toBe("proposal_only");
+      const closureFile = closure.files[0];
+      if (closureFile === undefined) throw new Error("missing closure file");
+      expect(
+        outcomePlanSchema
+          .parse(parseYaml(closureFile.content))
+          .outcomes.map((item: { status: string }) => item.status),
+      ).toEqual(["closed", "ready"]);
+      expect(
+        await readFile(path.join(fixture.root, "product/plan.yaml"), "utf8"),
+      ).toBe(yaml(closurePlan));
+      await expect(
+        planOutcomeClosure({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          nextOutcomeId: "OUT-ABSENT",
+        }),
+      ).rejects.toMatchObject({ code: "OUTCOME_NEXT_NOT_APPROVED" });
     } finally {
       await fixture.cleanup();
     }

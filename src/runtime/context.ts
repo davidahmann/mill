@@ -8,6 +8,7 @@ import { ExitCode, MillError } from "../errors.js";
 import { safeReadText } from "../security/safe-path.js";
 import type { MillConfig, TaskPacket } from "./inputs.js";
 import { textDigest } from "./inputs.js";
+import { discoverRepository } from "../repository/intelligence.js";
 
 export type ContextManifest = z.infer<typeof contextManifestSchema>;
 
@@ -65,6 +66,7 @@ export async function buildContextManifest(
   taskDigest: string,
 ): Promise<{ manifest: ContextManifest; digest: string }> {
   const included: { path: string; digest: string }[] = [];
+  let contextBytes = 0;
   const instructions = await effectiveInstructionPaths(worktree);
   for (const instruction of instructions) {
     if (sensitive(instruction, task.allowedPaths)) {
@@ -97,6 +99,14 @@ export async function buildContextManifest(
       );
     }
     const source = await safeReadText(worktree, contextPath, 2 * 1024 * 1024);
+    contextBytes += Buffer.byteLength(source, "utf8");
+    if (contextBytes > (task.budget.maxContextBytes ?? 8 * 1024 * 1024)) {
+      throw new MillError(
+        "CONTEXT_BUDGET_EXCEEDED",
+        "Frozen priority context exceeds the approved byte budget; narrow context before model spend.",
+        ExitCode.configuration,
+      );
+    }
     included.push({ path: contextPath, digest: textDigest(source) });
   }
   const effectiveInstructions = instructions.map((instruction) => {
@@ -116,15 +126,66 @@ export async function buildContextManifest(
     writablePatterns: [...task.allowedPaths].sort(),
     observedReads: "unavailable" as const,
   };
+  let repositoryContext: ContextManifest["repositoryContext"];
+  if (task.repositoryIntelligence === true) {
+    const map = await discoverRepository({
+      root: worktree,
+      changedPaths: task.allowedPaths.filter((value) => !value.endsWith("/**")),
+    });
+    if (map.source.commit !== baseCommit)
+      throw new MillError(
+        "DISCOVERY_CONTEXT_STALE",
+        "Repository intelligence does not match the admitted base commit.",
+        ExitCode.configuration,
+      );
+    const leads = new Set(
+      map.changeImpact.flatMap((impact) =>
+        impact.leads.map((lead) => lead.path),
+      ),
+    );
+    const selected = map.modules.filter(
+      (module) =>
+        sensitive(module.path, task.allowedPaths) || leads.has(module.path),
+    );
+    repositoryContext = {
+      authority: "derived_read_only",
+      sourceCommit: map.source.commit,
+      mapDigest: map.digest,
+      extractorVersion: map.extractor.version,
+      modules: selected.slice(0, 24).map((module) => ({
+        path: module.path,
+        digest: module.digest,
+        localImports: module.imports.flatMap((item) =>
+          item.targetPath === undefined ? [] : [item.targetPath],
+        ),
+        unresolvedImports: module.imports.filter(
+          (item) => item.resolution !== "resolved_local",
+        ).length,
+      })),
+      omittedModules: selected.length - Math.min(selected.length, 24),
+      unknowns: [...map.unknowns],
+    };
+    if (
+      contextBytes + Buffer.byteLength(JSON.stringify(repositoryContext)) >
+      (task.budget.maxContextBytes ?? 8 * 1024 * 1024)
+    )
+      throw new MillError(
+        "CONTEXT_BUDGET_EXCEEDED",
+        "Repository intelligence exceeds the frozen priority-context budget.",
+        ExitCode.configuration,
+      );
+  }
   const contextEpoch = canonicalDigest({
     taskDigest,
     baseCommit,
     included,
     effectiveInstructions,
     providerVisibleScope,
+    ...(repositoryContext === undefined ? {} : { repositoryContext }),
   });
   const manifest = contextManifestSchema.parse({
     schemaVersion: "1",
+    ...(repositoryContext === undefined ? {} : { repositoryContext }),
     taskDigest,
     baseCommit,
     provider: "openai",

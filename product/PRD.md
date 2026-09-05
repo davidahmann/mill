@@ -1,6 +1,7 @@
 # Mill product requirements
 
-Status: approved v1 contract Owner: David Ahmann Last updated: 2026-09-03
+Status: approved v1 contract with approved architecture follow-through Owner:
+David Ahmann Last updated: 2026-09-04
 
 ## Problem
 
@@ -60,7 +61,15 @@ Otherwise the evidence disposition blocks.
 - `build`: bounded writes in a disposable worktree and declared commands; no
   GitHub mutation.
 - `propose`: push the verified candidate and open a draft PR through an exact
-  scoped grant; no merge or deployment.
+  scoped grant. Optional attended readiness/merge requires explicitly enabled
+  policy and a separate exact-plan human approval. No deployment.
+
+The approved increment in `architecture-follow-through.md` additionally binds
+complete base-to-candidate review, producer/event/head CI evidence, one bounded
+native-validation repair, deterministic follow-up task compilation, bounded
+brownfield context, experimental native adoption, truthful audit/usage labels
+and independently pinned release verification. These do not broaden worker
+authority or qualify an untested stack.
 
 ## Success measures
 

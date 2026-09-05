@@ -24,8 +24,10 @@ For each wave:
 6. Run a complete exact-candidate local review and one systemic repair wave if
    necessary.
 7. Push the unchanged candidate, open/update one PR, and observe required CI.
-8. A human may mark the draft ready; David, the configured merger, merges it.
-   Observe the resulting main commit and checks.
+8. A human may mark the draft ready and merge in GitHub, or approve the exact
+   optional attended merge plan through their trusted work surface. Recheck
+   producer-bound checks, strict protection and actor/head/base before that
+   separately journaled effect. Observe the resulting main commit and checks.
 
 Before a Wave 4 implementation task can execute, freeze the source manifest,
 approved product contract, stable outcome and invariants, selected scenarios,
@@ -82,6 +84,8 @@ After onboarding, `run next` selects exactly one ready approved outcome. `start`
 may resume that outcome through the existing run, verify, review, delivery
 observation, and closure states. `ship --draft` remains a wrapper over the same
 exact proposal-digest and attended GitHub effect boundary. Wrappers do not mark
-a draft ready, merge, deploy, or create a second lifecycle. Selection compares
-the plan, product contract, impact, acceptance IDs, and task exactly and scans
-all nonterminal runs, not only the newest record, before any spend.
+a draft ready, merge, deploy, or create a second lifecycle. The separate
+`pr merge-plan`/`pr merge` boundary is opt-in and requires its own attended
+approval; see `docs/approvals.md`. Selection compares the plan, product
+contract, impact, acceptance IDs, and task exactly and scans all nonterminal
+runs, not only the newest record, before any spend.

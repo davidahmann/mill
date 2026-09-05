@@ -35,7 +35,9 @@ For every task, follow this path:
 6. Review the committed exact candidate in read-only mode.
 7. Plan the draft PR, obtain approval for that exact plan, then open it
    attended.
-8. Observe CI and review. Stop at the human readiness and merge boundary.
+8. Observe CI and review. Stop at the human readiness and merge boundary, or use
+   the explicitly enabled attended merge path with a separately approved exact
+   merge plan. A builder/reviewer cannot submit that approval.
 9. Finalize only from provider-authoritative merge and resulting-main evidence.
 
 The founder wrappers (`run next`, `start`, and `ship --draft`) coordinate the
@@ -130,8 +132,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   record without the second list may bind the configured subset during readback
   only when every other delivery binding still matches and the subset was
   already required before merge; it never relaxes pre-merge evidence.
-- Mill never marks ready, auto-merges, deploys, provisions a repository, or
-  changes branch protection.
+- Readiness and merge require `propose.attendedMerge: true`, producer-bound
+  checks, strict up-to-date protection and exact attended merge-plan approval.
+  Draft delivery alone never grants them. Mill never auto-merges, deploys,
+  provisions a repository or changes branch protection. Read `docs/approvals.md`
+  before operating the optional merge path.
 
 ## Native validation
 
@@ -154,9 +159,11 @@ For the final committed candidate, also run:
 node dist/cli.js --json --cwd . audit
 ```
 
-The audit must bind to a clean exact commit/tree and pass every applicable
-product, code, UX, accessibility, security, dependency, architecture,
-operations, and release check.
+The structural audit must bind to a clean exact commit/tree and pass every
+applicable product, code, UX, accessibility, security, dependency, architecture,
+operations, and release check. It does not substitute for executed native
+checks, accessibility/security behavior, scenario evidence or release
+qualification.
 
 ## Recovery
 
@@ -177,6 +184,11 @@ millctl --json support-bundle --output <absolute-path>
   own child process group.
 - An uncertain push or PR operation remains `effect_unknown` until GitHub
   readback classifies it. Reconcile before retry.
+- For uncertain readiness/merge, use `pr merge-reconcile`; never repeat a
+  possibly started merge. Generated task/native-adoption worktrees use durable
+  authority-plan records; commit their exact approved files and use
+  `state reconcile-plans` before purge. Neither reconciliation grants new
+  authority or performs the original effect.
 - Restore validates the database and quarantines newer unreferenced worktrees.
   Purge is allowed only after all runs are reviewed or terminal.
 - Support bundles are redacted. Inspect them before sharing anyway.

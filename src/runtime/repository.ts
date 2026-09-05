@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { findTrustedExecutable } from "../doctor.js";
 import { ExitCode, MillError } from "../errors.js";
+import { canonicalDigest } from "../contracts/canonical.js";
 import { scanRepository } from "../repository/scan.js";
 import { isWithin } from "../security/safe-path.js";
 import type { TaskPacket } from "./inputs.js";
@@ -207,6 +208,40 @@ export async function readCandidateIdentity(
     );
   }
   return { commit, tree };
+}
+
+/** Review the complete merge-base diff, including commits prepared before a task. */
+export async function captureReviewScope(
+  root: string,
+  baseRef: string,
+  candidateCommit: string,
+) {
+  const target = await resolveCommit(root, baseRef);
+  const candidate = await readCandidateIdentity(root, candidateCommit);
+  const baseCommit = (
+    await git(root, ["merge-base", target, candidate.commit])
+  ).trim();
+  const paths = (
+    await git(root, [
+      "diff",
+      "--no-ext-diff",
+      "--no-renames",
+      "--name-only",
+      "-z",
+      baseCommit,
+      candidate.commit,
+    ])
+  )
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  const scope = {
+    baseCommit,
+    candidateCommit: candidate.commit,
+    candidateTree: candidate.tree,
+    changedPaths: paths,
+  };
+  return { ...scope, digest: canonicalDigest(scope) };
 }
 
 /**

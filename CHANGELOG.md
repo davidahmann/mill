@@ -1,10 +1,31 @@
 # Changelog
 
+## 0.2.0 — candidate
+
+- Add opt-in, exact-plan attended readiness/merge with producer-bound CI,
+  strict-protection checks, separate intent journals and readback recovery.
+- Bind local review to the complete base-to-candidate diff, including
+  preparatory commits; preserve one bounded native-validation repair.
+- Compile source-backed change requests into dependency-checked version-2 tasks;
+  bind explicit supersession and propose closure from finalized evidence.
+- Add bounded repository-map context and experimental native Node ESM/npm
+  adoption without replacing existing source or native oracles.
+- Back up generated authority-plan receipts in SQLite and require committed
+  readback before purge; preserve partial apply worktrees.
+- Sanitize public PR subjects, omit raw evidence from routine status,
+  distinguish structural audits and report measured/partial/unavailable usage
+  honestly.
+- Qualify later releases with the independently pinned v0.1.5 verifier before
+  publishing one preserved artifact through the existing OIDC boundary.
+
+Candidate status is not a publication or expanded support claim. Release
+qualification and npm/GitHub readback are separate gates.
+
 All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
-The maintainer-prepared package identity is `0.1.6`. Release qualification,
+The maintainer-prepared package identity is `0.2.0`. Release qualification,
 tagging, npm publication, and GitHub Release creation remain outstanding and
 separately authorized; `0.1.5` remains the qualified public-alpha trust root.
 

@@ -201,32 +201,34 @@ The GitHub adapter is isolated behind the delivery coordinator. Planning reads
 the live delegated actor, repository node identity, clone URL, fork status and
 default branch, then binds them with the candidate commit/tree, task/config,
 branch, required checks, review policy, allowed merge methods, approval expiry,
-and intended effects. Only `pr open` mutates. Its effect journal records intent
-and call start before each push or PR request, caps each effect at two attempts,
-and makes ambiguous results enter `effect_unknown`. Reconciliation performs
-authoritative branch/marker/PR readback without mutation. Expiration blocks new
-mutation authority but never prevents readback or truthful lifecycle closure for
-an already attempted effect. Exact absence permits one retry; a second absent
-outcome blocks for human disposition. The same recorded PR number, node
-identity, marker, branch, base, open-draft state, and observed head are
-invariant whether an ambiguous repair push is absent or landed. A retry performs
-that check again from a fresh readback immediately before recording call start
-and invoking Git. GitHub API collections are paginated under one deadline and
-output budget. Tokens remain behind the operator-owned `gh` and Git
-credential-helper boundary and are not passed to Codex or stored in state.
+and intended effects. Draft delivery mutates only through `pr open`; the
+separate opt-in attended readiness/merge boundary is described below. Its effect
+journal records intent and call start before each push or PR request, caps each
+effect at two attempts, and makes ambiguous results enter `effect_unknown`.
+Reconciliation performs authoritative branch/marker/PR readback without
+mutation. Expiration blocks new mutation authority but never prevents readback
+or truthful lifecycle closure for an already attempted effect. Exact absence
+permits one retry; a second absent outcome blocks for human disposition. The
+same recorded PR number, node identity, marker, branch, base, open-draft state,
+and observed head are invariant whether an ambiguous repair push is absent or
+landed. A retry performs that check again from a fresh readback immediately
+before recording call start and invoking Git. GitHub API collections are
+paginated under one deadline and output budget. Tokens remain behind the
+operator-owned `gh` and Git credential-helper boundary and are not passed to
+Codex or stored in state.
 
 One stable delivery key and branch identify the PR across the single allowed
 repair. A new candidate gets new validation, review, approval, and push-effect
 identity while updating that same PR. Required checks are evaluated on the exact
 current head; missing, pending, conflicting, cancelled, neutral, skipped,
-timed-out, or failed results do not pass. Mill never changes draft readiness or
-merge state, and readiness is not treated as closure authority. Finalization
-requires GitHub to prove the PR head, merge commit, tree, authorized merger
-identity, containment in the configured default branch, allowed merge shape, and
-successful required checks on the exact merge commit. One-parent tree-preserving
-history is classified only as `linear_tree_preserving`, never guessed to be
-squash or rebase from policy. A tree-changing merge requires separate
-revalidation rather than inferred closure.
+timed-out, or failed results do not pass. Draft delivery does not change
+readiness or merge state, and readiness is not treated as closure authority.
+Finalization requires GitHub to prove the PR head, merge commit, tree,
+authorized merger identity, containment in the configured default branch,
+allowed merge shape, and successful required checks on the exact merge commit.
+One-parent tree-preserving history is classified only as
+`linear_tree_preserving`, never guessed to be squash or rebase from policy. A
+tree-changing merge requires separate revalidation rather than inferred closure.
 
 In Wave 2, the qualification approval digest binds a passing baseline's exact
 base commit, canonical task and repository configuration, selected command
@@ -257,6 +259,37 @@ deadline and foreground signal lifecycle, while safety cleanup alone retains its
 independent bounded deadline.
 
 ## Local lifecycle and recovery
+
+### Approved architecture follow-through
+
+The optional merge controller reuses delivery policy and the same writer lease.
+It binds an exact PR/head/base/tree, GitHub operator, method, policy and expiry,
+requires strict checks and App/workflow/event/head provenance, and journals
+readiness and merge separately. GitHub CAS protects the PR head, not an atomic
+base comparison; exact tree and resulting-main readback remain mandatory. The
+attended CLI is a trusted operator boundary, not a signed chat-message verifier.
+
+The task compiler consumes approved product/scenario/impact authority and an
+operator-supplied source-bound change request. It derives dependency-checked
+version-2 tasks and never obtains authority from prose. Native adoption is a
+separate experimental Node ESM/npm path preserving source and native commands.
+Both persist apply intent and file identities inside SQLite before worktree
+effects. Backup/restore therefore retains their identities; committed-file
+readback and purge checks preserve unfinished authority work.
+
+Opt-in context includes a bounded, source-bound static repository-map slice. It
+remains derived evidence. Native validation failures can supply one typed repair
+generation only from failed nonzero-exit evidence on the exact committed
+candidate; infrastructure uncertainty cannot be relabelled a code repair. Failed
+evidence survives the repair. Review binds the complete configured-base
+merge-base diff, including preparatory commits, with commit/tree/path/digest
+identity rechecked before promotion.
+
+Audit categories report structural assurance, not executed behavior. Compact
+status omits raw validation/review data and reports measured/partial/unavailable
+usage without invented cost. Routine release qualification additionally runs the
+verifier and artifact canary pinned to the qualified v0.1.5 commit; candidate
+checks do not replace that independent policy.
 
 Only one writer lease may mutate a repository namespace. The lease is a
 dedicated SQLite exclusive transaction: kernel ownership makes acquisition

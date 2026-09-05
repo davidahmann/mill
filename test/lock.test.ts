@@ -10,6 +10,7 @@ import {
   readLockStatus,
 } from "../src/config/lock.js";
 import { safeReadText } from "../src/security/safe-path.js";
+import { MILL_VERSION } from "../src/version.js";
 import { temporaryDirectory } from "./helpers.js";
 
 describe("exact version and safe path contracts", () => {
@@ -88,7 +89,7 @@ describe("exact version and safe path contracts", () => {
     try {
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.6"\n',
+        `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\n`,
       );
       await expect(
         enforceExactVersion(temporary.path),

@@ -44,6 +44,7 @@ export interface ReviewerWorkerInput extends WorkerLifecycle {
   task: TaskPacket;
   manifest: ContextManifest;
   candidateCommit: string;
+  reviewScope?: NonNullable<z.infer<typeof reviewResultSchema>["scope"]>;
   deadlineMs: number;
   maxOutputBytes: number;
 }

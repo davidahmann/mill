@@ -172,6 +172,63 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  independent-policy:
+    name: independent-release-policy
+    if: inputs.mode == 'candidate'
+    needs: qualify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout the separately pinned trusted verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: c547762d7644f62ac48011089564f5f46a48b786 # qualified v0.1.5 trust root
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify trusted source and genesis tag binding
+        run: |
+          test "$(git rev-parse HEAD)" = c547762d7644f62ac48011089564f5f46a48b786
+          test "$(git rev-parse 'v0.1.5^{commit}')" = c547762d7644f62ac48011089564f5f46a48b786
+          test "$(git cat-file -t v0.1.5)" = tag
+      - name: Set up the trusted verifier runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Build trusted tools from their own lock
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Download the exact candidate artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: genesis-candidate-${{ inputs.tag }}
+          path: ${{ runner.temp }}/qualified
+      - name: Assess qualification with trusted policy
+        run: |
+          cp "$RUNNER_TEMP/qualified/qualification.json" .mill-release-qualification.json
+          node dist/cli.js --json --cwd . qualify public-alpha --file .mill-release-qualification.json
+      - name: Prepare the explicitly pinned recipe verifier
+        run: >-
+          docker pull "$(node -e 'const fs=require("node:fs");const
+          y=require("yaml");process.stdout.write(y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage)')"
+      - name:
+          Exercise the candidate using the previous release's independent canary
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          test -n "$artifact"
+          node scripts/qualify-release-artifact.mjs "$artifact" --full-canary --report-output "$RUNNER_TEMP/trusted-canary.json"
+          node -e 'const fs=require("node:fs"),crypto=require("node:crypto");const digest=p=>"sha256:"+crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");fs.writeFileSync(process.argv[3],JSON.stringify({schemaVersion:"1",verifierCommit:"c547762d7644f62ac48011089564f5f46a48b786",artifactDigest:digest(process.argv[1]),qualificationDigest:digest(process.argv[2])})+"\n",{flag:"wx"})' "$artifact" "$RUNNER_TEMP/qualified/qualification.json" "$RUNNER_TEMP/trusted-verifier.json"
+      - name: Preserve independent verification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: independent-policy-${{ inputs.tag }}
+          path: |
+            ${{ runner.temp }}/trusted-verifier.json
+            ${{ runner.temp }}/trusted-canary.json
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: publish-qualified-artifact
     if: inputs.mode == 'publish'
@@ -216,6 +273,22 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
+      - name: Download independent verifier receipt
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: independent-policy-${{ inputs.tag }}
+          path: ${{ runner.temp }}/trusted
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+      - name: Bind candidate run and independently verified artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" > "$RUNNER_TEMP/candidate-run.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID/jobs?per_page=100" > "$RUNNER_TEMP/candidate-jobs.json"
+          node scripts/verify-independent-release.mjs "$RUNNER_TEMP/qualified" "$RUNNER_TEMP/trusted/trusted-verifier.json" "$RUNNER_TEMP/candidate-run.json" "$RUNNER_TEMP/candidate-jobs.json" "$RUNNER_TEMP/identity.json"
       - name: Verify preserved public-alpha qualification
         run: |
           qualification_input=.mill-release-qualification.json

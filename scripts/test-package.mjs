@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { canonicalDigest } from "../dist/contracts/canonical.js";
+import { MILL_VERSION } from "../dist/version.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 const temporary = await mkdtemp(path.join(tmpdir(), "mill-package-"));
@@ -118,7 +119,7 @@ try {
     encoding: "utf8",
     timeout: 10_000,
   });
-  if (version.status !== 0 || version.stdout.trim() !== "0.1.6") {
+  if (version.status !== 0 || version.stdout.trim() !== MILL_VERSION) {
     throw new Error(
       `packed millctl version smoke failed: ${version.stdout}${version.stderr}`,
     );
@@ -502,6 +503,7 @@ commands:
     codex,
     `#!${process.execPath}
 import {readFile,writeFile} from "node:fs/promises";
+import {readFileSync} from "node:fs";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 const args=process.argv.slice(2);
@@ -517,7 +519,9 @@ if(sandboxIndex<0||args[sandboxIndex+1]!==expectedSandbox){process.exit(2)}
 const index=args.indexOf("--cd");const cwd=index>=0?args[index+1]:process.cwd();
 if(args.includes("--output-schema")){
   const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
-  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,summary:"clean",findings:[]});
+  const prompt=readFileSync(0,"utf8");
+  const scope=JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0]??"null");
+  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:"clean",findings:[]});
   const outputIndex=args.indexOf("--output-last-message");
   if(outputIndex<0||!args[outputIndex+1])process.exit(2);
   await writeFile(args[outputIndex+1],text,{mode:0o600});
@@ -778,7 +782,7 @@ else process.exit(2);
         schemaVersion: "1",
         package: {
           name: "@davidahmann/mill",
-          version: "0.1.6",
+          version: MILL_VERSION,
           artifactDigest,
           npmIntegrity: packResult.integrity,
         },

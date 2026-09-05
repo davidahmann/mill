@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { runCli } from "../src/cli-program.js";
 import { canonicalDigest } from "../src/contracts/canonical.js";
 import { textDigest } from "../src/runtime/inputs.js";
+import { MILL_VERSION } from "../src/version.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
@@ -642,7 +643,7 @@ describe("CLI contracts", () => {
       });
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.6"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n',
+        `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\nintegration:\n  mode: greenfield\n  planDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n  baseCommit: null\n  files: []\n`,
       );
       const detach = capture();
       expect(
@@ -657,7 +658,7 @@ describe("CLI contracts", () => {
       });
       await writeFile(
         path.join(temporary.path, "mill.lock"),
-        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.1.6"\n',
+        `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\n`,
       );
       const legacyDetach = capture();
       expect(
@@ -708,7 +709,7 @@ describe("CLI contracts", () => {
     expect(JSON.parse(version.stdout.join(""))).toMatchObject({
       command: "version",
       ok: true,
-      data: { version: "0.1.6" },
+      data: { version: MILL_VERSION },
     });
 
     const help = capture();

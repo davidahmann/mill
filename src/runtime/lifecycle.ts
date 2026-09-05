@@ -3,10 +3,12 @@ import path from "node:path";
 
 import {
   contextManifestSchema,
+  deliveryRecordSchema,
   reviewResultSchema,
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
+import { verifyAuthorityPlanCommit } from "./authority-plans.js";
 import {
   codexWorkerAdapter,
   codexAuthStatus,
@@ -28,6 +30,7 @@ import {
   assertCandidateIdentity,
   assertGitControlState,
   captureGitControlState,
+  captureReviewScope,
   commitCandidate,
   commonGitDirectory,
   createCandidateWorktree,
@@ -59,6 +62,8 @@ import {
   type ActiveProcess,
 } from "./process.js";
 import { MILL_VERSION } from "../version.js";
+import { validationRepairFindings } from "./repair.js";
+import { summarizeUsage } from "./usage.js";
 
 interface RunContext {
   inputs: RuntimeInputs;
@@ -984,6 +989,13 @@ export async function reviewRun(input: {
         task: inputs.task,
         manifest: candidate.manifest,
         candidateCommit: candidate.commit,
+        reviewScope: await captureReviewScope(
+          candidate.worktree,
+          inputs.config.propose === undefined
+            ? run.baseCommit
+            : `refs/heads/${inputs.config.propose.baseBranch}`,
+          candidate.commit,
+        ),
         deadlineMs,
         maxOutputBytes: inputs.task.budget.maxOutputBytes,
         signal: signals.signal,
@@ -1083,7 +1095,7 @@ export async function resumeRun(input: {
     const manifest = storedManifest(run);
     const gitControl = storedGitControl(run);
     await assertGitControlState(worktreePath, gitControl);
-    const findings = storedReviewFindings(run);
+    const findings = storedReviewFindings(run) ?? validationRepairFindings(run);
     if (findings !== undefined) {
       if (run.repairCount >= 1) {
         throw new MillError(
@@ -1289,6 +1301,7 @@ export async function runStatus(input: {
   run?: PublicRunRecord;
   interrupted?: boolean;
   reconciliationRequired?: boolean;
+  usage?: ReturnType<typeof summarizeUsage>;
 }> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
@@ -1302,6 +1315,18 @@ export async function runStatus(input: {
     let reconciliationRequired =
       run.status === "effect_unknown" ||
       store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
+    if (run.deliveryJson !== undefined) {
+      const approval = deliveryRecordSchema.parse(
+        JSON.parse(run.deliveryJson),
+      ).mergeApproval;
+      if (
+        approval !== undefined &&
+        ["ready_started", "merge_started", "effect_unknown"].includes(
+          approval.state,
+        )
+      )
+        reconciliationRequired = true;
+    }
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
     if (
@@ -1331,6 +1356,7 @@ export async function runStatus(input: {
     }
     return {
       run: publicRunRecord(run),
+      usage: summarizeUsage(store.events(run.id)),
       ...(interrupted ? { interrupted: true } : {}),
       ...(reconciliationRequired ? { reconciliationRequired: true } : {}),
     };
@@ -1408,6 +1434,13 @@ export async function statePurge(input: {
   try {
     lease = await acquireWriterLease(store);
     const runs = store.runs();
+    const plans = store.authorityPlans();
+    if (plans.some((plan) => plan.state !== "committed"))
+      throw new MillError(
+        "AUTHORITY_PLANS_BLOCK_PURGE",
+        "Commit generated authority and run state reconcile-plans before purge.",
+        ExitCode.configuration,
+      );
     if (runs.some((run) => !isPurgeSafeRun(run.status))) {
       throw new MillError(
         "ACTIVE_RUNS_BLOCK_PURGE",
@@ -1415,8 +1448,12 @@ export async function statePurge(input: {
         ExitCode.configuration,
       );
     }
+    for (const plan of plans)
+      await verifyAuthorityPlanCommit(plan, commonDirectory);
     store.close();
     storeClosed = true;
+    for (const plan of plans)
+      await removeCandidateWorktree(input.root, plan.worktreePath);
     for (const run of runs) {
       if (run.worktreePath !== undefined) {
         await removeCandidateWorktree(input.root, run.worktreePath);

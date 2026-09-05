@@ -37,6 +37,12 @@ export interface GitHubCheck {
   name: string;
   status: string;
   conclusion: string | null;
+  id?: number;
+  appId?: number;
+  headSha?: string;
+  detailsUrl?: string;
+  workflowPath?: string;
+  event?: string;
 }
 
 export interface GitHubReview {
@@ -78,6 +84,24 @@ export interface GitHubObservation {
 }
 
 export interface GitHubAdapter {
+  markReady?(input: {
+    config: ProposeConfig;
+    pullRequestNodeId: string;
+    deadlineMs: number;
+    cancellationRequested?: () => boolean;
+  }): Promise<void>;
+  mergeExact?(input: {
+    config: ProposeConfig;
+    pullRequestNumber: number;
+    headSha: string;
+    method: "merge" | "squash";
+    deadlineMs: number;
+    cancellationRequested?: () => boolean;
+  }): Promise<void>;
+  strictChecks?(input: {
+    config: ProposeConfig;
+    deadlineMs: number;
+  }): Promise<boolean>;
   inspect(input: {
     config: ProposeConfig;
     deadlineMs: number;
@@ -273,6 +297,18 @@ function parseChecks(checkValue: unknown, statusValue: unknown): GitHubCheck[] {
       const item = object(raw, "check run");
       return {
         name: text(item.name, "check name"),
+        ...(Number.isSafeInteger(item.id) ? { id: item.id as number } : {}),
+        ...(typeof item.head_sha === "string"
+          ? { headSha: item.head_sha }
+          : {}),
+        ...(typeof item.details_url === "string"
+          ? { detailsUrl: item.details_url }
+          : {}),
+        ...(typeof item.app === "object" &&
+        item.app !== null &&
+        Number.isSafeInteger((item.app as Record<string, unknown>).id)
+          ? { appId: (item.app as { id: number }).id }
+          : {}),
         status: text(item.status, "check status"),
         conclusion:
           item.conclusion === null
@@ -720,9 +756,13 @@ class GhGitHubAdapter implements GitHubAdapter {
         lifecycle,
       ),
     ]);
-    const checks = parseChecks(
-      paginatedObjectCollection(checkValue, "check_runs", "check runs"),
-      paginatedObjectCollection(statusValue, "statuses", "commit statuses"),
+    const checks = await this.#bindCheckProducers(
+      parseChecks(
+        paginatedObjectCollection(checkValue, "check_runs", "check runs"),
+        paginatedObjectCollection(statusValue, "statuses", "commit statuses"),
+      ),
+      input.config,
+      lifecycle,
     );
     const reviews = paginatedArray(reviewsValue, "reviews").map(
       (raw): GitHubReview => {
@@ -848,17 +888,21 @@ class GhGitHubAdapter implements GitHubAdapter {
       const compare = object(compareValue, "default branch comparison");
       mergeIsOnDefaultBranch =
         compare.status === "ahead" || compare.status === "identical";
-      mergeChecks = parseChecks(
-        paginatedObjectCollection(
-          mergeCheckValue,
-          "check_runs",
-          "merge check runs",
+      mergeChecks = await this.#bindCheckProducers(
+        parseChecks(
+          paginatedObjectCollection(
+            mergeCheckValue,
+            "check_runs",
+            "merge check runs",
+          ),
+          paginatedObjectCollection(
+            mergeStatusValue,
+            "statuses",
+            "merge commit statuses",
+          ),
         ),
-        paginatedObjectCollection(
-          mergeStatusValue,
-          "statuses",
-          "merge commit statuses",
-        ),
+        input.config,
+        lifecycle,
       );
     }
     return {
@@ -872,6 +916,162 @@ class GhGitHubAdapter implements GitHubAdapter {
       mergeCommit,
       mergeIsOnDefaultBranch,
     };
+  }
+
+  async strictChecks(input: {
+    config: ProposeConfig;
+    deadlineMs: number;
+  }): Promise<boolean> {
+    const value = object(
+      await this.#ghJson(
+        [
+          "api",
+          "--hostname",
+          input.config.host,
+          `repos/${input.config.owner}/${input.config.repository}/branches/${encodeURIComponent(input.config.baseBranch)}/protection`,
+        ],
+        input,
+      ),
+      "branch protection",
+    );
+    return (
+      object(value.required_status_checks, "required status checks").strict ===
+      true
+    );
+  }
+
+  async markReady(input: {
+    config: ProposeConfig;
+    pullRequestNodeId: string;
+    deadlineMs: number;
+    cancellationRequested?: () => boolean;
+  }): Promise<void> {
+    const result = object(
+      await this.#ghJson(
+        [
+          "api",
+          "--hostname",
+          input.config.host,
+          "graphql",
+          "--raw-field",
+          "query=mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{id isDraft}}}",
+          "--raw-field",
+          `id=${input.pullRequestNodeId}`,
+        ],
+        input,
+      ),
+      "readiness result",
+    );
+    if (result.errors !== undefined)
+      throw new MillError(
+        "GITHUB_READY_FAILED",
+        "GitHub did not acknowledge readiness; reconcile before retry.",
+        ExitCode.temporary,
+      );
+  }
+
+  async mergeExact(input: {
+    config: ProposeConfig;
+    pullRequestNumber: number;
+    headSha: string;
+    method: "merge" | "squash";
+    deadlineMs: number;
+    cancellationRequested?: () => boolean;
+  }): Promise<void> {
+    const result = object(
+      await this.#ghJson(
+        [
+          "api",
+          "--hostname",
+          input.config.host,
+          "--method",
+          "PUT",
+          `repos/${input.config.owner}/${input.config.repository}/pulls/${input.pullRequestNumber}/merge`,
+          "--raw-field",
+          `sha=${input.headSha}`,
+          "--raw-field",
+          `merge_method=${input.method}`,
+        ],
+        input,
+      ),
+      "merge result",
+    );
+    if (result.merged !== true)
+      throw new MillError(
+        "GITHUB_MERGE_NOT_CONFIRMED",
+        "GitHub did not confirm the merge; reconcile before retry.",
+        ExitCode.temporary,
+      );
+  }
+
+  async #bindCheckProducers(
+    checks: GitHubCheck[],
+    config: ProposeConfig,
+    lifecycle: ProcessLifecycle,
+  ): Promise<GitHubCheck[]> {
+    if (config.checkProducers === undefined) return checks;
+    const prefix = `repos/${config.owner}/${config.repository}`;
+    const urlPrefix = `https://${config.host}/${config.owner}/${config.repository}/actions/runs/`;
+    const runCache = new Map<string, Record<string, unknown>>();
+    for (const check of checks) {
+      const producer = config.checkProducers[check.name];
+      if (
+        producer === undefined ||
+        check.appId !== producer.appId ||
+        !check.detailsUrl?.startsWith(urlPrefix)
+      )
+        continue;
+      const match = /^(\d+)\/job\/(\d+)$/u.exec(
+        check.detailsUrl.slice(urlPrefix.length),
+      );
+      if (match === null || check.id !== Number(match[2])) continue;
+      const runId = match[1];
+      if (runId === undefined) continue;
+      const job = object(
+        await this.#ghJson(
+          [
+            "api",
+            "--hostname",
+            config.host,
+            `${prefix}/actions/jobs/${match[2]}`,
+          ],
+          lifecycle,
+        ),
+        "workflow job",
+      );
+      if (
+        job.run_id !== Number(runId) ||
+        job.check_run_url !==
+          `https://api.github.com/${prefix}/check-runs/${check.id}` ||
+        job.head_sha !== check.headSha
+      )
+        continue;
+      let run = runCache.get(runId);
+      if (run === undefined) {
+        run = object(
+          await this.#ghJson(
+            [
+              "api",
+              "--hostname",
+              config.host,
+              `${prefix}/actions/runs/${runId}`,
+            ],
+            lifecycle,
+          ),
+          "workflow run",
+        );
+        runCache.set(runId, run);
+      }
+      const repository = object(run.repository, "workflow repository");
+      if (
+        run.head_sha === check.headSha &&
+        repository.node_id === config.repositoryNodeId
+      ) {
+        check.workflowPath = text(run.path, "workflow path");
+        check.event = text(run.event, "workflow event");
+      }
+    }
+    return checks;
   }
 }
 
