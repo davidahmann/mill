@@ -84,7 +84,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/builder-${{ matrix.builder }}"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/builder-${{ matrix.builder }}"
       - name: Preserve independent artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: builder-${{ matrix.builder }}
           path: ${{ runner.temp }}/builder-${{ matrix.builder }}/*.tgz
@@ -195,7 +195,7 @@ jobs:
           mv "$qualification_input" "$RUNNER_TEMP/qualified/qualification.json"
           trap - EXIT
       - name: Preserve qualified genesis candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genesis-candidate-${{ inputs.tag }}
           path: ${{ runner.temp }}/qualified/*
@@ -252,7 +252,7 @@ jobs:
           node scripts/qualify-release-artifact.mjs "$artifact" --full-canary --report-output "$RUNNER_TEMP/trusted-canary.json"
           node -e 'const fs=require("node:fs"),crypto=require("node:crypto");const digest=p=>"sha256:"+crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");fs.writeFileSync(process.argv[3],JSON.stringify({schemaVersion:"1",verifierCommit:"c547762d7644f62ac48011089564f5f46a48b786",artifactDigest:digest(process.argv[1]),qualificationDigest:digest(process.argv[2])})+"\n",{flag:"wx"})' "$artifact" "$RUNNER_TEMP/qualified/qualification.json" "$RUNNER_TEMP/trusted-verifier.json"
       - name: Preserve independent verification
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: independent-policy-${{ inputs.tag }}
           path: |
