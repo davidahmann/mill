@@ -188,9 +188,10 @@ npm publish "$artifact" --provenance --access public --tag alpha
 It does not run `npm pack` again. It verifies that npm's `alpha` dist-tag names
 the exact version, reads the package back, verifies registry signatures with a
 bounded propagation retry, downloads and requalifies the registry artifact,
-creates a draft prerelease with the same tarball/checksum/SBOM/evidence,
-downloads the GitHub asset, checks every identity, uploads final evidence using
-the durable tag URL, and only then publishes the prerelease.
+creates a plainly labelled draft public-alpha release with the same
+tarball/checksum/SBOM/evidence, downloads the GitHub asset, checks every
+identity, uploads final evidence using the durable tag URL, and only then
+publishes the normal GitHub Release.
 
 ### 5. Close the release
 
@@ -295,9 +296,11 @@ has proven state and schema compatibility.
 
 GitHub Latest and npm dist-tags are separate owner-approved effects after exact
 release qualification and readback. They do not require rebuilding or
-republishing. GitHub Latest cannot designate a prerelease; a separately approved
-normal-release label must still disclose Mill's public-alpha limits. As of
-2026-09-05, GitHub Latest and npm `alpha`/`latest` select `0.3.0`.
+republishing. The workflow creates a normal GitHub Release whose title retains
+the `Public alpha` label, so GitHub can set Latest without extending the
+qualified support limits. npm `alpha` and `latest` remain separate distribution
+pointers. Before this release, GitHub Latest and npm `alpha`/`latest` selected
+`0.3.0`.
 
 For an approved npm channel change, use the operator's own npm login and 2FA,
 change only the named dist-tag, and read back the resulting version and

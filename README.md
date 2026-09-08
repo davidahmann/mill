@@ -11,12 +11,12 @@ candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity. Draft-only is the default;
 repositories may explicitly enable a separately approved, exact-plan merge.
 
-Mill `0.3.0` is the current qualified public alpha and the latest release on
-[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.3.0) and npm. The
+Mill `0.3.1` is the current qualified public alpha and the latest release on
+[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.3.1) and npm. The
 release includes provenance, an SBOM, independent exact-artifact qualification,
 and verified registry and GitHub downloads. GitHub's Latest label does not
 expand the public-alpha support limits. See the
-[release record](docs/releases/v0.3.0.md) for exact evidence and recovery
+[release record](docs/releases/v0.3.1.md) for exact evidence and recovery
 history. The `v0.1.5` genesis release remains the historical trust root;
 `v0.2.0` was held before publication and its tag is preserved.
 

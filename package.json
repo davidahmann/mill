@@ -1,6 +1,6 @@
 {
   "name": "@davidahmann/mill",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A local-first, repo-native software factory from approved product intent to reviewed draft PRs.",
   "license": "Apache-2.0",
   "author": "David Ahmann",
@@ -58,12 +58,12 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.3",
-    "@vitest/coverage-v8": "4.1.11",
+    "@vitest/coverage-v8": "5.0.0",
     "ajv": "8.20.0",
     "eslint": "10.9.1",
     "prettier": "3.9.6",
-    "typescript-eslint": "8.68.0",
-    "vitest": "4.1.11"
+    "typescript-eslint": "8.69.0",
+    "vitest": "5.0.0"
   },
   "repository": {
     "type": "git",

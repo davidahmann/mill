@@ -1,0 +1,32 @@
+schemaVersion: "2"
+id: mill-release-v0.3.1
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-08: “address these and ship till green
+  incl tag, npm publish, latest GitHub Release”.
+source_base: 0ca99f4b48727a6313bbe605dc28eef3130e989b
+authority: product/release-v0.3.1.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Updates the exact artifact-action pins and development test dependencies.
+  - Makes the completed public-alpha GitHub Release normal and plainly labelled
+    so GitHub can select it as Latest.
+  - Advances the immutable package identity to v0.3.1 and admits only that tag
+    to the protected npm environment.
+affected_surfaces:
+  - package and CLI version identity
+  - release workflow, artifact transport, and GitHub Release finalization
+  - release policy tests and public release documentation
+verification:
+  - native check, exact-candidate audit, complete-diff review, and green PR
+  - annotated-tag identity and two independent candidate builds
+  - independent policy, registry-package, npm provenance, and GitHub-asset
+    readback
+exceptions:
+  - This attended maintainer release may merge, tag, publish, create the normal
+    GitHub Release, promote the named npm dist-tags, and add the exact v0.3.1
+    environment tag rule only as specified in its authority record.

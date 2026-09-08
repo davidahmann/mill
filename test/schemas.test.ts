@@ -677,7 +677,7 @@ describe("compact schemas", () => {
     );
     ajv.addFormat("uri", (value) => {
       try {
-        void new URL(value);
+        new URL(value);
         return true;
       } catch {
         return false;
@@ -872,7 +872,7 @@ describe("compact schemas", () => {
     );
     ajv.addFormat("uri", (value) => {
       try {
-        void new URL(value);
+        new URL(value);
         return true;
       } catch {
         return false;

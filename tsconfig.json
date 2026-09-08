@@ -14,7 +14,10 @@
     "noImplicitReturns": true,
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": false,
+    // Vitest 5.0.0's published Vite declarations are internally incompatible
+    // under TypeScript 6 strict optional-property checks. Project sources,
+    // tests, and configuration remain checked strictly.
+    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": [

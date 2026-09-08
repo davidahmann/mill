@@ -1,0 +1,58 @@
+schemaVersion: "2"
+task_id: mill-release-v0.3.1
+status: active
+owner: davidahmann
+base_commit: 0ca99f4b48727a6313bbe605dc28eef3130e989b
+execution_mode: approved_native_maintainer
+authority: product/release-v0.3.1.md
+impact_manifest: product/impacts/RELEASE_V0_3_1.yaml
+objective: >-
+  Resolve the three current Dependabot updates and ship the exact v0.3.1
+  public-alpha artifact through Mill's independently qualified release path.
+allowed_paths:
+  - .github/workflows/release.yml
+  - scripts/check-workflows.mjs
+  - scripts/release-workflow-policy.mjs
+  - test/release-workflow.test.ts
+  - test/schemas.test.ts
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - tsconfig.json
+  - README.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/repository-settings.md
+  - docs/releases/v0.3.1.md
+  - product/release-v0.3.1.md
+  - product/impacts/RELEASE_V0_3_1.yaml
+  - product/tasks/RELEASE_V0_3_1.yaml
+authority_preparation_paths:
+  - product/**
+  - docs/releases/**
+acceptance_items:
+  - R031-01 all three Dependabot updates are present on a current-main PR
+  - R031-02 package and CLI identify the fresh v0.3.1 version
+  - R031-03 workflow policy rejects a prerelease finalization that cannot be
+    Latest
+  - R031-04 native check, exact-candidate audit, full review, and PR checks pass
+  - R031-05 annotated tag, candidate, protected publication, readback, release,
+    and npm channel pointers all bind to the same preserved artifact
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+  - MILL_RELEASE_TAG=v0.3.1 node scripts/verify-release-tag.mjs
+required_reviews:
+  - read-only local Codex review of the complete committed Mill PR diff
+constraints:
+  - single attended maintainer writer
+  - exact v0.3.1 environment-tag admission only; no wildcard or bypass
+  - preserve all historical tags, npm versions, releases, and evidence
+stop_conditions:
+  - ambiguous tag, tree, artifact, candidate-run, provenance, or provider effect
+  - unavailable independent verification or recurring P0/P1 release finding
+closure:
+  status: pending_external_release_readback
+  owner: attended_maintainer_not_builder
+  evidence:
+    - docs/releases/v0.3.1.md
