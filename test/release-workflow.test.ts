@@ -78,6 +78,27 @@ describe("release verifier preparation policy", () => {
       "workflow contract passed",
     );
   });
+  it.each(["draft", "finalization"])(
+    "rejects a prerelease %s that cannot become GitHub Latest",
+    async (phase) => {
+      const workflow = await fixture();
+      const job = workflow.jobs.publish;
+      const step = job?.steps.find(
+        (entry) =>
+          entry.name ===
+          (phase === "draft"
+            ? "Create draft GitHub Release with exact artifacts"
+            : "Read back GitHub Release and finalize evidence"),
+      );
+      if (!step?.run) throw new Error("missing release publication fixture");
+      step.run = `${step.run}\n# --prerelease`;
+      await expect(check(workflow)).rejects.toThrow(
+        phase === "draft"
+          ? "release must be a plainly labelled normal public-alpha release"
+          : "release must remain a normal public-alpha release",
+      );
+    },
+  );
   it.each(["qualify", "independent-policy", "publish"])(
     "rejects %s without explicit verifier preparation",
     async (jobId) => {

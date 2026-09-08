@@ -84,7 +84,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/builder-${{ matrix.builder }}"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/builder-${{ matrix.builder }}"
       - name: Preserve independent artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: builder-${{ matrix.builder }}
           path: ${{ runner.temp }}/builder-${{ matrix.builder }}/*.tgz
@@ -145,7 +145,7 @@ jobs:
             exit 1
           fi
       - name: Download both independent artifacts
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: builder-*
           path: ${{ runner.temp }}/builders
@@ -195,7 +195,7 @@ jobs:
           mv "$qualification_input" "$RUNNER_TEMP/qualified/qualification.json"
           trap - EXIT
       - name: Preserve qualified genesis candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genesis-candidate-${{ inputs.tag }}
           path: ${{ runner.temp }}/qualified/*
@@ -230,7 +230,7 @@ jobs:
           npm ci --ignore-scripts
           npm run build
       - name: Download the exact candidate artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: genesis-candidate-${{ inputs.tag }}
           path: ${{ runner.temp }}/qualified
@@ -252,7 +252,7 @@ jobs:
           node scripts/qualify-release-artifact.mjs "$artifact" --full-canary --report-output "$RUNNER_TEMP/trusted-canary.json"
           node -e 'const fs=require("node:fs"),crypto=require("node:crypto");const digest=p=>"sha256:"+crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");fs.writeFileSync(process.argv[3],JSON.stringify({schemaVersion:"1",verifierCommit:"c547762d7644f62ac48011089564f5f46a48b786",artifactDigest:digest(process.argv[1]),qualificationDigest:digest(process.argv[2])})+"\n",{flag:"wx"})' "$artifact" "$RUNNER_TEMP/qualified/qualification.json" "$RUNNER_TEMP/trusted-verifier.json"
       - name: Preserve independent verification
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: independent-policy-${{ inputs.tag }}
           path: |
@@ -312,7 +312,7 @@ jobs:
           MILL_RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/verify-release-tag.mjs > "$RUNNER_TEMP/identity.json"
       - name: Download the qualified candidate run
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: genesis-candidate-${{ inputs.tag }}
           path: ${{ runner.temp }}/qualified
@@ -320,7 +320,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
       - name: Download independent verifier receipt
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: independent-policy-${{ inputs.tag }}
           path: ${{ runner.temp }}/trusted
@@ -393,7 +393,7 @@ jobs:
           checksum=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.sha256')
           notes_file="docs/releases/${RELEASE_TAG}.md"
           test -f "$notes_file"
-          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --title "Mill $RELEASE_TAG" \
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Mill $RELEASE_TAG (Public alpha)" \
             --notes-file "$notes_file" \
             "$artifact" "$checksum" \
             "$RUNNER_TEMP/qualified/sbom.cdx.json" \
@@ -425,4 +425,4 @@ jobs:
             "$RUNNER_TEMP/registry-readback.json" \
             "$RUNNER_TEMP/github-readback.json"
           gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          gh release edit "$RELEASE_TAG" --draft=false

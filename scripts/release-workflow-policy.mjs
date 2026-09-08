@@ -57,6 +57,41 @@ export function releaseDispatchFailures(jobs) {
   return failures;
 }
 
+/** A public-alpha release remains plainly labelled while GitHub can mark it Latest. */
+export function releasePublicationFailures(jobs) {
+  const job = jobs.publish;
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const create = steps.find(
+    (step) => step?.name === "Create draft GitHub Release with exact artifacts",
+  );
+  const finalize = steps.find(
+    (step) => step?.name === "Read back GitHub Release and finalize evidence",
+  );
+  const failures = [];
+  if (
+    typeof create?.run !== "string" ||
+    !create.run.includes(
+      'gh release create "$RELEASE_TAG" --verify-tag --draft',
+    ) ||
+    !create.run.includes('--title "Mill $RELEASE_TAG (Public alpha)"') ||
+    create.run.includes("--prerelease")
+  ) {
+    failures.push(
+      "publish: GitHub release must be a plainly labelled normal public-alpha release",
+    );
+  }
+  if (
+    typeof finalize?.run !== "string" ||
+    !finalize.run.includes('gh release edit "$RELEASE_TAG" --draft=false') ||
+    finalize.run.includes("--prerelease")
+  ) {
+    failures.push(
+      "publish: final GitHub release must remain a normal public-alpha release",
+    );
+  }
+  return failures;
+}
+
 /** Every fresh release runner prepares its own image before dependent effects. */
 export function releaseVerifierPreparationFailures(jobs) {
   const failures = [];

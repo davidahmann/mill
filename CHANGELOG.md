@@ -4,6 +4,21 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-08
+
+### Changed
+
+- Update the release workflow's pinned artifact actions to
+  `actions/upload-artifact` 7.0.1 and `actions/download-artifact` 8.0.1.
+- Update the development test toolchain to Vitest 5.0.0 and typescript-eslint
+  8.69.0.
+- Retain strict project type checking while skipping the internally inconsistent
+  upstream Vitest/Vite declaration checks published for the Vitest 5.0.0
+  transition.
+- Publish a plainly labelled normal GitHub Release for each qualified public
+  alpha so GitHub can mark the completed release as Latest without hiding the
+  alpha support limits.
+
 ## [0.3.0] - 2026-09-05
 
 ### Added
