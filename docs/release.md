@@ -50,8 +50,10 @@ Before tagging:
   settle;
 - add the reviewed, regular, non-symlink, nonempty `docs/releases/vX.Y.Z.md`
   record to the candidate before tagging; candidate builders require its fixed
-  `docs/` and `docs/releases/` directory chain to be real directories too,
-  immediately after immutable checkout, before any other workflow step;
+  `docs/` and `docs/releases/` directory chain to be real directories too, and
+  every requested-tag release job proves the tag syntax, annotation, and
+  checked-out commit immediately after immutable checkout and before any other
+  workflow step;
 - prove the reviewed candidate tree equals the resulting squash-merged `main`
   tree;
 - run `npm run check` from a fresh checkout of resulting `main`;
@@ -139,15 +141,18 @@ gh workflow run release.yml --ref "$tag" \
   -f sequence_base64="$sequence_base64"
 ```
 
-The workflow checks out the immutable tag twice, then immediately verifies a
-regular, non-symlink, nonempty tag-bound release record whose fixed `docs/` and
-`docs/releases/` parent directories are also non-symlinks before any other step.
-It installs with lifecycle scripts disabled, verifies tag identity, runs the
-full native gate, and packs once in each independent job. It safely extracts and
-compares canonical package paths, executable bits, and bytes. Any symlink,
-special entry, unsafe path, excessive entry count, package mismatch, or content
-difference blocks. It copies one tarball without replacement and records
-SHA-256, npm integrity, and canonical content digests.
+Every requested-tag job first checks out the immutable tag, then proves the
+dispatched value has Mill’s release-tag syntax, names an annotated tag that
+resolves to the checked-out commit, and owns a regular, non-symlink, nonempty
+release record whose fixed `docs/` and `docs/releases/` parent directories are
+also non-symlinks. This happens before setup, dependency installation, or any
+later action. The workflow then installs with lifecycle scripts disabled,
+verifies complete tag identity, runs the full native gate, and packs once in
+each independent build. It safely extracts and compares canonical package paths,
+executable bits, and bytes. Any symlink, special entry, unsafe path, excessive
+entry count, package mismatch, or content difference blocks. It copies one
+tarball without replacement and records SHA-256, npm integrity, and canonical
+content digests.
 
 The qualification job installs that preserved tarball, runs packed greenfield
 and compatible-adoption canaries in clean temporary repositories, executes the

@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { parse } from "yaml";
 import {
-  releaseNotesFailures,
+  releaseDispatchFailures,
   releaseVerifierPreparationFailures,
 } from "./release-workflow-policy.mjs";
 
@@ -44,7 +44,7 @@ for (const file of files) {
     continue;
   }
   if (file === "release.yml") {
-    failures.push(...releaseNotesFailures(jobs));
+    failures.push(...releaseDispatchFailures(jobs));
     failures.push(...releaseVerifierPreparationFailures(jobs));
   }
   for (const [jobName, rawJob] of Object.entries(jobs)) {
