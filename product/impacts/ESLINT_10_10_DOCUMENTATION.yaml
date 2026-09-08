@@ -3,8 +3,8 @@ id: mill-eslint-10.10-documentation
 status: approved
 approved_by: davidahmann
 approval_source: >-
-  Attended Codex conversation on 2026-09-08: "also check pr33" and "also
-  update docs in new pr to use new version while doing pr 33".
+  Attended Codex conversation on 2026-09-08: "also check pr33" and "also update
+  docs in new pr to use new version while doing pr 33".
 source_base: 325fff12e2c598456711d26177de74c9971b5313
 authority: product/eslint-10.10-maintenance.md
 affected_invariants:

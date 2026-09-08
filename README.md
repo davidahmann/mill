@@ -111,7 +111,7 @@ Install the qualified public alpha at its exact version with lifecycle scripts
 disabled:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.3.0
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.3.1
 npx --no-install millctl --version
 ```
 
@@ -128,7 +128,7 @@ PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
 node dist/cli.js --version
 ```
 
-The `alpha` and `latest` npm tags both resolve to `0.3.0`. Downstream
+The `alpha` and `latest` npm tags both resolve to `0.3.1`. Downstream
 repositories should still pin the exact version so a later release cannot alter
 their delivery machinery implicitly. Updating an existing Mill installation is
 deliberate: preserve state and repository snapshots, inspect the release notes,
