@@ -1,0 +1,60 @@
+schemaVersion: "2"
+task_id: mill-release-dispatch-preflight
+status: closed
+owner: davidahmann
+base_commit: 6813bdb301d7ac00dd83dc03685878cb38db3aa2
+execution_mode: approved_native_maintainer
+authority: product/release-dispatch-preflight.md
+impact_manifest: product/impacts/RELEASE_DISPATCH_PREFLIGHT.yaml
+objective: >-
+  Make an invalid requested release tag or tag-bound release record fail at the
+  first trusted workflow boundary, before dependency installation or any later
+  candidate or publication activity.
+allowed_paths:
+  - .github/workflows/release.yml
+  - scripts/release-workflow-policy.mjs
+  - scripts/check-workflows.mjs
+  - test/release-workflow.test.ts
+  - docs/release.md
+  - product/release-dispatch-preflight.md
+  - product/tasks/RELEASE_DISPATCH_PREFLIGHT.yaml
+  - product/impacts/RELEASE_DISPATCH_PREFLIGHT.yaml
+authority_preparation_paths:
+  - product/**
+acceptance_items:
+  - RDP-01 exact requested-tag preflight in every requested-tag release job
+  - RDP-02 annotated-tag, checked-out-commit, and release-record proof before
+    setup
+  - RDP-03 regression tests reject missing, conditional, reordered, or weakened
+    preflight
+  - RDP-04 native check, audit, and complete-diff review are green before
+    shipment
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - read-only local Codex review of the entire committed PR diff
+constraints:
+  - single attended maintainer writer
+  - no retag, rebuild, republish, deployment, protection bypass, auto-merge, or
+    historical release mutation
+stop_conditions:
+  - ambiguous authority, tag identity, artifact identity, or provider effect
+  - unavailable native verification or exact-candidate review
+  - recurring same-subsystem P0 or P1 review findings
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-08
+  disposition: >-
+    Every requested-tag release job now proves the dispatched tag syntax,
+    annotation, checked-out commit, and exact regular release record as its
+    immediate post-checkout boundary. The retained Node verifier remains the
+    authority for package, mainline, and reviewed-tree identity. Direct shell
+    regressions cover valid, malformed, lightweight, stale, and unsafe
+    release-record states; structural regressions reject missing, conditional,
+    reordered, or weakened preflight.
+  evidence:
+    - npm run check
+    - node dist/cli.js --json --cwd . audit
+    - read-only local Codex complete-diff review with no actionable findings

@@ -1,0 +1,36 @@
+schemaVersion: "2"
+id: mill-release-dispatch-preflight
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-08: “ok lets do it plan implement test
+  validate fix any gaps/bugs ship till green no new release though yet but make
+  sure realease flow is wha we will need last releases had some hiccups and i
+  think we addressed them but still dont want release pr churns moving forward”.
+source_base: 6813bdb301d7ac00dd83dc03685878cb38db3aa2
+authority: product/release-dispatch-preflight.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Requested release-tag syntax, annotation, checked-out commit identity, and
+    exact release record are proved immediately after checkout in every
+    requested-tag release job.
+  - Static workflow policy rejects dispatch preflight that is missing,
+    conditional, later than the second step, or different from the reviewed
+    command contract.
+affected_surfaces:
+  - release workflow dispatch control
+  - workflow policy and release-workflow regression tests
+  - release and task evidence documentation
+verification:
+  - native check and exact-candidate audit
+  - direct shell regression for valid and invalid tag states
+  - read-only complete-diff review
+  - green PR and resulting-main checks
+exceptions:
+  - This attended maintainer task may change its declared workflow, policy,
+    test, documentation, and product-evidence paths.
+  - It cannot publish, retag, rebuild, deploy, bypass protection, or alter
+    historical release artifacts.
