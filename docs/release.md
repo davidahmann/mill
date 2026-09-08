@@ -209,10 +209,11 @@ not qualify a new stack, host tuple, worker profile, model identity, or forge.
 Before creating a new release identity, read back the `npm` environment's
 reviewer and branch/tag admission rules. Protected-branches-only is not the same
 policy as selected release tags. The owner authorized `main` plus exact tags
-`v0.2.1` and `v0.3.0` on 2026-09-05; provider readback confirmed all three
-permitted refs and unchanged reviewer and main branch protections. A subsequent
-tag needs its own explicit environment-policy authorization. Do not use a
-wildcard, bypass approval, or dispatch a different ref to work around an
+`v0.2.1` and `v0.3.0` on 2026-09-05, and the separate v0.3.1 authority added
+only exact tag `v0.3.1` on 2026-09-08. Provider readback confirmed all four
+permitted refs and the unchanged reviewer and main branch protections. A
+subsequent tag needs its own explicit environment-policy authorization. Do not
+use a wildcard, bypass approval, or dispatch a different ref to work around an
 admission failure.
 
 The `v0.2.0` tag is retained as prepublication evidence. Publication was held
@@ -299,8 +300,8 @@ release qualification and readback. They do not require rebuilding or
 republishing. The workflow creates a normal GitHub Release whose title retains
 the `Public alpha` label, so GitHub can set Latest without extending the
 qualified support limits. npm `alpha` and `latest` remain separate distribution
-pointers. Before this release, GitHub Latest and npm `alpha`/`latest` selected
-`0.3.0`.
+pointers. The completed v0.3.1 release is GitHub Latest, and npm `alpha` and
+`latest` both select `0.3.1`.
 
 For an approved npm channel change, use the operator's own npm login and 2FA,
 change only the named dist-tag, and read back the resulting version and

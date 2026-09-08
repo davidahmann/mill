@@ -1,0 +1,29 @@
+schemaVersion: "2"
+id: mill-eslint-10.10-documentation
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-08: "also check pr33" and "also update
+  docs in new pr to use new version while doing pr 33".
+source_base: 325fff12e2c598456711d26177de74c9971b5313
+authority: product/eslint-10.10-maintenance.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Updates the direct ESLint development dependency and its resolved lockfile.
+  - Corrects live public documentation to name the completed v0.3.1 release and
+    its alpha/latest distribution pointers.
+affected_surfaces:
+  - development lint tooling and lockfile resolution
+  - README, release guidance, repository settings, and delivery-plan narrative
+verification:
+  - native check and exact-candidate audit
+  - read-only complete-diff review
+  - green PR checks, including dependency review and DCO
+exceptions:
+  - This attended maintainer task may update only its declared source, docs, and
+    authority paths.
+  - It cannot tag, publish, republish, move npm channels, modify a GitHub
+    release, change protection, or bypass review.

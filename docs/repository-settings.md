@@ -99,10 +99,10 @@ replace the exact tag rules with a wildcard or an unrestricted environment.
 
 ## Current distribution channels
 
-Before v0.3.1, npm `alpha`/`latest` and GitHub Latest select `0.3.0`. The
-`latest` change used the account's hardware-2FA assertion and provider readback;
-it did not republish the artifact. GitHub Latest is public release ID
-`383294609`. The historical duplicate workflow draft `383199322` remains
-untouched; release automation must not confuse its tag with the public release
-identity during recovery. Channel labels do not expand Mill's qualified
-public-alpha support tuple or authorize republishing.
+The completed v0.3.1 release is GitHub Latest, and npm `alpha`/`latest` both
+select `0.3.1`. The named `latest` change used the account's hardware-2FA
+assertion and provider readback; it did not republish the artifact. GitHub
+Latest is public release ID `385028581`. The historical duplicate workflow draft
+`383199322` remains untouched; release automation must not confuse its tag with
+the public release identity during recovery. Channel labels do not expand Mill's
+qualified public-alpha support tuple or authorize republishing.

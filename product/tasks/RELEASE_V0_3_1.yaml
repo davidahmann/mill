@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-release-v0.3.1
-status: active
+status: closed
 owner: davidahmann
 base_commit: 0ca99f4b48727a6313bbe605dc28eef3130e989b
 execution_mode: approved_native_maintainer
@@ -52,7 +52,23 @@ stop_conditions:
   - ambiguous tag, tree, artifact, candidate-run, provenance, or provider effect
   - unavailable independent verification or recurring P0/P1 release finding
 closure:
-  status: pending_external_release_readback
+  status: completed
   owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-08
+  release: v0.3.1
+  tag_commit: 325fff12e2c598456711d26177de74c9971b5313
+  reviewed_candidate_tree: 14f5a5538bb812e3fba6e9e43a18290d89d5664b
+  candidate_run: 34271508952
+  publish_run: 34272395948
+  npm_integrity: sha512-3RTvbdtyjon2V3sJJQ9vM/EJzDcR5rf91sdV+KCy4szipyOI4zi6FJOPAuuak6lbEsi5Xbi0ClIfrxeLAgT9MQ==
+  disposition: >-
+    The annotated tag, independently qualified candidate, protected OIDC
+    publication, provenance and signature readback, registry requalification,
+    normal GitHub Release, and npm alpha/latest pointers all resolve to the
+    preserved v0.3.1 artifact. No package was rebuilt or republished while
+    promoting the latest channel.
   evidence:
     - docs/releases/v0.3.1.md
+    - https://github.com/davidahmann/mill/actions/runs/34271508952
+    - https://github.com/davidahmann/mill/actions/runs/34272395948
+    - https://github.com/davidahmann/mill/releases/tag/v0.3.1
