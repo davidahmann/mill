@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-eslint-10.10-documentation
-status: active
+status: closed
 owner: davidahmann
 base_commit: 325fff12e2c598456711d26177de74c9971b5313
 execution_mode: approved_native_maintainer
@@ -43,5 +43,23 @@ stop_conditions:
   - unavailable native verification or exact-candidate review
   - recurring P0 or P1 finding in the dependency or documentation change
 closure:
-  status: pending
+  status: completed
   owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-08
+  pull_request: https://github.com/davidahmann/mill/pull/34
+  candidate_commit: 3741fd3d40f180a04efe1c3bd2725be73adc00df
+  candidate_tree: b3a13aa8cc152f52bec4c1f55e8831c6892d4a38
+  merge_commit: a98db3ebf8aa95aeaa3b5cb3b53812c6309230d5
+  disposition: >-
+    The maintainer-DCO-signed candidate reconstructed PR #33's ESLint 10.10.0
+    dependency resolution exactly, updated only live v0.3.1 documentation, and
+    passed native validation, audit, PR checks, and resulting-main CI/CodeQL.
+    The resulting-main tree matches the reviewed candidate tree. Dependabot PR
+    #33 was closed after the replacement merged; no release or package effect
+    occurred.
+  evidence:
+    - https://github.com/davidahmann/mill/pull/34
+    - https://github.com/davidahmann/mill/actions/runs/34273946647
+    - https://github.com/davidahmann/mill/actions/runs/34273946688
+    - https://github.com/davidahmann/mill/actions/runs/34274284147
+    - https://github.com/davidahmann/mill/actions/runs/34274284077
