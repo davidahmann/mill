@@ -1,0 +1,72 @@
+schemaVersion: "2"
+task_id: mill-oss-semantic-release-replay
+status: closed
+owner: davidahmann
+base_commit: a5edbde3a4884df5d08920b1b2e50f9722f1d4b0
+execution_mode: approved_native_maintainer
+authority: product/oss-semantic-release-replay.md
+impact_manifest: product/impacts/OSS_SEMANTIC_RELEASE_REPLAY.yaml
+objective: >-
+  Qualify Mill's present Node ESM/npm adoption boundary with a public historical
+  API-deprecation replay, record proven limits, and repair only a Mill defect
+  directly exposed by the replay.
+allowed_paths:
+  - docs/canaries/semantic-release-github-search-api-deprecation-replay.md
+  - product/oss-semantic-release-replay.md
+  - product/tasks/OSS_SEMANTIC_RELEASE_REPLAY.yaml
+  - product/impacts/OSS_SEMANTIC_RELEASE_REPLAY.yaml
+  - src/repository/native-adoption.ts
+  - src/contracts/schemas.ts
+  - src/cli-program.ts
+  - test/native-adoption.test.ts
+  - test/release-workflow.test.ts
+  - docs/brownfield.md
+  - README.md
+authority_preparation_paths:
+  - product/**
+  - docs/canaries/**
+acceptance_items:
+  - OSR-01 frozen public base and upstream implementation remain separately
+    recorded
+  - OSR-02 native-adoption plan accepts only the exact clean public base and
+    local overlay
+  - OSR-03 independent candidate removes REST GitHub Search API consumption
+  - OSR-04 independent candidate passes the upstream native test command
+  - OSR-05 replay evidence records limitations and does not make a support claim
+  - OSR-06 native Mill gate, exact-candidate audit, full-diff review, and green
+    PR complete
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - read-only local Codex review of the complete committed Mill PR diff
+constraints:
+  - single attended maintainer writer
+  - public upstream source only; disposable local clone only
+  - no upstream GitHub mutation, fork, tag, release, npm publication,
+    deployment, or credential capture
+  - do not supply upstream implementation head to the coding agent
+stop_conditions:
+  - source identity drift, unsafe package-install behavior, missing independent
+    oracle, or target external effect
+  - an unsupported target stack or a Mill defect requiring broader authority
+    than this task
+  - recurring same-subsystem P0 or P1 review findings
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-08
+  disposition: >-
+    The exact public Node ESM/npm base passed native adoption planning and an
+    attended apply that wrote only Mill controls. A blind local candidate
+    removed runtime GitHub REST Search API consumption, retained GraphQL issue
+    lookup, passed the target native suite, and passed an independent no-REST
+    oracle. No Mill implementation defect was exposed. The replay is recorded as
+    bounded engineering evidence, with customer, continuous-detection,
+    semantic-contract, lifecycle, deployment, and shared-learning claims left
+    explicitly unqualified.
+  evidence:
+    - docs/canaries/semantic-release-github-search-api-deprecation-replay.md
+    - npm run check
+    - node dist/cli.js --json --cwd . audit
+    - read-only local Codex complete-diff review
