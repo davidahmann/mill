@@ -1,0 +1,35 @@
+schemaVersion: "2"
+id: mill-oss-semantic-release-replay
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-08: “ok lets do it plan implement test
+  validate fix any gaps/bugs ship till green no new release though yet”,
+  followed by confirmation that the semantic-release/github historical replay
+  proceeds after release-workflow hardening.
+source_base: a5edbde3a4884df5d08920b1b2e50f9722f1d4b0
+authority: product/oss-semantic-release-replay.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Adds public replay evidence for one frozen Node ESM/npm API-deprecation
+    case.
+  - Documents whether the current native-adoption boundary admits the exact
+    upstream base and whether a bounded candidate satisfies independent tests.
+affected_surfaces:
+  - public replay evidence and task authority
+  - native-adoption documentation or implementation only if the replay proves a
+    defect
+verification:
+  - exact upstream commit and pull-request identity readback
+  - Mill native-adoption plan against a clean disposable public clone
+  - independent source and upstream test verification on a disposable candidate
+  - native Mill gate, exact-candidate audit, full-diff review, and green PR
+exceptions:
+  - The task may record public replay evidence and repair a directly exposed
+    native-adoption defect within its declared paths.
+  - It cannot represent an upstream contribution, a customer acceptance result,
+    a release qualification, or any external effect.

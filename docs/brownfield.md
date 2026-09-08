@@ -86,6 +86,12 @@ Commit the controls, run `state reconcile-plans`, then explicitly prepare
 dependencies and provide approved product/scenario/impact/task authority for
 native baseline qualification and execution.
 
+The
+[semantic-release/github Search API replay](canaries/semantic-release-github-search-api-deprecation-replay.md)
+records a passed public example of this exact onboarding boundary. It qualifies
+only that frozen Node ESM/npm case; it does not add a broad compatibility or
+customer-maintenance claim.
+
 An incompatible original package manager requires a separately reviewed local
 overlay, not a silent conversion or support claim. Qualification applies only to
 the exact tested repository revision, commands, dependency lock, image and host.
