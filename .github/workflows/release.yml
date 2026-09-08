@@ -145,7 +145,7 @@ jobs:
             exit 1
           fi
       - name: Download both independent artifacts
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: builder-*
           path: ${{ runner.temp }}/builders
@@ -230,7 +230,7 @@ jobs:
           npm ci --ignore-scripts
           npm run build
       - name: Download the exact candidate artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: genesis-candidate-${{ inputs.tag }}
           path: ${{ runner.temp }}/qualified
@@ -312,7 +312,7 @@ jobs:
           MILL_RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/verify-release-tag.mjs > "$RUNNER_TEMP/identity.json"
       - name: Download the qualified candidate run
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: genesis-candidate-${{ inputs.tag }}
           path: ${{ runner.temp }}/qualified
@@ -320,7 +320,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
       - name: Download independent verifier receipt
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: independent-policy-${{ inputs.tag }}
           path: ${{ runner.temp }}/trusted
