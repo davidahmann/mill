@@ -57,7 +57,8 @@ authentication of a customer's declaration or proof of commercial value.
 ## Acceptance
 
 - IA-01 existing tasks retain their baseline behavior; explicit baseline
-  selections cannot silently reduce candidate commands or weaken required gates.
+  selections cannot silently reduce candidate commands, omit preservation
+  scenarios or affected invariant commands, or weaken required gates.
 - IA-02 missing, duplicate, stale, changed, unbound or inconsistent matrix
   inputs block; all workflow/configuration pairs have checks or disclosed
   exclusions.

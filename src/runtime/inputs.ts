@@ -354,6 +354,17 @@ export async function loadRuntimeInputs(
           );
         }
       }
+      for (const id of impact.affectedInvariantIds) {
+        const invariant = product.invariants.find((item) => item.id === id);
+        if (
+          invariant?.verification.mode === "command" &&
+          !task.baselineCommandIds.includes(invariant.verification.ref)
+        ) {
+          blockers.push(
+            `baseline omits a preservation invariant command: ${id}:${invariant.verification.ref}`,
+          );
+        }
+      }
     }
     if (task.authority.adaptation !== undefined) {
       const reference = task.authority.adaptation;

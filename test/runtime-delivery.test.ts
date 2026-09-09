@@ -9,8 +9,10 @@ import { stringify as yaml, parse as parseYaml } from "yaml";
 import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { planOutcomeClosure } from "../src/planning/closure.js";
 import {
+  adaptationManifestSchema,
   deliveryRecordSchema,
   outcomePlanSchema,
+  taskPacketV2Schema,
 } from "../src/contracts/schemas.js";
 
 import { MillError, ExitCode } from "../src/errors.js";
@@ -43,7 +45,7 @@ import {
   statePurge,
   verifyRun,
 } from "../src/runtime/lifecycle.js";
-import { loadRuntimeInputs } from "../src/runtime/inputs.js";
+import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import { commonGitDirectory } from "../src/runtime/repository.js";
 import {
   StateStore,
@@ -91,6 +93,69 @@ function activate(fixture: Awaited<ReturnType<typeof runtimeFixture>>): void {
   process.env.MILL_STATE_HOME = fixture.stateHome;
   process.env.MILL_CODEX_PATH = fixture.codexPath;
   process.env.MILL_DOCKER_PATH = fixture.dockerPath;
+}
+
+async function bindAdaptationAuthority(
+  fixture: Awaited<ReturnType<typeof runtimeFixture>>,
+  expiresAt: string,
+): Promise<void> {
+  const taskPath = path.join(fixture.root, fixture.taskPath);
+  const evidencePath = "quality/adaptation-fixture.json";
+  const manifestPath = "product/adaptation.yaml";
+  const evidence = '{"configuration":"standard"}\n';
+  const reference = { path: evidencePath, digest: textDigest(evidence) };
+  const manifest = adaptationManifestSchema.parse({
+    schemaVersion: "1",
+    id: "fixture-adaptation",
+    owner: "test-owner",
+    provider: { id: "fixture", from: "v1", to: "v2", notice: reference },
+    applicability: {
+      statement: "The fixture uses the retired route.",
+      evidence: reference,
+    },
+    workflows: ["positive-value"],
+    configurations: [{ id: "standard", revision: "1", fixture: reference }],
+    fixtures: {
+      kind: "synthetic",
+      capturedAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt,
+    },
+    matrix: [
+      {
+        workflowId: "positive-value",
+        configurationId: "standard",
+        disposition: "check",
+        scenarioId: "SCN-POSITIVE",
+        commandId: "test",
+      },
+    ],
+  });
+  const manifestText = yaml(manifest);
+  const task = taskPacketV2Schema.parse(
+    parseYaml(await readFile(taskPath, "utf8")),
+  );
+  task.contextPaths.push(evidencePath);
+  task.authority.adaptation = {
+    path: manifestPath,
+    digest: textDigest(manifestText),
+  };
+  await Promise.all([
+    writeFile(path.join(fixture.root, evidencePath), evidence),
+    writeFile(path.join(fixture.root, manifestPath), manifestText),
+    writeFile(taskPath, yaml(task)),
+  ]);
+  await git(fixture.root, [
+    "add",
+    evidencePath,
+    manifestPath,
+    fixture.taskPath,
+  ]);
+  await git(fixture.root, [
+    "commit",
+    "--no-gpg-sign",
+    "-m",
+    "test: bind adaptation authority",
+  ]);
 }
 
 function completedCheck(conclusion: string, name = "validate"): GitHubCheck {
@@ -382,6 +447,7 @@ async function seedLegacyPostMergeDelivery(
 async function reviewedFixture(
   options: {
     attendedMerge?: boolean;
+    adaptationExpiresAt?: string;
     impactExpiresAt?: string;
     githubReviewer?: string;
     requiredChecks?: readonly string[];
@@ -415,6 +481,9 @@ async function reviewedFixture(
         ? {}
         : { postMergeRequiredChecks: options.postMergeRequiredChecks }),
     });
+  }
+  if (options.adaptationExpiresAt !== undefined) {
+    await bindAdaptationAuthority(fixture, options.adaptationExpiresAt);
   }
   activate(fixture);
   const qualification = await qualifyBaseline({
@@ -763,15 +832,19 @@ describe("exact-candidate GitHub draft delivery", () => {
     "ready_receipt_lost",
     "success",
     "authority_expires_after_ready",
+    "adaptation_expires_after_ready",
   ])(
     "requires exact attended merge approval and reconciles %s",
     async (scenario) => {
-      const impactExpiresAt = new Date(Date.now() + 300_000).toISOString();
+      const authorityExpiresAt = new Date(Date.now() + 300_000).toISOString();
       const { fixture, runId, candidateCommit, candidateTree } =
         await reviewedFixture({
           attendedMerge: true,
           ...(scenario === "authority_expires_after_ready"
-            ? { impactExpiresAt }
+            ? { impactExpiresAt: authorityExpiresAt }
+            : {}),
+          ...(scenario === "adaptation_expires_after_ready"
+            ? { adaptationExpiresAt: authorityExpiresAt }
             : {}),
         });
       class MergeGitHub extends FakeGitHub {
@@ -789,9 +862,12 @@ describe("exact-candidate GitHub draft delivery", () => {
           this.readyCalls++;
           if (this.pullRequest === null) throw new Error("missing fake PR");
           this.pullRequest = { ...this.pullRequest, draft: false };
-          if (scenario === "authority_expires_after_ready")
+          if (
+            scenario === "authority_expires_after_ready" ||
+            scenario === "adaptation_expires_after_ready"
+          )
             vi.spyOn(Date, "now").mockReturnValue(
-              Date.parse(impactExpiresAt) + 1,
+              Date.parse(authorityExpiresAt) + 1,
             );
           if (this.loseReadyReceipt) throw new Error("ready receipt lost");
         }
@@ -884,7 +960,10 @@ describe("exact-candidate GitHub draft delivery", () => {
         expect(adapter.readyCalls).toBe(0);
         expect(adapter.mergeCalls).toBe(0);
         let fresh = await planMerge({ ...input, method: "squash" });
-        if (scenario === "authority_expires_after_ready") {
+        if (
+          scenario === "authority_expires_after_ready" ||
+          scenario === "adaptation_expires_after_ready"
+        ) {
           await expect(
             applyMerge({
               ...input,

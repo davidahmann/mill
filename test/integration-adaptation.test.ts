@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { adaptationManifestSchema } from "../src/contracts/schemas.js";
+import {
+  adaptationManifestSchema,
+  impactManifestSchema,
+  productContractSchema,
+  scenarioSetSchema,
+} from "../src/contracts/schemas.js";
+import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import {
   assessAdaptation,
   adaptationEvidence,
@@ -315,6 +321,122 @@ describe("adaptation lifecycle admission", () => {
         baseline.evidence.commands.find((item) => item.commandId === "target")
           ?.status,
       ).toBe("failed");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+  it("requires an explicit baseline to preserve each affected invariant command", async () => {
+    const fixture = await prepared();
+    try {
+      const productPath = path.join(fixture.root, "product/contract.yaml");
+      const impactPath = path.join(fixture.root, "product/impact.yaml");
+      const scenarioPath = path.join(fixture.root, "quality/scenarios.yaml");
+      const configPath = path.join(fixture.root, "mill.yaml");
+      const product = productContractSchema.parse(
+        parse(await readFile(productPath, "utf8")),
+      );
+      const impact = impactManifestSchema.parse(
+        parse(await readFile(impactPath, "utf8")),
+      );
+      const scenarios = scenarioSetSchema.parse(
+        parse(await readFile(scenarioPath, "utf8")),
+      );
+      const config = millConfigSchema.parse(
+        parse(await readFile(configPath, "utf8")),
+      );
+      const invariant = product.invariants.find(
+        (item) => item.id === "INV-POSITIVE",
+      );
+      const command = config.commands.test;
+      if (invariant === undefined || command === undefined)
+        throw new Error("fixture lacks its required invariant command");
+      invariant.verification = { mode: "command", ref: "invariant" };
+      config.commands.invariant = { ...command };
+      fixture.task.commandIds.push("invariant");
+      impact.productContractDigest = canonicalDigest(product as JsonValue);
+      scenarios.productContractDigest = canonicalDigest(product as JsonValue);
+      impact.commandIds.push("invariant");
+      if (impact.approval === null)
+        throw new Error("fixture impact must be approved");
+      impact.approval = {
+        ...impact.approval,
+        proposalDigest: canonicalDigest({
+          ...impact,
+          approval: null,
+        }),
+      };
+      const productText = stringify(product);
+      const impactText = stringify(impact);
+      const scenarioText = stringify(scenarios);
+      fixture.task.authority.productContract.digest = textDigest(productText);
+      fixture.task.authority.impactManifest.digest = textDigest(impactText);
+      fixture.task.authority.scenarioSet.digest = textDigest(scenarioText);
+      await Promise.all([
+        writeFile(productPath, productText),
+        writeFile(impactPath, impactText),
+        writeFile(scenarioPath, scenarioText),
+        writeFile(configPath, stringify(config)),
+        writeFile(fixture.taskFile, stringify(fixture.task)),
+      ]);
+      await execute(
+        "/usr/bin/git",
+        [
+          "-c",
+          "user.name=Mill Test",
+          "-c",
+          "user.email=test@example.invalid",
+          "add",
+          ".",
+        ],
+        { cwd: fixture.root },
+      );
+      await execute(
+        "/usr/bin/git",
+        [
+          "-c",
+          "user.name=Mill Test",
+          "-c",
+          "user.email=test@example.invalid",
+          "commit",
+          "-m",
+          "test: bind invariant baseline",
+        ],
+        { cwd: fixture.root },
+      );
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({
+        code: "CONTINUITY_AUTHORITY_BLOCKED",
+        details: {
+          blockers: [
+            "baseline omits a preservation invariant command: INV-POSITIVE:invariant",
+          ],
+        },
+      });
+      fixture.task.baselineCommandIds = ["test", "invariant"];
+      await writeFile(fixture.taskFile, stringify(fixture.task));
+      await execute(
+        "/usr/bin/git",
+        [
+          "-c",
+          "user.name=Mill Test",
+          "-c",
+          "user.email=test@example.invalid",
+          "commit",
+          "-am",
+          "test: retain invariant baseline",
+        ],
+        { cwd: fixture.root },
+      );
+      const baseline = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      expect(baseline.evidence.commands.map((item) => item.commandId)).toEqual([
+        "test",
+        "invariant",
+      ]);
+      expect(baseline.approvalDigest).not.toBeNull();
     } finally {
       await fixture.cleanup();
     }
