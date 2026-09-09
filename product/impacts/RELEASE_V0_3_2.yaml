@@ -1,0 +1,34 @@
+schemaVersion: "2"
+id: mill-release-v0.3.2
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-09: “lets do new latest release incl
+  npm and update docs to use new version also reanalyze readme and agents.md and
+  think of optimizations and rewrites and address ship all till green”.
+source_base: 44022ffd0c017278e84085ff5e9d08c439eb6dd3
+authority: product/release-v0.3.2.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Advances the immutable package identity to v0.3.2.
+  - Makes public installation and operational guidance cite the current release
+    record rather than stale fixed distribution identities.
+  - Ships the merged integration-adaptation evidence through the existing
+    independently qualified release path.
+affected_surfaces:
+  - package and CLI version identity
+  - public README, operating contract, release/runbook and product-plan records
+  - exact release record, npm environment admission, and public distribution
+verification:
+  - native check, exact-candidate audit, complete-diff review, and green PR
+  - annotated-tag identity and two independent candidate builds
+  - independent policy, registry-package, npm provenance, and GitHub-asset
+    readback
+exceptions:
+  - This attended maintainer release may merge, create and push the annotated
+    v0.3.2 tag, add its exact npm-environment rule, publish one preserved
+    artifact, create the normal GitHub Release, and promote only its alpha and
+    latest npm dist-tags as specified in its authority record.

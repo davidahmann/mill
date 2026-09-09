@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.1
+Version: 2.2
 
 Status: normative
 
@@ -252,18 +252,18 @@ precede the immutable npm effect; a prior job's Docker cache is not evidence.
 Native workflow policy guards this order. Mill runtime validation still never
 pulls an image implicitly.
 
-The owner-approved GitHub `npm` environment admits branch `main` plus historical
-tag `v0.2.1` and exact tag `v0.3.0`, with its required reviewer retained.
-Routine release dispatch uses its exact tag, not an unbound main ref. A future
-tag requires a separate exact environment-policy authorization; never widen to
-wildcard tags or bypass the reviewer gate. Main branch protections remain
-unchanged.
+The protected GitHub `npm` environment admits `main` and separately approved,
+exact release tags while retaining its required reviewer. Routine release
+dispatch uses the exact annotated tag, never an unbound main ref. Each new tag
+needs its own source authority, environment-policy authorization, and provider
+readback; never use a wildcard or bypass the reviewer gate. Main branch
+protections remain unchanged.
 
-The current published public alpha is `0.3.0`; both npm `alpha` and `latest` and
-GitHub Latest point to it. Its exact support tuple and expiry are in
-`docs/releases/v0.3.0.md`. This distribution status does not broaden supported
-stacks or autonomy. The v0.1.5 verifier remains the workflow's independently
-pinned policy; do not silently replace it with the newest version.
+The current public version, npm channel pointers, GitHub Latest record, support
+tuple, and expiry belong in the current `docs/releases/vX.Y.Z.md` record and
+provider readback. They are distribution facts, not authority to broaden
+supported stacks or autonomy. The v0.1.5 verifier remains the workflow's
+independently pinned policy; do not silently replace it with the newest version.
 
 Publication and channel promotion are distinct effects. Never rerun a publish
 job to recover an already-published npm version. Inventory GitHub releases by

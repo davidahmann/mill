@@ -4,6 +4,28 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-09
+
+### Added
+
+- Add optional, digest-bound integration-adaptation authority for provider
+  notices, applicability evidence, frozen fixtures, configurations, workflows,
+  and a complete check-or-exclusion matrix.
+- Record offline configuration-level adaptation evidence alongside ordinary
+  candidate validation without claiming live provider execution or owner
+  acceptance.
+
+### Changed
+
+- Let an approved baseline select preservation commands while candidate
+  verification still executes every required command. A selected baseline must
+  retain preservation scenarios and command-verified affected invariants.
+- Keep adaptation-fixture expiry as an authority deadline through attended merge
+  effects, and accept a dependency-free snapshot only when the root lock graph
+  proves it empty.
+- Make public release documentation point to the current version record instead
+  of carrying stale distribution identities in the operator contract.
+
 ## [0.3.1] - 2026-09-08
 
 ### Changed
