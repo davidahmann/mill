@@ -1,21 +1,19 @@
 # Mill delivery plan
 
-Status: public-alpha scope complete; attended integration-adaptation
-qualification in progress
+Status: public-alpha scope complete; integration-adaptation qualification landed
 
 Owner: David Ahmann
 
-Brownfield discovery is landed. The current approved bounded increment is
-[`integration adaptation`](integration-adaptation.md): it binds a supplied
-provider change to an explicit workflow/configuration matrix and keeps candidate
-evidence visibly offline and owner-acceptance-pending. It does not add provider
-monitoring, shared customer context, recurring coverage infrastructure or a
-public support claim. Brownfield discovery adds only read-only TypeScript source
-evidence and conservative change leads; it does not expand the public-alpha
-adoption recipe or delivery authority. Its contract, impact, and local fixture
-evaluation are recorded in `product/brownfield-discovery.md`,
-`product/impacts/BROWNFIELD_DISCOVERY.yaml`, `product/brownfield-contract.yaml`,
-`quality/brownfield-scenarios.yaml`, and
+Brownfield discovery and [`integration adaptation`](integration-adaptation.md)
+are landed. The latter binds a supplied provider change to an explicit
+workflow/configuration matrix and keeps candidate evidence visibly offline and
+owner-acceptance-pending. It does not add provider monitoring, shared customer
+context, recurring coverage infrastructure or a public support claim. Brownfield
+discovery adds only read-only TypeScript source evidence and conservative change
+leads; it does not expand the public-alpha adoption recipe or delivery
+authority. Its contract, impact, and local fixture evaluation are recorded in
+`product/brownfield-discovery.md`, `product/impacts/BROWNFIELD_DISCOVERY.yaml`,
+`product/brownfield-contract.yaml`, `quality/brownfield-scenarios.yaml`, and
 `docs/canaries/brownfield-discovery.md`.
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
@@ -63,7 +61,8 @@ configured. It has no CI provenance or GitHub Release and is not the supported
 alpha. The protected GitHub environment and package-specific OIDC trust are
 active. Version `0.1.5` completed the provenance, registry requalification,
 final evidence, and GitHub Release chain and is the qualified trust root for a
-future release. The current `0.3.1` release is selected by npm `alpha` and
-`latest`; bootstrap-only `0.1.4` remains deprecated evidence. The first alpha
-remains attended, single-repository, and limited to its exact qualified recipe
-and host tuple. No autonomous-planner or general stack-support claim is made.
+future release. The current release record identifies the exact npm `alpha` and
+`latest` pointers; bootstrap-only `0.1.4` remains deprecated evidence. The first
+alpha remains attended, single-repository, and limited to its exact qualified
+recipe and host tuple. No autonomous-planner or general stack-support claim is
+made.

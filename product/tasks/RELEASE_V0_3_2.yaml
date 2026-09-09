@@ -1,0 +1,50 @@
+schemaVersion: "2"
+task_id: mill-release-v0.3.2
+status: approved
+owner: davidahmann
+base_commit: 44022ffd0c017278e84085ff5e9d08c439eb6dd3
+execution_mode: approved_native_maintainer
+authority: product/release-v0.3.2.md
+impact_manifest: product/impacts/RELEASE_V0_3_2.yaml
+objective: >-
+  Ship the exact v0.3.2 public-alpha artifact with current public documentation
+  and release-safe operational guidance.
+allowed_paths:
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - docs/release.md
+  - docs/repository-settings.md
+  - docs/releases/v0.3.2.md
+  - product/PLAN.md
+  - product/release-v0.3.2.md
+  - product/impacts/RELEASE_V0_3_2.yaml
+  - product/tasks/RELEASE_V0_3_2.yaml
+authority_preparation_paths:
+  - product/**
+  - docs/releases/**
+acceptance_items:
+  - R032-01 public installation and current-release documentation name v0.3.2
+  - R032-02 the package and CLI identify the fresh v0.3.2 version
+  - R032-03 AGENTS and the release runbook retain exact-tag policy while no
+    longer carrying stale current-distribution facts
+  - R032-04 native check, exact-candidate audit, complete review, and PR checks
+    pass
+  - R032-05 annotated tag, candidate, protected publication, readback, release,
+    and npm alpha/latest pointers all bind to the same preserved artifact
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+  - MILL_RELEASE_TAG=v0.3.2 node scripts/verify-release-tag.mjs
+required_reviews:
+  - read-only local Codex review of the complete committed Mill PR diff
+constraints:
+  - single attended maintainer writer
+  - exact v0.3.2 environment-tag admission only; no wildcard or bypass
+  - preserve all historical tags, npm versions, releases, and evidence
+stop_conditions:
+  - ambiguous tag, tree, artifact, candidate-run, provenance, or provider effect
+  - unavailable independent verification or recurring P0/P1 release finding
