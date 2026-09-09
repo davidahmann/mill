@@ -77,9 +77,9 @@ export async function buildContextManifest(
       );
     }
   }
-  const authorityPaths = Object.values(task.authority).map(
-    (reference) => reference.path,
-  );
+  const authorityPaths = Object.values(task.authority)
+    .filter((reference) => reference !== undefined)
+    .map((reference) => reference.path);
   for (const contextPath of [
     ...new Set([...task.contextPaths, ...authorityPaths, ...instructions]),
   ].sort()) {

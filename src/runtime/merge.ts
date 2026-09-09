@@ -55,6 +55,9 @@ function authorityDeadline(inputs: RuntimeInputs): number {
     ...(inputs.task.schemaVersion === "2" ? inputs.task.attestations : []).map(
       (item) => Date.parse(item.expiresAt),
     ),
+    ...(inputs.adaptation === undefined
+      ? []
+      : [Date.parse(inputs.adaptation.manifest.fixtures.expiresAt)]),
   );
 }
 

@@ -556,6 +556,76 @@ const authorityReferenceSchema = z.strictObject({
   digest: digestSchema,
 });
 
+const adaptationCellSchema = z.discriminatedUnion("disposition", [
+  z.strictObject({
+    workflowId: z.string().min(1),
+    configurationId: z.string().min(1),
+    disposition: z.literal("check"),
+    scenarioId: z.string().min(1),
+    commandId: z.string().min(1),
+  }),
+  z.strictObject({
+    workflowId: z.string().min(1),
+    configurationId: z.string().min(1),
+    disposition: z.literal("excluded"),
+    reason: z.string().min(1),
+  }),
+]);
+
+export const adaptationManifestSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  id: z.string().min(1),
+  owner: z.string().min(1),
+  provider: z.strictObject({
+    id: z.string().min(1),
+    from: z.string().min(1),
+    to: z.string().min(1),
+    notice: authorityReferenceSchema,
+  }),
+  applicability: z.strictObject({
+    statement: z.string().min(1),
+    evidence: authorityReferenceSchema,
+  }),
+  workflows: z.array(z.string().min(1)).min(1).max(32),
+  configurations: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        revision: z.string().min(1),
+        fixture: authorityReferenceSchema,
+      }),
+    )
+    .min(1)
+    .max(32),
+  fixtures: z.strictObject({
+    kind: z.enum(["synthetic", "provider_recording"]),
+    capturedAt: z.iso.datetime(),
+    expiresAt: z.iso.datetime(),
+  }),
+  matrix: z.array(adaptationCellSchema).min(1).max(1024),
+});
+
+export const adaptationEvidenceSchema = z.strictObject({
+  manifestDigest: digestSchema,
+  observedAt: z.iso.datetime(),
+  assurance: z.literal("offline_fixture_execution"),
+  ownerAcceptance: z.literal("not_recorded"),
+  provider: adaptationManifestSchema.shape.provider,
+  configurations: adaptationManifestSchema.shape.configurations,
+  fixtures: adaptationManifestSchema.shape.fixtures,
+  matrix: z.array(
+    z.strictObject({
+      workflowId: z.string(),
+      configurationId: z.string(),
+      status: z.enum(["passed", "failed", "blocked", "excluded"]),
+      commandId: z.string().optional(),
+      scenarioId: z.string().optional(),
+      outputDigest: digestSchema.optional(),
+      reason: z.string().optional(),
+    }),
+  ),
+});
+
 const humanAttestationSchema = z.strictObject({
   id: z.string().regex(/^ATT-[A-Z0-9][A-Z0-9-]*$/u),
   approvedBy: z.string().min(1),
@@ -631,11 +701,13 @@ export const taskPacketV1Schema = z.strictObject({
 export const taskPacketV2Schema = z.strictObject({
   schemaVersion: z.literal("2"),
   ...taskPacketCommonShape,
+  baselineCommandIds: z.array(z.string().min(1)).min(1).optional(),
   authority: z.strictObject({
     productContract: authorityReferenceSchema,
     scenarioSet: authorityReferenceSchema,
     policy: authorityReferenceSchema,
     impactManifest: authorityReferenceSchema,
+    adaptation: authorityReferenceSchema.optional(),
   }),
   attestations: z.array(humanAttestationSchema).default([]),
   acceptance: z
@@ -816,6 +888,7 @@ export const validationEvidenceSchema = z.strictObject({
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   verifierImage: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
   network: z.literal("none"),
+  adaptation: adaptationEvidenceSchema.optional(),
   commands: z.array(
     z.strictObject({
       commandId: z.string().min(1),
@@ -1300,6 +1373,7 @@ export const releaseEvidenceSchema = z.strictObject({
 });
 
 export const contractSchemas = {
+  adaptationManifest: adaptationManifestSchema,
   changeRequest: changeRequestSchema,
   auditReport: auditReportSchema,
   blueprint: blueprintSchema,

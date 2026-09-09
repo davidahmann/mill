@@ -5,12 +5,18 @@ import { parse as parseYaml } from "yaml";
 import type { z } from "zod";
 
 import {
+  adaptationManifestSchema,
   impactManifestSchema,
   millConfigSchema,
   productContractSchema,
   scenarioSetSchema,
   taskPacketSchema,
 } from "../contracts/schemas.js";
+import {
+  adaptationReferences,
+  assessAdaptation,
+  type AdaptationManifest,
+} from "../planning/adaptation.js";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { ExitCode, MillError } from "../errors.js";
 import { safeReadText } from "../security/safe-path.js";
@@ -31,6 +37,7 @@ export interface RuntimeInputs {
   taskDigest: string;
   configDigest: string;
   protectedPaths: readonly string[];
+  adaptation?: { manifest: AdaptationManifest; digest: string };
   continuity?: {
     product: ContinuityProductContract;
     scenarios: ContinuityScenarioSet;
@@ -216,6 +223,23 @@ export async function loadRuntimeInputs(
       );
     }
   }
+  if (task.schemaVersion === "2" && task.baselineCommandIds !== undefined) {
+    if (
+      new Set(task.baselineCommandIds).size !==
+        task.baselineCommandIds.length ||
+      task.baselineCommandIds.some(
+        (id) =>
+          !task.commandIds.includes(id) ||
+          config.commands[id]?.required !== true,
+      )
+    ) {
+      throw new MillError(
+        "INVALID_BASELINE_COMMANDS",
+        "Baseline commands must be a unique subset of the required candidate commands.",
+        ExitCode.configuration,
+      );
+    }
+  }
   const selectedControlPaths = task.commandIds.flatMap(
     (commandId) => config.commands[commandId]?.controlPaths ?? [],
   );
@@ -223,7 +247,9 @@ export async function loadRuntimeInputs(
   const protectedPaths = [
     "mill.yaml",
     taskPath,
-    ...Object.values(task.authority).map((reference) => reference.path),
+    ...Object.values(task.authority)
+      .filter((reference) => reference !== undefined)
+      .map((reference) => reference.path),
     ...task.contextPaths,
     ...selectedControlPaths,
     ...dependencyLockPaths,
@@ -244,6 +270,7 @@ export async function loadRuntimeInputs(
     }
   }
   for (const reference of Object.values(task.authority)) {
+    if (reference === undefined) continue;
     const source = await safeReadText(root, reference.path, 2 * 1024 * 1024);
     if (textDigest(source) !== reference.digest) {
       throw new MillError(
@@ -259,6 +286,7 @@ export async function loadRuntimeInputs(
     }
   }
   let continuity: RuntimeInputs["continuity"];
+  let adaptation: RuntimeInputs["adaptation"];
   if (task.schemaVersion === "2") {
     const [productSource, scenarioSource, impactSource] = await Promise.all([
       safeReadText(root, task.authority.productContract.path, 2 * 1024 * 1024),
@@ -314,6 +342,63 @@ export async function loadRuntimeInputs(
     const selectedScenarios = scenarios.scenarios.filter((scenario) =>
       impact.scenarioIds.includes(scenario.id),
     );
+    if (task.baselineCommandIds !== undefined) {
+      for (const scenario of selectedScenarios) {
+        if (
+          scenario.coverage !== "new_behavior" &&
+          scenario.executionRef !== undefined &&
+          !task.baselineCommandIds.includes(scenario.executionRef)
+        ) {
+          blockers.push(
+            `baseline omits a preservation scenario command: ${scenario.executionRef}`,
+          );
+        }
+      }
+      for (const id of impact.affectedInvariantIds) {
+        const invariant = product.invariants.find((item) => item.id === id);
+        if (
+          invariant?.verification.mode === "command" &&
+          !task.baselineCommandIds.includes(invariant.verification.ref)
+        ) {
+          blockers.push(
+            `baseline omits a preservation invariant command: ${id}:${invariant.verification.ref}`,
+          );
+        }
+      }
+    }
+    if (task.authority.adaptation !== undefined) {
+      const reference = task.authority.adaptation;
+      const manifest = parseContract(
+        await safeReadText(root, reference.path, 2 * 1024 * 1024),
+        adaptationManifestSchema,
+        reference.path,
+      );
+      blockers.push(
+        ...assessAdaptation(
+          manifest,
+          {
+            commandIds: task.commandIds,
+            requiredCommandIds: task.commandIds.filter(
+              (id) => config.commands[id]?.required === true,
+            ),
+            scenarios: selectedScenarios,
+          },
+          new Date(),
+          authorityMode === "readback",
+        ),
+      );
+      for (const bound of adaptationReferences(manifest)) {
+        validateRelative(bound.path, "Adaptation evidence path");
+        if (!task.contextPaths.includes(bound.path))
+          blockers.push(
+            `adaptation evidence must be frozen context: ${bound.path}`,
+          );
+        const source = await safeReadText(root, bound.path, 2 * 1024 * 1024);
+        if (textDigest(source) !== bound.digest)
+          blockers.push(`adaptation evidence digest mismatch: ${bound.path}`);
+      }
+      adaptation = { manifest, digest: reference.digest };
+    }
     for (const acceptance of task.acceptance) {
       const approved = productAcceptance.get(acceptance.id);
       if (approved === undefined) continue;
@@ -374,6 +459,7 @@ export async function loadRuntimeInputs(
     configDigest: canonicalDigest(config as unknown as JsonValue),
     protectedPaths,
     ...(continuity === undefined ? {} : { continuity }),
+    ...(adaptation === undefined ? {} : { adaptation }),
   };
 }
 

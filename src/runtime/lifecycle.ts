@@ -795,7 +795,11 @@ export async function qualifyBaseline(input: {
         ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
         candidateCommit: qualified.baseCommit,
         config: inputs.config,
-        task: inputs.task,
+        task:
+          inputs.task.schemaVersion === "2" &&
+          inputs.task.baselineCommandIds !== undefined
+            ? { ...inputs.task, commandIds: inputs.task.baselineCommandIds }
+            : inputs.task,
         deadlineMs: operationDeadline(inputs.task.budget.deadlineSeconds),
         maxOutputBytes: inputs.task.budget.maxOutputBytes,
         signal,
@@ -870,6 +874,9 @@ export async function verifyRun(input: {
       candidateCommit: candidate.commit,
       config: inputs.config,
       task: inputs.task,
+      ...(inputs.adaptation === undefined
+        ? {}
+        : { adaptation: inputs.adaptation }),
       ...(inputs.continuity === undefined
         ? {}
         : {

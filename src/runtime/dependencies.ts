@@ -321,7 +321,7 @@ async function markerMatches(
 async function validateNpmLock(
   root: string,
   lockPaths: readonly string[],
-): Promise<void> {
+): Promise<boolean> {
   const lockPath = "package-lock.json";
   if (!lockPaths.includes(lockPath)) {
     throw new MillError(
@@ -416,6 +416,48 @@ async function validateNpmLock(
       );
     }
   }
+  // npm ci need not create node_modules for a proven empty dependency graph.
+  // A missing root entry is insufficient evidence (and keeps legacy denial).
+  const rootEntry = (packages as Record<string, unknown>)[""];
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(
+      await readFile(path.join(root, "package.json"), "utf8"),
+    );
+  } catch (error) {
+    throw new MillError(
+      "NPM_LOCK_INVALID",
+      "Dependency preparation requires a valid root package.json.",
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
+  }
+  const empty = (value: unknown): boolean => {
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      return false;
+    const item = value as Record<string, unknown>;
+    return (
+      item.workspaces === undefined &&
+      [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies",
+      ].every((field) => {
+        const dependency = item[field];
+        return (
+          dependency === undefined ||
+          (typeof dependency === "object" &&
+            dependency !== null &&
+            !Array.isArray(dependency) &&
+            Object.keys(dependency).length === 0)
+        );
+      })
+    );
+  };
+  return (
+    Object.keys(packages).length === 1 && empty(rootEntry) && empty(manifest)
+  );
 }
 
 export async function dependencySnapshotDirectory(input: {
@@ -561,7 +603,10 @@ async function prepareDependencySnapshotWithSignal(input: {
       await copyFile(sourceFile, destinationFile);
     }
     const identity = await dependencyIdentity(temporary, input.config);
-    await validateNpmLock(temporary, dependencies.lockPaths);
+    const emptyDependencyGraph = await validateNpmLock(
+      temporary,
+      dependencies.lockPaths,
+    );
     const destination = path.join(parent, identity.key);
     preparationLease = await acquireExclusiveLease({
       path: `${destination}.lease.sqlite3`,
@@ -701,9 +746,13 @@ async function prepareDependencySnapshotWithSignal(input: {
         { exitCode: result.exitCode, stderr: result.stderr.slice(0, 2_000) },
       );
     }
-    const modules = await lstat(path.join(temporary, "node_modules")).catch(
+    let modules = await lstat(path.join(temporary, "node_modules")).catch(
       () => undefined,
     );
+    if (modules === undefined && emptyDependencyGraph) {
+      await mkdir(path.join(temporary, "node_modules"), { mode: 0o700 });
+      modules = await lstat(path.join(temporary, "node_modules"));
+    }
     if (
       modules === undefined ||
       !modules.isDirectory() ||

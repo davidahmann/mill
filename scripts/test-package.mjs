@@ -183,23 +183,25 @@ try {
   ) {
     throw new Error("packed recipe does not Markdown-escape its product title");
   }
-  const schemaImport = spawnSync(
-    process.execPath,
-    [
-      "--input-type=module",
-      "--eval",
-      'await import("@davidahmann/mill/schemas/mill-lock.schema.json", { with: { type: "json" } })',
-    ],
-    {
-      cwd: temporary,
-      encoding: "utf8",
-      timeout: 10_000,
-    },
-  );
-  if (schemaImport.status !== 0) {
-    throw new Error(
-      `packed schema import failed: ${schemaImport.stdout}${schemaImport.stderr}`,
+  for (const schema of ["mill-lock", "adaptation-manifest"]) {
+    const schemaImport = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `await import("@davidahmann/mill/schemas/${schema}.schema.json", { with: { type: "json" } })`,
+      ],
+      {
+        cwd: temporary,
+        encoding: "utf8",
+        timeout: 10_000,
+      },
     );
+    if (schemaImport.status !== 0) {
+      throw new Error(
+        `packed ${schema} schema import failed: ${schemaImport.stdout}${schemaImport.stderr}`,
+      );
+    }
   }
   for (const command of [
     "audit",
