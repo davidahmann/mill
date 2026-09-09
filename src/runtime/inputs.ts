@@ -127,6 +127,22 @@ function validateRelative(value: string, label: string): void {
   }
 }
 
+function validateCanonicalRelative(value: string, label: string): void {
+  validateRelative(value, label);
+  if (
+    value.length === 0 ||
+    value === "." ||
+    path.posix.normalize(value) !== value
+  ) {
+    throw new MillError(
+      "INVALID_RUNTIME_PATH",
+      `${label} must be a canonical in-repository relative path.`,
+      ExitCode.configuration,
+      { value },
+    );
+  }
+}
+
 function validatePathPattern(value: string, label: string): void {
   const remaining = value.endsWith("/**") ? value.slice(0, -3) : value;
   validateRelative(remaining, label);
@@ -246,10 +262,17 @@ export async function loadRuntimeInputs(
       );
     }
   }
+  if (task.playbooks !== undefined) {
+    validateCanonicalRelative(task.playbooks.index.path, "Playbook index path");
+  }
   const playbooks = await resolvePlaybookSelection({
     root,
     ...(task.playbooks === undefined ? {} : { selection: task.playbooks }),
+    maxBytes: task.budget.maxContextBytes ?? 8 * 1024 * 1024,
   });
+  for (const playbook of playbooks?.selected ?? []) {
+    validateCanonicalRelative(playbook.path, "Playbook path");
+  }
   const selectedControlPaths = task.commandIds.flatMap(
     (commandId) => config.commands[commandId]?.controlPaths ?? [],
   );

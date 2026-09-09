@@ -306,6 +306,13 @@ qualification additionally runs the verifier and artifact canary pinned to the
 qualified v0.1.5 commit; candidate checks do not replace that independent
 policy.
 
+The read-only run timeline projects the existing append-only local event journal
+into schema-backed event sequence, timestamps, types and state transitions. It
+checks monotonic ordering, creation, transition continuity, legal transition
+edges and agreement with the durable run status. Timeline output contains no
+event payloads, prompts, command output, paths or telemetry export. It is
+diagnostic evidence, never a lifecycle mutator, repair path or effect authority.
+
 Only one writer lease may mutate a repository namespace. The lease is a
 dedicated SQLite exclusive transaction: kernel ownership makes acquisition
 atomic and releases it on controller death, without stale-directory deletion or

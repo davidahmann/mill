@@ -272,6 +272,33 @@ const samples = {
       },
     ],
   },
+  runTimeline: {
+    schemaVersion: "1",
+    run: {
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      taskId: "task-1",
+      status: "reviewed",
+      baseCommit: "a".repeat(40),
+      candidateCommit: "b".repeat(40),
+      cancelRequested: false,
+      repairCount: 0,
+      attemptCount: 1,
+    },
+    events: [
+      {
+        sequence: 1,
+        occurredAt: "2026-09-09T12:30:00.000Z",
+        type: "run.created",
+      },
+      {
+        sequence: 2,
+        occurredAt: "2026-09-09T12:30:01.000Z",
+        type: "run.ready",
+        transition: { from: "approved", to: "ready" },
+      },
+    ],
+    integrity: { status: "consistent", reasons: [] },
+  },
   impactManifest: {
     schemaVersion: "1",
     id: "task-1",
@@ -699,6 +726,7 @@ const schemaFiles = {
   outcomePlan: "outcome-plan.schema.json",
   playbook: "playbook.schema.json",
   playbookIndex: "playbook-index.schema.json",
+  runTimeline: "run-timeline.schema.json",
   impactManifest: "impact-manifest.schema.json",
   millConfig: "mill-config.schema.json",
   deliveryRecord: "delivery-record.schema.json",

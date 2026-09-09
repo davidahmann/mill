@@ -20,6 +20,7 @@ documents use the same data model.
 - `context-manifest.schema.json`
 - `worker-profile.schema.json`
 - `worker-invocation.schema.json`
+- `run-timeline.schema.json`
 - `validation-evidence.schema.json`
 - `review-result.schema.json`
 - `delivery-record.schema.json`

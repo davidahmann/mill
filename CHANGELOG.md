@@ -9,6 +9,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Add repository-owned playbook contracts, read-only metadata discovery and
   explicit task selection that freezes an index and selected playbook bytes in
   the context manifest.
+- Add a schema-backed, read-only run timeline that validates durable event
+  ordering and lifecycle transitions without exposing event payloads.
 
 ### Changed
 

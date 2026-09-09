@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "run": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "taskId": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "ready",
+            "running",
+            "committed",
+            "verified",
+            "reviewed",
+            "proposing",
+            "effect_unknown",
+            "awaiting_ci",
+            "awaiting_human",
+            "merged",
+            "post_merge_verified",
+            "closed",
+            "blocked",
+            "cancelled",
+            "failed",
+            "stale"
+          ]
+        },
+        "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "cancelRequested": { "type": "boolean" },
+        "repairCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "attemptCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "blockCode": { "type": "string", "minLength": 1 }
+      },
+      "required": [
+        "id",
+        "taskId",
+        "status",
+        "baseCommit",
+        "cancelRequested",
+        "repairCount",
+        "attemptCount"
+      ],
+      "additionalProperties": false
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "type": { "type": "string", "minLength": 1 },
+          "transition": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "ready",
+                  "running",
+                  "committed",
+                  "verified",
+                  "reviewed",
+                  "proposing",
+                  "effect_unknown",
+                  "awaiting_ci",
+                  "awaiting_human",
+                  "merged",
+                  "post_merge_verified",
+                  "closed",
+                  "blocked",
+                  "cancelled",
+                  "failed",
+                  "stale"
+                ]
+              },
+              "to": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "ready",
+                  "running",
+                  "committed",
+                  "verified",
+                  "reviewed",
+                  "proposing",
+                  "effect_unknown",
+                  "awaiting_ci",
+                  "awaiting_human",
+                  "merged",
+                  "post_merge_verified",
+                  "closed",
+                  "blocked",
+                  "cancelled",
+                  "failed",
+                  "stale"
+                ]
+              }
+            },
+            "required": ["from", "to"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["sequence", "occurredAt", "type"],
+        "additionalProperties": false
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["consistent", "inconsistent"] },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "minLength": 1 },
+              "message": { "type": "string", "minLength": 1 },
+              "sequence": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["status", "reasons"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "run", "events", "integrity"],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/run-timeline.schema.json",
+  "title": "RunTimeline"
+}

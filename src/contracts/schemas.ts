@@ -13,6 +13,25 @@ const stableInvariantIdSchema = z.string().regex(/^INV-[A-Z0-9][A-Z0-9-]*$/u);
 const stableSourceIdSchema = z.string().regex(/^SRC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableDecisionIdSchema = z.string().regex(/^DEC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableOutcomeIdSchema = z.string().regex(/^OUT-[A-Z0-9][A-Z0-9-]*$/u);
+const runStatusSchema = z.enum([
+  "approved",
+  "ready",
+  "running",
+  "committed",
+  "verified",
+  "reviewed",
+  "proposing",
+  "effect_unknown",
+  "awaiting_ci",
+  "awaiting_human",
+  "merged",
+  "post_merge_verified",
+  "closed",
+  "blocked",
+  "cancelled",
+  "failed",
+  "stale",
+]);
 const uniqueNonemptyStringArraySchema = z
   .array(z.string().min(1))
   .min(1)
@@ -851,6 +870,44 @@ export const workerInvocationSchema = z.strictObject({
   maxOutputBytes: z.number().int().min(1024).max(10_000_000),
 });
 
+export const runTimelineSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  run: z.strictObject({
+    id: z.uuid(),
+    taskId: z.string().min(1),
+    status: runStatusSchema,
+    baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    candidateCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    cancelRequested: z.boolean(),
+    repairCount: z.number().int().min(0),
+    attemptCount: z.number().int().min(0),
+    blockCode: z.string().min(1).optional(),
+  }),
+  events: z.array(
+    z.strictObject({
+      sequence: z.number().int().positive(),
+      occurredAt: z.iso.datetime(),
+      type: z.string().min(1),
+      transition: z
+        .strictObject({ from: runStatusSchema, to: runStatusSchema })
+        .optional(),
+    }),
+  ),
+  integrity: z.strictObject({
+    status: z.enum(["consistent", "inconsistent"]),
+    reasons: z.array(
+      z.strictObject({
+        code: z.string().min(1),
+        message: z.string().min(1),
+        sequence: z.number().int().positive().optional(),
+      }),
+    ),
+  }),
+});
+
 export const contextManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   playbooks: z
@@ -1458,6 +1515,7 @@ export const contractSchemas = {
   repositoryIntelligence: repositoryIntelligenceSchema,
   repositoryIntegrationPlan: repositoryIntegrationPlanSchema,
   reviewResult: reviewResultSchema,
+  runTimeline: runTimelineSchema,
   scenarioSet: scenarioSetSchema,
   sourceManifest: sourceManifestSchema,
   supportTuple: supportTupleSchema,

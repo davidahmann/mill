@@ -85,6 +85,7 @@ try {
     "schemas/repository-integration-plan.schema.json",
     "schemas/repository-intelligence.schema.json",
     "schemas/review-result.schema.json",
+    "schemas/run-timeline.schema.json",
     "schemas/source-manifest.schema.json",
     "schemas/support-tuple.schema.json",
     "schemas/specification-proposal.schema.json",
@@ -190,6 +191,7 @@ try {
     "adaptation-manifest",
     "playbook",
     "playbook-index",
+    "run-timeline",
   ]) {
     const schemaImport = spawnSync(
       process.execPath,
@@ -223,6 +225,7 @@ try {
     "qualify",
     "run",
     "status",
+    "timeline",
     "verify",
     "review",
     "pr",

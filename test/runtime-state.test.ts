@@ -128,6 +128,31 @@ describe("operational state", () => {
         "run.created",
         "run.ready",
       ]);
+      expect(store.runEventSnapshot(run.id)).toMatchObject({
+        run: { id: run.id, status: "ready" },
+        events: [{ type: "run.created" }, { type: "run.ready" }],
+      });
+      const corruptJournal = new DatabaseSync(store.databasePath);
+      try {
+        corruptJournal
+          .prepare(
+            "INSERT INTO run_events(run_id, occurred_at, type, data_json) VALUES (?, ?, ?, ?)",
+          )
+          .run(
+            run.id,
+            new Date().toISOString(),
+            "worker.admitted",
+            JSON.stringify("private-marker"),
+          );
+      } finally {
+        corruptJournal.close();
+      }
+      const sanitizedSnapshot = store.runEventSnapshot(run.id);
+      expect(JSON.stringify(sanitizedSnapshot)).not.toContain("private-marker");
+      expect(sanitizedSnapshot.events.at(-1)).toMatchObject({
+        type: "worker.admitted",
+        journalDataInvalid: true,
+      });
       expect((await stat(store.directory)).mode & 0o777).toBe(0o700);
       expect((await stat(store.databasePath)).mode & 0o777).toBe(0o600);
       const backup = await store.backup();

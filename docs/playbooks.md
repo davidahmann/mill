@@ -34,7 +34,11 @@ At admission, Mill verifies the pinned index and each selected playbook's digest
 and matching ID/kind. It adds only the index and selected files to the frozen
 priority context and records the selection in the context manifest. A changed,
 missing, duplicate or mismatched selection blocks. Selected files are immutable
-runtime inputs and cannot overlap the builder's allowed output paths.
+runtime inputs and cannot overlap the builder's allowed output paths. Selection
+is loaded serially and limited by the task's frozen priority-context budget, so
+a large index cannot exhaust that budget before admission rejects it. If an
+index or selected file is already present in task-owned frozen context, Mill
+still verifies it but records and charges the distinct file once.
 
 This is progressive selection, not a claim that Mill observes every filesystem
 read by a coding agent. The index supports discovery; task selection is the

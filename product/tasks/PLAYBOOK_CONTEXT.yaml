@@ -7,8 +7,9 @@ execution_mode: approved_native_maintainer
 authority: product/playbook-context.md
 impact_manifest: product/impacts/PLAYBOOK_CONTEXT.yaml
 objective: >-
-  Add repository-owned, digest-pinned playbook discovery and task selection
-  without changing Mill's product, verification or external-effect authority.
+  Add repository-owned, digest-pinned playbook discovery and task selection plus
+  a read-only, integrity-checked local run timeline without changing Mill's
+  product, verification or external-effect authority.
 allowed_paths:
   - src/**
   - test/**
@@ -21,7 +22,7 @@ allowed_paths:
   - README.md
   - AGENTS.md
   - CHANGELOG.md
-acceptance_items: [PB-01, PB-02, PB-03, PB-04, PB-05]
+acceptance_items: [PB-01, PB-02, PB-03, PB-04, PB-05, PB-06]
 validation_commands:
   - npm run check
   - node dist/cli.js --json --cwd . audit
@@ -31,7 +32,7 @@ constraints:
   - one native-maintainer writer in a disposable worktree
   - preserve existing task, acceptance, verification and delivery authority
   - no release, publication, MCP server, daemon, centralized service or
-    automatic mutation
+    automatic mutation, telemetry or trace export
 stop_conditions:
   - ambiguous authority, stale selected context, secret disclosure or
     unavailable mandatory gate

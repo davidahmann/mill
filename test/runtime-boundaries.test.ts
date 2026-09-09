@@ -18,6 +18,7 @@ import {
 } from "../src/runtime/context.js";
 import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import type { MillConfig, TaskPacket } from "../src/runtime/inputs.js";
+import { resolvePlaybookSelection } from "../src/runtime/playbooks.js";
 import {
   assertCandidateScope,
   assertGitControlState,
@@ -206,6 +207,42 @@ describe("runtime authority and repository boundaries", () => {
         expect.arrayContaining([paths.indexPath, paths.playbookPath]),
       );
 
+      const uniqueContextBytes = (
+        await Promise.all(
+          [...new Set(frozen.manifest.included.map((item) => item.path))].map(
+            async (contextPath) =>
+              Buffer.byteLength(
+                await readFile(path.join(fixture.root, contextPath), "utf8"),
+                "utf8",
+              ),
+          ),
+        )
+      ).reduce((total, bytes) => total + bytes, 0);
+      const overlapping = await buildContextManifest(
+        fixture.root,
+        "a".repeat(40),
+        {
+          ...inputs.task,
+          contextPaths: [
+            ...inputs.task.contextPaths,
+            paths.indexPath,
+            paths.playbookPath,
+          ],
+          budget: {
+            ...inputs.task.budget,
+            maxContextBytes: uniqueContextBytes,
+          },
+        },
+        inputs.config,
+        inputs.taskDigest,
+      );
+      expect(overlapping.manifest.included.map((item) => item.path)).toEqual(
+        expect.arrayContaining([paths.indexPath, paths.playbookPath]),
+      );
+      expect(
+        new Set(overlapping.manifest.included.map((item) => item.path)).size,
+      ).toBe(overlapping.manifest.included.length);
+
       await writeFile(path.join(fixture.root, paths.playbookPath), "changed\n");
       await expect(
         assertContextFresh(fixture.root, frozen.manifest),
@@ -256,6 +293,91 @@ describe("runtime authority and repository boundaries", () => {
       await expect(
         loadRuntimeInputs(fixture.root, fixture.taskPath),
       ).rejects.toMatchObject({ code: "BOUND_INPUT_SCOPE_OVERLAP" });
+
+      await writeFile(
+        path.join(fixture.root, fixture.taskPath),
+        taskSource.replace(
+          `path: ${paths.indexPath}`,
+          `path: ./${paths.indexPath}`,
+        ),
+      );
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({ code: "INVALID_RUNTIME_PATH" });
+
+      const aliasedIndex = indexSource.replace(
+        `path: ${paths.playbookPath}`,
+        `path: ./${paths.playbookPath}`,
+      );
+      await Promise.all([
+        writeFile(path.join(fixture.root, paths.indexPath), aliasedIndex),
+        writeFile(
+          path.join(fixture.root, fixture.taskPath),
+          taskSource.replace(textDigest(indexSource), textDigest(aliasedIndex)),
+        ),
+      ]);
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({ code: "INVALID_RUNTIME_PATH" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("bounds cumulative playbook selection before loading every file", async () => {
+    const fixture = await runtimeFixture();
+    try {
+      const first = `schemaVersion: "1"
+id: first
+title: First playbook
+kind: repository_procedure
+applicability: [Apply once.]
+requiredInputs: []
+procedure: [Inspect the repository.]
+verification: [Run a check.]
+stopConditions: [Stop on missing evidence.]
+boundaries: [This is not acceptance authority.]
+# ${"x".repeat(512)}
+`;
+      const second = first.replace("id: first", "id: second");
+      const index = `schemaVersion: "1"
+playbooks:
+  - id: first
+    title: First playbook
+    summary: First bounded procedure.
+    kind: repository_procedure
+    tags: [first]
+    path: playbooks/first.yaml
+    digest: ${textDigest(first)}
+  - id: second
+    title: Second playbook
+    summary: Second bounded procedure.
+    kind: repository_procedure
+    tags: [second]
+    path: playbooks/second.yaml
+    digest: ${textDigest(second)}
+`;
+      await mkdir(path.join(fixture.root, "playbooks"), { recursive: true });
+      await Promise.all([
+        writeFile(path.join(fixture.root, "playbooks", "first.yaml"), first),
+        writeFile(path.join(fixture.root, "playbooks", "second.yaml"), second),
+        writeFile(path.join(fixture.root, "playbooks", "index.yaml"), index),
+      ]);
+      const oneSelection =
+        Buffer.byteLength(index, "utf8") + Buffer.byteLength(first, "utf8");
+      await expect(
+        resolvePlaybookSelection({
+          root: fixture.root,
+          selection: {
+            index: {
+              path: "playbooks/index.yaml",
+              digest: textDigest(index),
+            },
+            ids: ["first", "second"],
+          },
+          maxBytes: oneSelection,
+        }),
+      ).rejects.toMatchObject({ code: "CONTEXT_BUDGET_EXCEEDED" });
     } finally {
       await fixture.cleanup();
     }

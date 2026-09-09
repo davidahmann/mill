@@ -79,13 +79,11 @@ For its one qualified shape, Mill can:
     names the next attended safe action without taking it;
 13. report the built-in builder's trusted-host boundary and reject an
     unqualified request for isolated execution rather than silently claiming
-    containment.
+    containment. Mill does not autonomously research the web or invent a product
+    specification in this alpha. The operator supplies the structured proposal
+    that Mill assesses and freezes.
 
-Mill does not autonomously research the web or invent a product specification in
-this alpha. The operator supplies the structured proposal that Mill assesses and
-freezes.
-
-## Repository playbooks (unreleased source)
+## Repository playbooks and run timelines (unreleased source)
 
 The source branch can index small repository-owned playbooks, search compact
 metadata, and bind a selected set into a task's frozen context. A playbook can
@@ -95,8 +93,13 @@ selection is digest-pinned and recorded in the context manifest; stale or
 mismatched index or playbook bytes block admission. See
 [repository playbooks](docs/playbooks.md).
 
-This source capability is not part of the current public-alpha support claim or
-the published `0.3.2` package until it receives its own qualification and
+`millctl --json timeline` projects the selected durable run and its append-only
+events into a schema-checked timeline. It includes lifecycle facts only, never
+event payloads, and marks malformed, discontinuous, forbidden, or stale state
+evidence as inconsistent. See [run timelines](docs/run-timeline.md).
+
+These source capabilities are not part of the current public-alpha support claim
+or the published `0.3.2` package until they receive their own qualification and
 release.
 
 ## Supported shape
@@ -380,6 +383,7 @@ interrupted, inspect before acting:
 ```sh
 millctl --json status --run <run-id>
 millctl --json continuation --run <run-id>
+millctl --json timeline --run <run-id>
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
@@ -404,6 +408,11 @@ observed interruption/effect uncertainty, measured resource fields, and the next
 attended action without performing it. It reports provider-measured input,
 output, and cache-input tokens when present, partial fields when a completed
 call omitted them, and `unavailable` currency cost rather than an estimate.
+
+`timeline` is a separate read-only diagnostic view. It shows event sequence,
+timestamp, event type and state transitions, never event payloads. It blocks if
+the recorded sequence, lifecycle contract or durable run status disagree; it
+cannot repair state or authorize the next action.
 
 An unresolved push, PR, readiness or merge blocks repair, new delivery and state
 purge/restore even if the enclosing run says `blocked` or `cancelled`.

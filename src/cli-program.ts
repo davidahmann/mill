@@ -49,6 +49,7 @@ import {
   resumeRun,
   reviewRun,
   runStatus,
+  runTimeline,
   startLocalRun,
   stateBackup,
   statePurge,
@@ -1339,6 +1340,50 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         throw new MillError(
           "RUN_NOT_FOUND",
           "No durable run exists for this continuation request.",
+          ExitCode.data,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("timeline")
+    .description("project one run into a read-only integrity-checked timeline")
+    .option("--run <id>", "run identifier")
+    .action(async (options: { run?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await runTimeline({
+        root,
+        ...(options.run === undefined ? {} : { runId: options.run }),
+      });
+      const consistent = data?.integrity.status === "consistent";
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "timeline",
+          ok: consistent,
+          status: consistent ? "ok" : "blocked",
+          data: data ?? {},
+          reasons:
+            data === undefined
+              ? [
+                  {
+                    code: "RUN_NOT_FOUND",
+                    message: "No durable run exists for this timeline request.",
+                  },
+                ]
+              : data.integrity.reasons,
+        }),
+      );
+      if (data === undefined || !consistent) {
+        throw new MillError(
+          data === undefined ? "RUN_NOT_FOUND" : "TIMELINE_INTEGRITY_BLOCKED",
+          data === undefined
+            ? "No durable run exists for this timeline request."
+            : "Durable run events do not form a consistent lifecycle timeline.",
           ExitCode.data,
           { resultAlreadyEmitted: true },
         );

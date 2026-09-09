@@ -11,6 +11,16 @@ in that conversation. It authorizes no package version change, tag, npm
 publication, GitHub Release, deployment, customer-system action, MCP server,
 centralized playbook service, automatic update or background process.
 
+## Source reviewed
+
+Mastra's workflow implementation and tests were inspected at
+[`df4e650ce805d22647b559b128f89e6207ffac69`](https://github.com/mastra-ai/mastra/tree/df4e650ce805d22647b559b128f89e6207ffac69).
+The relevant pattern is local lifecycle observability with schema-backed output
+and tests for resume/cancellation lineage. Mill adopts only a read-only,
+redacted timeline projection; it does not adopt Mastra, its workflow engine,
+telemetry, tracing exporters, storage abstraction, MCP server, model router or
+agent runtime.
+
 ## Outcome
 
 An approved Mill task can select small repository-owned playbooks from a compact
@@ -18,6 +28,10 @@ index. Mill validates and pins the exact selected files as context, records that
 selection in the context manifest, and rejects stale, missing, inconsistent or
 builder-writable playbook inputs. Read-only CLI commands let an operator search
 metadata before retrieving one verified playbook.
+
+Mill also projects one durable run into a compact timeline, checks that its
+append-only event order and lifecycle transitions agree with durable state, and
+omits event payloads from that public view.
 
 ## Scope
 
@@ -34,6 +48,9 @@ metadata before retrieving one verified playbook.
 5. Define the post-run improvement path as a separate human-reviewed repository
    change. It cannot alter the candidate or acceptance oracle of the run that
    discovered the improvement.
+6. Add a public schema and read-only timeline command that projects local run
+   events, validates transition continuity and reports inconsistencies without
+   exporting event payloads or telemetry.
 
 ## Boundaries
 
@@ -48,6 +65,8 @@ metadata before retrieving one verified playbook.
 - No centralized distribution, polling, telemetry, automatic instruction
   mutation, daemon, arbitrary stack support or support-matrix expansion is
   introduced.
+- Timeline output is diagnostic evidence only. It cannot repair state, resume a
+  run, authorize an effect, replace the support bundle or establish acceptance.
 
 ## Acceptance
 
@@ -61,3 +80,6 @@ metadata before retrieving one verified playbook.
   either form to replace task-owned acceptance or checks.
 - PB-05 Native checks, packed-package checks, schema generation, exact-candidate
   audit, complete-diff review and PR CI pass. No release is made.
+- PB-06 A run timeline is schema-valid and read-only, exposes no event payloads,
+  and blocks on missing, malformed, discontinuous, forbidden or stale lifecycle
+  evidence.

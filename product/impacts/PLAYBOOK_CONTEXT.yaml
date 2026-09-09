@@ -18,12 +18,14 @@ material_changes:
   - Read-only metadata discovery precedes explicit task selection.
   - Playbook maintenance is a separately reviewed future change, never a
     current-run authority path.
+  - A read-only run timeline projects redacted event lineage and blocks when it
+    conflicts with durable lifecycle state.
 verification:
   - positive and negative index, content, scope and stale-input tests
-  - read-only CLI contract tests and public JSON schema checks
+  - read-only CLI/timeline contract tests and public JSON schema checks
   - native check, packed package, audit, complete-diff review and PR CI
 exceptions:
   - Native maintainer may update contracts, documentation and regression tests
     in the approved paths.
-  - No release, MCP server, customer-system action, automatic update or support
-    expansion is authorized.
+  - No release, MCP server, customer-system action, automatic update, telemetry
+    export or support expansion is authorized.

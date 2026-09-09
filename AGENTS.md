@@ -91,8 +91,9 @@ the same candidate. Unknown or conflicting authority blocks execution.
   command logs, and temporary worktrees out of candidate scope.
 - Do not infer an unsupported stack. Public alpha qualifies only the exact
   bundled Node.js/TypeScript/Next.js recipe and compatible adoption shape.
-- Do not claim a source-only playbook capability is part of a published package
-  or public-alpha support matrix before separate qualification and release.
+- Do not claim source-only playbook or timeline capabilities are part of a
+  published package or public-alpha support matrix before separate qualification
+  and release.
 
 Typical expert flow:
 

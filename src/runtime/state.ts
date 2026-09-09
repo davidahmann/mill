@@ -278,6 +278,17 @@ const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   stale: [],
 };
 
+export function isRunStatus(value: unknown): value is RunStatus {
+  return typeof value === "string" && Object.hasOwn(transitions, value);
+}
+
+export function isRunTransitionAllowed(
+  from: RunStatus,
+  to: RunStatus,
+): boolean {
+  return transitions[from].includes(to);
+}
+
 function stateRoot(): string {
   const configured = process.env.MILL_STATE_HOME;
   if (configured !== undefined) {
@@ -1547,6 +1558,65 @@ export class StateStore {
           data: JSON.parse(item.data_json) as unknown,
         };
       });
+  }
+
+  /** Reads lifecycle state and its event journal from one SQLite snapshot. */
+  runEventSnapshot(id?: string): {
+    run?: RunRecord;
+    events: readonly Record<string, unknown>[];
+  } {
+    this.#database.exec("BEGIN");
+    try {
+      const run = id === undefined ? this.latestRun() : this.getRun(id);
+      const events =
+        run === undefined
+          ? []
+          : this.#database
+              .prepare(
+                "SELECT sequence, occurred_at, type, data_json FROM run_events WHERE run_id = ? ORDER BY sequence",
+              )
+              .all(run.id)
+              .map((row) => {
+                const item = row as {
+                  sequence: number;
+                  occurred_at: string;
+                  type: string;
+                  data_json: string;
+                };
+                try {
+                  const data = JSON.parse(item.data_json) as unknown;
+                  if (
+                    typeof data !== "object" ||
+                    data === null ||
+                    Array.isArray(data)
+                  ) {
+                    throw new Error("run event data must be an object");
+                  }
+                  return {
+                    sequence: item.sequence,
+                    occurredAt: item.occurred_at,
+                    type: item.type,
+                    data,
+                  };
+                } catch {
+                  return {
+                    sequence: item.sequence,
+                    occurredAt: item.occurred_at,
+                    type: item.type,
+                    journalDataInvalid: true,
+                  };
+                }
+              });
+      this.#database.exec("COMMIT");
+      return { ...(run === undefined ? {} : { run }), events };
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original read failure.
+      }
+      throw error;
+    }
   }
 
   recordEvent(

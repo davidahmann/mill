@@ -10,6 +10,8 @@ import { safeReadText } from "../security/safe-path.js";
 type PlaybookIndex = z.infer<typeof playbookIndexSchema>;
 type Playbook = z.infer<typeof playbookSchema>;
 
+const defaultSelectionByteLimit = 8 * 1024 * 1024;
+
 export interface PlaybookSelectionRequest {
   index: { path: string; digest: string };
   ids: readonly string[];
@@ -40,6 +42,16 @@ export interface ResolvedPlaybookSelection {
     path: string;
     digest: string;
   }[];
+}
+
+interface LoadedPlaybookIndex {
+  index: ResolvedPlaybookIndex;
+  byteLength: number;
+}
+
+interface LoadedPlaybook {
+  playbook: ResolvedPlaybook;
+  byteLength: number;
 }
 
 function textDigest(value: string): string {
@@ -74,12 +86,25 @@ function parsePlaybookContract<T>(
   return parsed.data;
 }
 
-export async function loadPlaybookIndex(input: {
+function selectionBudgetExceeded(): MillError {
+  return new MillError(
+    "CONTEXT_BUDGET_EXCEEDED",
+    "Selected playbooks exceed the approved frozen priority-context budget; narrow the selection before model spend.",
+    ExitCode.configuration,
+  );
+}
+
+async function readPlaybookIndex(input: {
   root: string;
   path: string;
   expectedDigest?: string;
-}): Promise<ResolvedPlaybookIndex> {
+  maxBytes?: number;
+}): Promise<LoadedPlaybookIndex> {
   const source = await safeReadText(input.root, input.path, 2 * 1024 * 1024);
+  const byteLength = Buffer.byteLength(source, "utf8");
+  if (input.maxBytes !== undefined && byteLength > input.maxBytes) {
+    throw selectionBudgetExceeded();
+  }
   const digest = textDigest(source);
   if (input.expectedDigest !== undefined && digest !== input.expectedDigest) {
     throw new MillError(
@@ -89,17 +114,29 @@ export async function loadPlaybookIndex(input: {
     );
   }
   return {
-    path: input.path,
-    digest,
-    index: parsePlaybookContract(source, playbookIndexSchema, input.path),
+    byteLength,
+    index: {
+      path: input.path,
+      digest,
+      index: parsePlaybookContract(source, playbookIndexSchema, input.path),
+    },
   };
 }
 
-export async function loadIndexedPlaybook(input: {
+export async function loadPlaybookIndex(input: {
+  root: string;
+  path: string;
+  expectedDigest?: string;
+}): Promise<ResolvedPlaybookIndex> {
+  return (await readPlaybookIndex(input)).index;
+}
+
+async function readIndexedPlaybook(input: {
   root: string;
   index: ResolvedPlaybookIndex;
   id: string;
-}): Promise<ResolvedPlaybook> {
+  maxBytes?: number;
+}): Promise<LoadedPlaybook> {
   const entry = input.index.index.playbooks.find(
     (playbook) => playbook.id === input.id,
   );
@@ -111,6 +148,10 @@ export async function loadIndexedPlaybook(input: {
     );
   }
   const source = await safeReadText(input.root, entry.path, 2 * 1024 * 1024);
+  const byteLength = Buffer.byteLength(source, "utf8");
+  if (input.maxBytes !== undefined && byteLength > input.maxBytes) {
+    throw selectionBudgetExceeded();
+  }
   if (textDigest(source) !== entry.digest) {
     throw new MillError(
       "PLAYBOOK_DIGEST_MISMATCH",
@@ -126,26 +167,58 @@ export async function loadIndexedPlaybook(input: {
       ExitCode.configuration,
     );
   }
-  return { ...entry, playbook };
+  return { byteLength, playbook: { ...entry, playbook } };
+}
+
+export async function loadIndexedPlaybook(input: {
+  root: string;
+  index: ResolvedPlaybookIndex;
+  id: string;
+}): Promise<ResolvedPlaybook> {
+  return (await readIndexedPlaybook(input)).playbook;
 }
 
 export async function resolvePlaybookSelection(input: {
   root: string;
   selection?: PlaybookSelectionRequest;
+  maxBytes?: number;
+  alreadyIncludedPaths?: readonly string[];
 }): Promise<ResolvedPlaybookSelection | undefined> {
   if (input.selection === undefined) return undefined;
-  const index = await loadPlaybookIndex({
+  const byteLimit = input.maxBytes ?? defaultSelectionByteLimit;
+  const chargedPaths = new Set(input.alreadyIncludedPaths ?? []);
+  const indexAlreadyIncluded = chargedPaths.has(input.selection.index.path);
+  const loadedIndex = await readPlaybookIndex({
     root: input.root,
     path: input.selection.index.path,
     expectedDigest: input.selection.index.digest,
+    ...(indexAlreadyIncluded ? {} : { maxBytes: byteLimit }),
   });
-  const selected = await Promise.all(
-    input.selection.ids.map((id) =>
-      loadIndexedPlaybook({ root: input.root, index, id }),
-    ),
-  );
+  const selected: ResolvedPlaybook[] = [];
+  chargedPaths.add(loadedIndex.index.path);
+  let remainingBytes =
+    byteLimit - (indexAlreadyIncluded ? 0 : loadedIndex.byteLength);
+  for (const id of input.selection.ids) {
+    const entry = loadedIndex.index.index.playbooks.find(
+      (playbook) => playbook.id === id,
+    );
+    const pathAlreadyIncluded =
+      entry !== undefined && chargedPaths.has(entry.path);
+    const loaded = await readIndexedPlaybook({
+      root: input.root,
+      index: loadedIndex.index,
+      id,
+      ...(pathAlreadyIncluded ? {} : { maxBytes: remainingBytes }),
+    });
+    if (!pathAlreadyIncluded) remainingBytes -= loaded.byteLength;
+    chargedPaths.add(loaded.playbook.path);
+    selected.push(loaded.playbook);
+  }
   return {
-    index: { path: index.path, digest: index.digest },
+    index: {
+      path: loadedIndex.index.path,
+      digest: loadedIndex.index.digest,
+    },
     selected: selected.map((playbook) => ({
       id: playbook.id,
       kind: playbook.kind,
