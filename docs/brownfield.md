@@ -97,3 +97,14 @@ overlay, not a silent conversion or support claim. Qualification applies only to
 the exact tested repository revision, commands, dependency lock, image and host.
 Java, Python, arbitrary monorepos, external databases and enterprise network
 integrations remain outside this native adoption boundary.
+
+## Bounded integration adaptation
+
+An optional version-2 task may bind a provider notice, applicability evidence
+and a complete workflow/configuration matrix as frozen authority. A preservation
+subset can qualify the unchanged base; the candidate always runs its full
+required command set. Candidate evidence reports each selected configuration,
+fixture revision and exclusion as `offline_fixture_execution`, never as live
+provider behavior or customer acceptance. The attended synthetic lifecycle
+qualification and its limits are recorded in
+[`integration-adaptation.md`](canaries/integration-adaptation.md).
