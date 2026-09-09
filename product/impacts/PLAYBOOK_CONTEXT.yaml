@@ -1,0 +1,29 @@
+schemaVersion: "2"
+id: mill-playbook-context
+status: approved
+approved_by: davidahmann
+approval_source:
+  attended conversation on 2026-09-09 authorizing implementation, validation and
+  delivery through green CI without a release.
+source_base: ce1ccdce47d34886f80a0588713386d85658c617
+authority: product/playbook-context.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Optional indexed playbooks become digest-bound task context and manifest
+    evidence.
+  - Read-only metadata discovery precedes explicit task selection.
+  - Playbook maintenance is a separately reviewed future change, never a
+    current-run authority path.
+verification:
+  - positive and negative index, content, scope and stale-input tests
+  - read-only CLI contract tests and public JSON schema checks
+  - native check, packed package, audit, complete-diff review and PR CI
+exceptions:
+  - Native maintainer may update contracts, documentation and regression tests
+    in the approved paths.
+  - No release, MCP server, customer-system action, automatic update or support
+    expansion is authorized.

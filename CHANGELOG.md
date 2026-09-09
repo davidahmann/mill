@@ -4,6 +4,18 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Add repository-owned playbook contracts, read-only metadata discovery and
+  explicit task selection that freezes an index and selected playbook bytes in
+  the context manifest.
+
+### Changed
+
+- Keep reusable migration knowledge separate from repository-owned acceptance
+  and verification. Playbook corrections require a separate reviewed change and
+  cannot recertify the run that discovered them.
+
 ## [0.3.2] - 2026-09-09
 
 ### Added

@@ -8,6 +8,8 @@ export {
 export {
   contractSchemas,
   adaptationManifestSchema,
+  playbookIndexSchema,
+  playbookSchema,
   repositoryIntelligenceSchema,
   type ContractKind,
 } from "./contracts/schemas.js";
@@ -15,6 +17,15 @@ export {
   assessAdaptation,
   type AdaptationManifest,
 } from "./planning/adaptation.js";
+export {
+  loadIndexedPlaybook,
+  loadPlaybookIndex,
+  resolvePlaybookSelection,
+  searchPlaybookIndex,
+  type ResolvedPlaybook,
+  type ResolvedPlaybookIndex,
+  type ResolvedPlaybookSelection,
+} from "./runtime/playbooks.js";
 export {
   doctor,
   doctorReady,

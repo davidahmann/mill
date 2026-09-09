@@ -9,6 +9,7 @@ import { safeReadText } from "../security/safe-path.js";
 import type { MillConfig, TaskPacket } from "./inputs.js";
 import { textDigest } from "./inputs.js";
 import { discoverRepository } from "../repository/intelligence.js";
+import { resolvePlaybookSelection } from "./playbooks.js";
 
 export type ContextManifest = z.infer<typeof contextManifestSchema>;
 
@@ -80,8 +81,22 @@ export async function buildContextManifest(
   const authorityPaths = Object.values(task.authority)
     .filter((reference) => reference !== undefined)
     .map((reference) => reference.path);
+  const playbooks = await resolvePlaybookSelection({
+    root: worktree,
+    ...(task.playbooks === undefined ? {} : { selection: task.playbooks }),
+  });
   for (const contextPath of [
-    ...new Set([...task.contextPaths, ...authorityPaths, ...instructions]),
+    ...new Set([
+      ...task.contextPaths,
+      ...authorityPaths,
+      ...instructions,
+      ...(playbooks === undefined
+        ? []
+        : [
+            playbooks.index.path,
+            ...playbooks.selected.map((item) => item.path),
+          ]),
+    ]),
   ].sort()) {
     if (sensitive(contextPath, config.sensitivePaths)) {
       throw new MillError(
@@ -181,11 +196,13 @@ export async function buildContextManifest(
     included,
     effectiveInstructions,
     providerVisibleScope,
+    ...(playbooks === undefined ? {} : { playbooks }),
     ...(repositoryContext === undefined ? {} : { repositoryContext }),
-  });
+  } as unknown as JsonValue);
   const manifest = contextManifestSchema.parse({
     schemaVersion: "1",
     ...(repositoryContext === undefined ? {} : { repositoryContext }),
+    ...(playbooks === undefined ? {} : { playbooks }),
     taskDigest,
     baseCommit,
     provider: "openai",

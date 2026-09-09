@@ -278,6 +278,123 @@ describe("CLI contracts", () => {
     }
   });
 
+  it("searches compact playbook metadata and verifies a selected playbook before showing it", async () => {
+    const temporary = await temporaryDirectory("mill-cli-playbooks-");
+    try {
+      await mkdir(path.join(temporary.path, "playbooks"));
+      const playbook = `schemaVersion: "1"
+id: provider-api-adaptation
+title: Adapt a provider API
+kind: shared_migration_knowledge
+applicability: [A provider API changes.]
+requiredInputs: [Provider notice]
+procedure: [Confirm applicability.]
+verification: [Run repository checks.]
+stopConditions: [Acceptance is missing.]
+boundaries: [The playbook is not acceptance authority.]
+`;
+      const index = `schemaVersion: "1"
+playbooks:
+  - id: provider-api-adaptation
+    title: Adapt a provider API
+    summary: A bounded provider migration procedure.
+    kind: shared_migration_knowledge
+    tags: [provider, migration]
+    path: playbooks/provider-api-adaptation.yaml
+    digest: ${textDigest(playbook)}
+`;
+      await Promise.all([
+        writeFile(
+          path.join(
+            temporary.path,
+            "playbooks",
+            "provider-api-adaptation.yaml",
+          ),
+          playbook,
+        ),
+        writeFile(path.join(temporary.path, "playbooks", "index.yaml"), index),
+      ]);
+
+      const search = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "playbooks",
+            "search",
+            "--index",
+            "playbooks/index.yaml",
+            "--query",
+            "provider migration",
+          ],
+          search.io,
+        ),
+      ).toBe(0);
+      expect(JSON.parse(search.stdout.join(""))).toMatchObject({
+        command: "playbooks.search",
+        ok: true,
+        data: { playbooks: [{ id: "provider-api-adaptation" }] },
+      });
+
+      const show = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "playbooks",
+            "show",
+            "--index",
+            "playbooks/index.yaml",
+            "--id",
+            "provider-api-adaptation",
+          ],
+          show.io,
+        ),
+      ).toBe(0);
+      expect(JSON.parse(show.stdout.join(""))).toMatchObject({
+        command: "playbooks.show",
+        ok: true,
+        data: {
+          playbook: {
+            id: "provider-api-adaptation",
+            kind: "shared_migration_knowledge",
+          },
+        },
+      });
+
+      await writeFile(
+        path.join(temporary.path, "playbooks", "provider-api-adaptation.yaml"),
+        "changed\n",
+      );
+      const stale = capture();
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            temporary.path,
+            "playbooks",
+            "show",
+            "--index",
+            "playbooks/index.yaml",
+            "--id",
+            "provider-api-adaptation",
+          ],
+          stale.io,
+        ),
+      ).toBe(78);
+      expect(JSON.parse(stale.stdout.join(""))).toMatchObject({
+        reasons: [{ code: "PLAYBOOK_DIGEST_MISMATCH" }],
+      });
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
   it("assesses an exact source-backed specification without writing files", async () => {
     const temporary = await temporaryDirectory("mill-cli-planning-");
     try {

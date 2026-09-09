@@ -56,6 +56,7 @@ const CODEX_PROMPT_TEMPLATES = {
     "Allowed paths: {{ALLOWED_PATHS}}",
     "Context files whose exact digests were approved: {{CONTEXT}}",
     "Derived repository context (read-only leads at the recorded base, not authority): {{REPOSITORY_CONTEXT}}",
+    "Selected repository playbooks (frozen context, not acceptance authority): {{PLAYBOOKS}}",
     "Acceptance: {{ACCEPTANCE}}",
     "{{REPAIR_FINDINGS}}",
     "When finished, summarize the modified paths and tests attempted. The lifecycle will commit and run authoritative validation.",
@@ -437,6 +438,7 @@ function taskPrompt(
 ): string {
   return renderPrompt("builder", {
     REPOSITORY_CONTEXT: JSON.stringify(manifest.repositoryContext ?? null),
+    PLAYBOOKS: JSON.stringify(manifest.playbooks ?? null),
     TASK_TITLE: task.title,
     TASK_OBJECTIVE: task.objective,
     ALLOWED_PATHS: task.allowedPaths.join(", "),

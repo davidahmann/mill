@@ -1,0 +1,38 @@
+schemaVersion: "2"
+task_id: mill-playbook-context
+status: approved
+owner: davidahmann
+base_commit: ce1ccdce47d34886f80a0588713386d85658c617
+execution_mode: approved_native_maintainer
+authority: product/playbook-context.md
+impact_manifest: product/impacts/PLAYBOOK_CONTEXT.yaml
+objective: >-
+  Add repository-owned, digest-pinned playbook discovery and task selection
+  without changing Mill's product, verification or external-effect authority.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - playbooks/**
+  - docs/**
+  - product/**
+  - architecture/**
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+acceptance_items: [PB-01, PB-02, PB-03, PB-04, PB-05]
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - independent read-only review of the complete exact candidate diff
+constraints:
+  - one native-maintainer writer in a disposable worktree
+  - preserve existing task, acceptance, verification and delivery authority
+  - no release, publication, MCP server, daemon, centralized service or
+    automatic mutation
+stop_conditions:
+  - ambiguous authority, stale selected context, secret disclosure or
+    unavailable mandatory gate
+  - recurring same-subsystem P0 or P1 finding

@@ -373,6 +373,10 @@ const repositoryPathPatternSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+(?:\/\*\*)?$/u);
 
+const repositoryFilePathSchema = z
+  .string()
+  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+$/u);
+
 const repositoryMountDirectorySchema = z
   .string()
   .regex(
@@ -556,6 +560,52 @@ const authorityReferenceSchema = z.strictObject({
   digest: digestSchema,
 });
 
+const playbookKindSchema = z.enum([
+  "shared_migration_knowledge",
+  "repository_procedure",
+]);
+
+export const playbookSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+  title: z.string().min(1),
+  kind: playbookKindSchema,
+  applicability: z.array(z.string().min(1)).min(1),
+  requiredInputs: z.array(z.string().min(1)),
+  procedure: z.array(z.string().min(1)).min(1),
+  verification: z.array(z.string().min(1)).min(1),
+  stopConditions: z.array(z.string().min(1)).min(1),
+  boundaries: z.array(z.string().min(1)).min(1),
+});
+
+export const playbookIndexSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  playbooks: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+        title: z.string().min(1),
+        summary: z.string().min(1),
+        kind: playbookKindSchema,
+        tags: uniqueNonemptyStringArraySchema,
+        path: repositoryFilePathSchema,
+        digest: digestSchema,
+      }),
+    )
+    .min(1)
+    .refine(
+      (playbooks) =>
+        new Set(playbooks.map((playbook) => playbook.id)).size ===
+        playbooks.length,
+      { message: "playbook IDs must be unique" },
+    ),
+});
+
+const playbookSelectionSchema = z.strictObject({
+  index: authorityReferenceSchema,
+  ids: uniqueNonemptyStringArraySchema,
+});
+
 const adaptationCellSchema = z.discriminatedUnion("disposition", [
   z.strictObject({
     workflowId: z.string().min(1),
@@ -659,6 +709,7 @@ const evidenceDispositionSchema = z.discriminatedUnion("mode", [
 
 const taskPacketCommonShape = {
   repositoryIntelligence: z.literal(true).optional(),
+  playbooks: playbookSelectionSchema.optional(),
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
   title: z.string().min(1),
   objective: z.string().min(1),
@@ -802,6 +853,22 @@ export const workerInvocationSchema = z.strictObject({
 
 export const contextManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
+  playbooks: z
+    .strictObject({
+      index: z.strictObject({
+        path: repositoryFilePathSchema,
+        digest: digestSchema,
+      }),
+      selected: z.array(
+        z.strictObject({
+          id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+          kind: playbookKindSchema,
+          path: repositoryFilePathSchema,
+          digest: digestSchema,
+        }),
+      ),
+    })
+    .optional(),
   repositoryContext: z
     .strictObject({
       authority: z.literal("derived_read_only"),
@@ -1383,6 +1450,8 @@ export const contractSchemas = {
   millConfig: millConfigSchema,
   millLock: millLockSchema,
   outcomePlan: outcomePlanSchema,
+  playbook: playbookSchema,
+  playbookIndex: playbookIndexSchema,
   productContract: productContractSchema,
   recipeManifest: recipeManifestSchema,
   releaseEvidence: releaseEvidenceSchema,

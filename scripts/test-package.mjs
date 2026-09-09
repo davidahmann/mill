@@ -78,6 +78,8 @@ try {
     "schemas/delivery-record.schema.json",
     "schemas/impact-manifest.schema.json",
     "schemas/mill-config.schema.json",
+    "schemas/playbook-index.schema.json",
+    "schemas/playbook.schema.json",
     "schemas/recipe-manifest.schema.json",
     "schemas/release-evidence.schema.json",
     "schemas/repository-integration-plan.schema.json",
@@ -183,7 +185,12 @@ try {
   ) {
     throw new Error("packed recipe does not Markdown-escape its product title");
   }
-  for (const schema of ["mill-lock", "adaptation-manifest"]) {
+  for (const schema of [
+    "mill-lock",
+    "adaptation-manifest",
+    "playbook",
+    "playbook-index",
+  ]) {
     const schemaImport = spawnSync(
       process.execPath,
       [
@@ -206,6 +213,7 @@ try {
   for (const command of [
     "audit",
     "discover",
+    "playbooks",
     "new",
     "adopt",
     "auth",

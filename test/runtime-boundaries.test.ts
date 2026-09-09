@@ -16,7 +16,7 @@ import {
   assertContextFresh,
   buildContextManifest,
 } from "../src/runtime/context.js";
-import { loadRuntimeInputs } from "../src/runtime/inputs.js";
+import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import type { MillConfig, TaskPacket } from "../src/runtime/inputs.js";
 import {
   assertCandidateScope,
@@ -52,6 +52,49 @@ async function git(root: string, args: readonly string[]): Promise<string> {
     { cwd: root },
   );
   return result.stdout;
+}
+
+async function addPlaybookSelection(
+  root: string,
+  taskPath: string,
+): Promise<{ indexPath: string; playbookPath: string }> {
+  const indexPath = "playbooks/index.yaml";
+  const playbookPath = "playbooks/provider-api-adaptation.yaml";
+  const playbook = `schemaVersion: "1"
+id: provider-api-adaptation
+title: Adapt a provider API
+kind: shared_migration_knowledge
+applicability: [A provider API changes.]
+requiredInputs: [Provider notice]
+procedure: [Confirm applicability.]
+verification: [Run repository checks.]
+stopConditions: [Acceptance is missing.]
+boundaries: [The playbook is not acceptance authority.]
+`;
+  const index = `schemaVersion: "1"
+playbooks:
+  - id: provider-api-adaptation
+    title: Adapt a provider API
+    summary: A bounded provider migration procedure.
+    kind: shared_migration_knowledge
+    tags: [provider, migration]
+    path: ${playbookPath}
+    digest: ${textDigest(playbook)}
+`;
+  await mkdir(path.join(root, "playbooks"), { recursive: true });
+  await Promise.all([
+    writeFile(path.join(root, playbookPath), playbook),
+    writeFile(path.join(root, indexPath), index),
+  ]);
+  const source = await readFile(path.join(root, taskPath), "utf8");
+  await writeFile(
+    path.join(root, taskPath),
+    source.replace(
+      "contextPaths:",
+      `playbooks:\n  index:\n    path: ${indexPath}\n    digest: ${textDigest(index)}\n  ids: [provider-api-adaptation]\ncontextPaths:`,
+    ),
+  );
+  return { indexPath, playbookPath };
 }
 
 describe("runtime authority and repository boundaries", () => {
@@ -125,6 +168,94 @@ describe("runtime authority and repository boundaries", () => {
           inputs.taskDigest,
         ),
       ).rejects.toMatchObject({ code: "INVALID_CONTEXT_FILE" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("selects digest-pinned playbooks as frozen context without granting acceptance authority", async () => {
+    const fixture = await runtimeFixture();
+    try {
+      const paths = await addPlaybookSelection(fixture.root, fixture.taskPath);
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      expect(inputs.playbooks).toMatchObject({
+        index: { path: paths.indexPath },
+        selected: [
+          {
+            id: "provider-api-adaptation",
+            kind: "shared_migration_knowledge",
+            path: paths.playbookPath,
+          },
+        ],
+      });
+      expect(inputs.protectedPaths).toEqual(
+        expect.arrayContaining([paths.indexPath, paths.playbookPath]),
+      );
+      const frozen = await buildContextManifest(
+        fixture.root,
+        "a".repeat(40),
+        inputs.task,
+        inputs.config,
+        inputs.taskDigest,
+      );
+      expect(frozen.manifest.playbooks).toMatchObject({
+        index: { path: paths.indexPath },
+        selected: [{ id: "provider-api-adaptation", path: paths.playbookPath }],
+      });
+      expect(frozen.manifest.included.map((item) => item.path)).toEqual(
+        expect.arrayContaining([paths.indexPath, paths.playbookPath]),
+      );
+
+      await writeFile(path.join(fixture.root, paths.playbookPath), "changed\n");
+      await expect(
+        assertContextFresh(fixture.root, frozen.manifest),
+      ).rejects.toMatchObject({ code: "CONTEXT_DRIFT" });
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({ code: "PLAYBOOK_DIGEST_MISMATCH" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("rejects unselected, mutable or builder-writable playbook inputs", async () => {
+    const fixture = await runtimeFixture();
+    try {
+      const paths = await addPlaybookSelection(fixture.root, fixture.taskPath);
+      const taskSource = await readFile(
+        path.join(fixture.root, fixture.taskPath),
+        "utf8",
+      );
+      const indexSource = await readFile(
+        path.join(fixture.root, paths.indexPath),
+        "utf8",
+      );
+      await writeFile(path.join(fixture.root, paths.indexPath), "changed\n");
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({ code: "PLAYBOOK_INDEX_DIGEST_MISMATCH" });
+      await writeFile(path.join(fixture.root, paths.indexPath), indexSource);
+      await writeFile(
+        path.join(fixture.root, fixture.taskPath),
+        taskSource.replace(
+          "ids: [provider-api-adaptation]",
+          "ids: [missing-playbook]",
+        ),
+      );
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({ code: "PLAYBOOK_NOT_FOUND" });
+
+      await writeFile(
+        path.join(fixture.root, fixture.taskPath),
+        taskSource.replace(
+          "allowedPaths:\n  - src/value.js",
+          `allowedPaths:\n  - ${paths.playbookPath}`,
+        ),
+      );
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({ code: "BOUND_INPUT_SCOPE_OVERLAP" });
     } finally {
       await fixture.cleanup();
     }

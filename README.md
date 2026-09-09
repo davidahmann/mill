@@ -85,6 +85,20 @@ Mill does not autonomously research the web or invent a product specification in
 this alpha. The operator supplies the structured proposal that Mill assesses and
 freezes.
 
+## Repository playbooks (unreleased source)
+
+The source branch can index small repository-owned playbooks, search compact
+metadata, and bind a selected set into a task's frozen context. A playbook can
+carry reusable migration knowledge or a repository procedure, while the task's
+approved acceptance criteria and native checks remain authoritative. The
+selection is digest-pinned and recorded in the context manifest; stale or
+mismatched index or playbook bytes block admission. See
+[repository playbooks](docs/playbooks.md).
+
+This source capability is not part of the current public-alpha support claim or
+the published `0.3.2` package until it receives its own qualification and
+release.
+
 ## Supported shape
 
 The first recipe is intentionally exact:

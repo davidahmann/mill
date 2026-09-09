@@ -91,6 +91,8 @@ the same candidate. Unknown or conflicting authority blocks execution.
   command logs, and temporary worktrees out of candidate scope.
 - Do not infer an unsupported stack. Public alpha qualifies only the exact
   bundled Node.js/TypeScript/Next.js recipe and compatible adoption shape.
+- Do not claim a source-only playbook capability is part of a published package
+  or public-alpha support matrix before separate qualification and release.
 
 Typical expert flow:
 
@@ -121,6 +123,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   or cleanup.
 - `discover` and opt-in repository-map context are bounded, revision-bound
   derived evidence, not executed test coverage or permission to change scope.
+- Repository playbooks are optional, repository-owned, digest-bound context.
+  Search only compact index metadata; an approved task selects the full files
+  that are frozen and recorded for a run. A playbook cannot define acceptance,
+  alter command controls, grant tools, credentials, delivery, merge or release
+  authority, or update itself through the run it informed.
 - `adopt-native` is experimental Node ESM/npm adoption preserving existing
   source and native commands. It is not the qualified web-recipe adoption path
   and does not establish arbitrary-stack or pnpm support.
