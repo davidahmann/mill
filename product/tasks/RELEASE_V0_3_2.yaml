@@ -48,3 +48,25 @@ constraints:
 stop_conditions:
   - ambiguous tag, tree, artifact, candidate-run, provenance, or provider effect
   - unavailable independent verification or recurring P0/P1 release finding
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-09
+  release: v0.3.2
+  tag_commit: b48b9b167df6b57991e03075ba5c8237a3a8554c
+  reviewed_candidate_tree: c486696648e9927a206933507f4257ceefa0c529
+  candidate_run: 34387631805
+  publish_run: 34388616783
+  github_release_id: 385751369
+  npm_integrity: sha512-bbcwN0geCWywa1lUDWLfftTigp9IyEGaMPYSoE2/lbFIXyr4vJ0CizNTJyBfU4+dytdB3eOxJiXUuV3HiY5HeQ==
+  disposition: >-
+    The annotated tag, two independent artifact builders, candidate and trusted
+    policy verification, protected OIDC publication, npm provenance/signature
+    verification, registry requalification, normal GitHub Release, and npm
+    alpha/latest pointers all resolve to the preserved v0.3.2 artifact. The
+    attended latest-channel promotion did not rebuild or republish the package.
+  evidence:
+    - docs/releases/v0.3.2.md
+    - https://github.com/davidahmann/mill/actions/runs/34387631805
+    - https://github.com/davidahmann/mill/actions/runs/34388616783
+    - https://github.com/davidahmann/mill/releases/tag/v0.3.2
