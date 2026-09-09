@@ -1,15 +1,21 @@
 # Mill delivery plan
 
-Status: public-alpha scope complete
+Status: public-alpha scope complete; attended integration-adaptation
+qualification in progress
 
 Owner: David Ahmann
 
-Brownfield discovery is the next approved bounded increment. It adds only
-read-only TypeScript source evidence and conservative change leads; it does not
-expand the public-alpha adoption recipe or delivery authority. Its contract,
-impact, and local fixture evaluation are recorded in
-`product/brownfield-discovery.md`, `product/impacts/BROWNFIELD_DISCOVERY.yaml`,
-`product/brownfield-contract.yaml`, `quality/brownfield-scenarios.yaml`, and
+Brownfield discovery is landed. The current approved bounded increment is
+[`integration adaptation`](integration-adaptation.md): it binds a supplied
+provider change to an explicit workflow/configuration matrix and keeps candidate
+evidence visibly offline and owner-acceptance-pending. It does not add provider
+monitoring, shared customer context, recurring coverage infrastructure or a
+public support claim. Brownfield discovery adds only read-only TypeScript source
+evidence and conservative change leads; it does not expand the public-alpha
+adoption recipe or delivery authority. Its contract, impact, and local fixture
+evaluation are recorded in `product/brownfield-discovery.md`,
+`product/impacts/BROWNFIELD_DISCOVERY.yaml`, `product/brownfield-contract.yaml`,
+`quality/brownfield-scenarios.yaml`, and
 `docs/canaries/brownfield-discovery.md`.
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,

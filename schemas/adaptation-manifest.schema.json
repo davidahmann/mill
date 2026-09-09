@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "id": { "type": "string", "minLength": 1 },
+    "owner": { "type": "string", "minLength": 1 },
+    "provider": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "notice": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          },
+          "required": ["path", "digest"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["id", "from", "to", "notice"],
+      "additionalProperties": false
+    },
+    "applicability": {
+      "type": "object",
+      "properties": {
+        "statement": { "type": "string", "minLength": 1 },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          },
+          "required": ["path", "digest"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["statement", "evidence"],
+      "additionalProperties": false
+    },
+    "workflows": {
+      "minItems": 1,
+      "maxItems": 32,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "configurations": {
+      "minItems": 1,
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "revision": { "type": "string", "minLength": 1 },
+          "fixture": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+            },
+            "required": ["path", "digest"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "revision", "fixture"],
+        "additionalProperties": false
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["synthetic", "provider_recording"]
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": ["kind", "capturedAt", "expiresAt"],
+      "additionalProperties": false
+    },
+    "matrix": {
+      "minItems": 1,
+      "maxItems": 1024,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "workflowId": { "type": "string", "minLength": 1 },
+              "configurationId": { "type": "string", "minLength": 1 },
+              "disposition": { "type": "string", "const": "check" },
+              "scenarioId": { "type": "string", "minLength": 1 },
+              "commandId": { "type": "string", "minLength": 1 }
+            },
+            "required": [
+              "workflowId",
+              "configurationId",
+              "disposition",
+              "scenarioId",
+              "commandId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "workflowId": { "type": "string", "minLength": 1 },
+              "configurationId": { "type": "string", "minLength": 1 },
+              "disposition": { "type": "string", "const": "excluded" },
+              "reason": { "type": "string", "minLength": 1 }
+            },
+            "required": [
+              "workflowId",
+              "configurationId",
+              "disposition",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "owner",
+    "provider",
+    "applicability",
+    "workflows",
+    "configurations",
+    "fixtures",
+    "matrix"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/adaptation-manifest.schema.json",
+  "title": "AdaptationManifest"
+}

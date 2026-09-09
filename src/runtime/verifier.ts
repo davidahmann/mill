@@ -17,6 +17,10 @@ import path from "node:path";
 
 import { findTrustedExecutable } from "../doctor.js";
 import { validationEvidenceSchema } from "../contracts/schemas.js";
+import {
+  adaptationEvidence,
+  type AdaptationManifest,
+} from "../planning/adaptation.js";
 import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
 import {
@@ -75,6 +79,7 @@ function validationEvidence(input: {
   verifierImage: string;
   commands: readonly CommandEvidence[];
   task: TaskPacket;
+  adaptation?: { manifest: AdaptationManifest; digest: string };
   impact?: ImpactManifest;
   product?: ContinuityProductContract;
   scenarios?: ContinuityScenarioSet;
@@ -94,14 +99,29 @@ function validationEvidence(input: {
   const commandsPassed = input.commands.every(
     (item) => !item.required || item.status === "passed",
   );
+  const adaptation =
+    input.adaptation === undefined
+      ? undefined
+      : adaptationEvidence(
+          input.adaptation.manifest,
+          input.adaptation.digest,
+          input.commands,
+        );
   return validationEvidenceSchema.parse({
     schemaVersion: "1",
     candidateCommit: input.candidateCommit,
     verifierImage: input.verifierImage,
     network: "none",
+    ...(adaptation === undefined ? {} : { adaptation }),
     commands: input.commands,
     ...(semantic === undefined ? {} : { semantic }),
-    passed: commandsPassed && (semantic?.passed ?? true),
+    passed:
+      commandsPassed &&
+      (semantic?.passed ?? true) &&
+      (adaptation?.matrix.every(
+        (cell) => cell.status === "passed" || cell.status === "excluded",
+      ) ??
+        true),
   });
 }
 
@@ -405,6 +425,7 @@ export async function verifyDeclaredCommands(input: {
   candidateCommit: string;
   config: MillConfig;
   task: TaskPacket;
+  adaptation?: { manifest: AdaptationManifest; digest: string };
   impact?: ImpactManifest;
   product?: ContinuityProductContract;
   scenarios?: ContinuityScenarioSet;
@@ -434,6 +455,9 @@ export async function verifyDeclaredCommands(input: {
       verifierImage: input.config.verifier.image,
       commands: stoppedCommands(input.config, input.task.commandIds, stopped),
       task: input.task,
+      ...(input.adaptation === undefined
+        ? {}
+        : { adaptation: input.adaptation }),
       ...(input.impact === undefined ? {} : { impact: input.impact }),
       ...(input.product === undefined ? {} : { product: input.product }),
       ...(input.scenarios === undefined ? {} : { scenarios: input.scenarios }),
@@ -730,6 +754,9 @@ export async function verifyDeclaredCommands(input: {
       verifierImage: input.config.verifier.image,
       commands: evidence,
       task: input.task,
+      ...(input.adaptation === undefined
+        ? {}
+        : { adaptation: input.adaptation }),
       ...(input.impact === undefined ? {} : { impact: input.impact }),
       ...(input.product === undefined ? {} : { product: input.product }),
       ...(input.scenarios === undefined ? {} : { scenarios: input.scenarios }),

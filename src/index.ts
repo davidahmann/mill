@@ -7,9 +7,14 @@ export {
 } from "./contracts/canonical.js";
 export {
   contractSchemas,
+  adaptationManifestSchema,
   repositoryIntelligenceSchema,
   type ContractKind,
 } from "./contracts/schemas.js";
+export {
+  assessAdaptation,
+  type AdaptationManifest,
+} from "./planning/adaptation.js";
 export {
   doctor,
   doctorReady,

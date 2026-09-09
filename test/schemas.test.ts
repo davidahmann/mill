@@ -50,6 +50,43 @@ const auditCategories = [
   "release",
 ] as const;
 const samples = {
+  adaptationManifest: {
+    schemaVersion: "1",
+    id: "migration",
+    owner: "owner",
+    provider: {
+      id: "example",
+      from: "v1",
+      to: "v2",
+      notice: { path: "notice.md", digest },
+    },
+    applicability: {
+      statement: "Source uses v1",
+      evidence: { path: "scope.md", digest },
+    },
+    workflows: ["assign"],
+    configurations: [
+      {
+        id: "standard",
+        revision: "1",
+        fixture: { path: "fixture.json", digest },
+      },
+    ],
+    fixtures: {
+      kind: "synthetic",
+      capturedAt: "2026-09-09T00:00:00.000Z",
+      expiresAt: "2026-10-09T00:00:00.000Z",
+    },
+    matrix: [
+      {
+        workflowId: "assign",
+        configurationId: "standard",
+        disposition: "check",
+        commandId: "test",
+        scenarioId: "SCN-ASSIGN",
+      },
+    ],
+  },
   changeRequest: {
     schemaVersion: "1",
     id: "follow-up",
@@ -618,6 +655,7 @@ const samples = {
 } as const;
 
 const schemaFiles = {
+  adaptationManifest: "adaptation-manifest.schema.json",
   changeRequest: "change-request.schema.json",
   auditReport: "audit-report.schema.json",
   sourceManifest: "source-manifest.schema.json",

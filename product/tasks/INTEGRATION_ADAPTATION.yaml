@@ -1,0 +1,34 @@
+schemaVersion: "2"
+task_id: mill-integration-adaptation
+status: approved
+owner: davidahmann
+base_commit: 799729fc993574fa928a84cf79ea9c21751998e8
+execution_mode: approved_native_maintainer
+authority: product/integration-adaptation.md
+impact_manifest: product/impacts/INTEGRATION_ADAPTATION.yaml
+objective:
+  Bind and qualify one bounded integration adaptation with configuration-level
+  evidence.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - docs/**
+  - product/**
+  - architecture/**
+  - README.md
+  - CHANGELOG.md
+acceptance_items: [IA-01, IA-02, IA-03, IA-04, IA-05]
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - independent read-only review of the complete exact candidate diff
+constraints:
+  - single native-maintainer writer in a disposable worktree
+  - preserve existing assertions, coverage thresholds and delivery boundaries
+  - no tag, package publication, release, deployment or upstream OSS mutation
+stop_conditions:
+  - uncertain external effect, secret disclosure or unavailable mandatory gate
+  - recurring same-subsystem P0 or P1 finding

@@ -205,6 +205,11 @@
           "required": ["deadlineSeconds", "maxOutputBytes", "retryCount"],
           "additionalProperties": false
         },
+        "baselineCommandIds": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "authority": {
           "type": "object",
           "properties": {
@@ -245,6 +250,18 @@
               "additionalProperties": false
             },
             "impactManifest": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "adaptation": {
               "type": "object",
               "properties": {
                 "path": { "type": "string", "minLength": 1 },

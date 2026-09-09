@@ -1,0 +1,31 @@
+schemaVersion: "2"
+id: mill-integration-adaptation
+status: approved
+approved_by: davidahmann
+approval_source:
+  Attended conversation on 2026-09-09 authorizing plan, implementation, testing
+  and shipping, without release.
+source_base: 799729fc993574fa928a84cf79ea9c21751998e8
+authority: product/integration-adaptation.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Optional baseline selection separates preservation admission from the full
+    candidate gate.
+  - Optional adaptation authority binds configuration coverage and local fixture
+    provenance.
+  - Offline candidate results expose matrix execution and exclusions without
+    live compatibility claims.
+verification:
+  - negative command-selection and frozen-authority tests
+  - matrix completeness, expiry, provenance and wrong-candidate tests
+  - native lifecycle exercise, full native gate, package checks and clean audit
+  - independent exact-candidate review and green PR/main checks
+exceptions:
+  - Native maintainer may update contracts and regression tests in the approved
+    paths.
+  - No runtime acceptance, release or external-system authority is inferred from
+    this brief.

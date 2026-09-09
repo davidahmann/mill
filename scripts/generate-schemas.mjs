@@ -9,6 +9,7 @@ import { contractSchemas } from "../dist/contracts/schemas.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 const definitions = {
+  adaptationManifest: ["adaptation-manifest.schema.json", "AdaptationManifest"],
   changeRequest: ["change-request.schema.json", "ChangeRequest"],
   auditReport: ["audit-report.schema.json", "AuditReport"],
   blueprint: ["blueprint.schema.json", "Blueprint"],
