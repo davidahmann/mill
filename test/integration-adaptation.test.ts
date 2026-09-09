@@ -46,16 +46,21 @@ describe("integration adaptation evidence", () => {
   it("binds actual command results to explicit configuration coverage without claiming live compatibility", () => {
     const plan = manifest();
     expect(assessAdaptation(plan, selected, now)).toEqual([]);
-    const evidence = adaptationEvidence(plan, hash, [
-      {
-        commandId: "owner-standard",
-        required: true,
-        status: "passed",
-        exitCode: 0,
-        durationMs: 1,
-        outputDigest: hash,
-      },
-    ]);
+    const evidence = adaptationEvidence(
+      plan,
+      hash,
+      [
+        {
+          commandId: "owner-standard",
+          required: true,
+          status: "passed",
+          exitCode: 0,
+          durationMs: 1,
+          outputDigest: hash,
+        },
+      ],
+      now,
+    );
     expect(evidence.assurance).toBe("offline_fixture_execution");
     expect(evidence.ownerAcceptance).toBe("not_recorded");
     expect(evidence.matrix[0]).toMatchObject({
@@ -65,20 +70,25 @@ describe("integration adaptation evidence", () => {
     });
   });
   it("does not turn absent or failed command execution into passing evidence", () => {
-    expect(adaptationEvidence(manifest(), hash, []).matrix[0]?.status).toBe(
-      "blocked",
-    );
     expect(
-      adaptationEvidence(manifest(), hash, [
-        {
-          commandId: "owner-standard",
-          required: true,
-          status: "failed",
-          exitCode: 1,
-          durationMs: 1,
-          outputDigest: hash,
-        },
-      ]).matrix[0]?.status,
+      adaptationEvidence(manifest(), hash, [], now).matrix[0]?.status,
+    ).toBe("blocked");
+    expect(
+      adaptationEvidence(
+        manifest(),
+        hash,
+        [
+          {
+            commandId: "owner-standard",
+            required: true,
+            status: "failed",
+            exitCode: 1,
+            durationMs: 1,
+            outputDigest: hash,
+          },
+        ],
+        now,
+      ).matrix[0]?.status,
     ).toBe("failed");
   });
   it("marks results blocked when fixture evidence expires during verification", () => {
