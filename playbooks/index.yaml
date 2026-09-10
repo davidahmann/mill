@@ -1,0 +1,9 @@
+schemaVersion: "1"
+playbooks:
+  - id: provider-api-adaptation
+    title: Adapt a bounded provider API change
+    summary: Reusable steps and stopping rules for one provider contract change.
+    kind: shared_migration_knowledge
+    tags: [provider, api, migration, verification]
+    path: playbooks/integration-adaptation.yaml
+    digest: sha256:b01d9115868fb09fdc542f517235548c8d535b343c0f6d28917a2a981c6ace62

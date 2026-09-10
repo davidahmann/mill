@@ -16,6 +16,12 @@ authority. Its contract, impact, and local fixture evaluation are recorded in
 `product/brownfield-contract.yaml`, `quality/brownfield-scenarios.yaml`, and
 `docs/canaries/brownfield-discovery.md`.
 
+The next source-only increment is
+[repository playbook context](playbook-context.md): a compact, digest-pinned
+index and explicit task selection for reusable operational knowledge. It does
+not add a centralized service, MCP interface, automatic updates, customer
+acceptance or public-alpha support claim.
+
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
 2. **Local delivery:** durable state, disposable worktree, bounded Codex build,

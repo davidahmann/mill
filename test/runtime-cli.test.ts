@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 
 import { runCli } from "../src/cli-program.js";
+import { loadMillConfig } from "../src/runtime/inputs.js";
+import { commonGitDirectory } from "../src/runtime/repository.js";
+import { StateStore } from "../src/runtime/state.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 
 function capture(): {
@@ -37,6 +41,68 @@ async function jsonCommand(args: readonly string[]): Promise<{
 }
 
 describe("runtime CLI contracts", () => {
+  it("blocks malformed journal data without exposing it through timeline output", async () => {
+    const fixture = await runtimeFixture();
+    const previousState = process.env.MILL_STATE_HOME;
+    process.env.MILL_STATE_HOME = fixture.stateHome;
+    try {
+      const config = await loadMillConfig(fixture.root);
+      const store = await StateStore.open(
+        config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      let runId: string;
+      try {
+        runId = store.createRun({
+          repositoryId: config.repositoryId,
+          taskId: "timeline-redaction",
+          taskDigest: `sha256:${"a".repeat(64)}`,
+          configDigest: `sha256:${"b".repeat(64)}`,
+          baseCommit: "c".repeat(40),
+          deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+        }).id;
+        const database = new DatabaseSync(store.databasePath);
+        try {
+          database
+            .prepare(
+              "INSERT INTO run_events(run_id, occurred_at, type, data_json) VALUES (?, ?, ?, ?)",
+            )
+            .run(
+              runId,
+              new Date().toISOString(),
+              "worker.admitted",
+              JSON.stringify("private-marker"),
+            );
+        } finally {
+          database.close();
+        }
+      } finally {
+        store.close();
+      }
+
+      const timeline = await jsonCommand([
+        "--cwd",
+        fixture.root,
+        "timeline",
+        "--run",
+        runId,
+      ]);
+      expect(timeline).toMatchObject({
+        exitCode: 65,
+        value: {
+          command: "timeline",
+          status: "blocked",
+          reasons: [{ code: "TIMELINE_EVENT_DATA_INVALID" }],
+        },
+      });
+      expect(JSON.stringify(timeline.value)).not.toContain("private-marker");
+    } finally {
+      if (previousState === undefined) delete process.env.MILL_STATE_HOME;
+      else process.env.MILL_STATE_HOME = previousState;
+      await fixture.cleanup();
+    }
+  });
+
   it("exposes the attended local lifecycle, state controls, and redacted support projection", async () => {
     const fixture = await runtimeFixture();
     const previous = {
@@ -111,6 +177,25 @@ describe("runtime CLI contracts", () => {
         exitCode: 0,
         value: { data: { run: { status: "committed" } } },
       });
+
+      const timeline = await jsonCommand([
+        "--cwd",
+        fixture.root,
+        "timeline",
+        "--run",
+        runId,
+      ]);
+      expect(timeline).toMatchObject({
+        exitCode: 0,
+        value: {
+          command: "timeline",
+          data: {
+            run: { id: runId, status: "committed" },
+            integrity: { status: "consistent", reasons: [] },
+          },
+        },
+      });
+      expect(JSON.stringify(timeline.value)).not.toContain(fixture.stateHome);
 
       expect(
         await jsonCommand([

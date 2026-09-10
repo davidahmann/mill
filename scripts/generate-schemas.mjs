@@ -20,6 +20,8 @@ const definitions = {
   millConfig: ["mill-config.schema.json", "MillConfig"],
   millLock: ["mill-lock.schema.json", "MillLock"],
   outcomePlan: ["outcome-plan.schema.json", "OutcomePlan"],
+  playbook: ["playbook.schema.json", "Playbook"],
+  playbookIndex: ["playbook-index.schema.json", "PlaybookIndex"],
   productContract: ["product-contract.schema.json", "ProductContract"],
   publicAlphaQualification: [
     "public-alpha-qualification.schema.json",
@@ -36,6 +38,7 @@ const definitions = {
     "RepositoryIntegrationPlan",
   ],
   reviewResult: ["review-result.schema.json", "ReviewResult"],
+  runTimeline: ["run-timeline.schema.json", "RunTimeline"],
   scenarioSet: ["scenario-set.schema.json", "ScenarioSet"],
   sourceManifest: ["source-manifest.schema.json", "SourceManifest"],
   supportTuple: ["support-tuple.schema.json", "SupportTuple"],

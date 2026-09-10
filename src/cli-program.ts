@@ -12,6 +12,11 @@ import { inspectPrd } from "./intake/prd.js";
 import { scanRepository } from "./repository/scan.js";
 import { discoverRepository } from "./repository/intelligence.js";
 import {
+  loadIndexedPlaybook,
+  loadPlaybookIndex,
+  searchPlaybookIndex,
+} from "./runtime/playbooks.js";
+import {
   applyAdoptionIntegration,
   applyGreenfieldIntegration,
   planAdoptionIntegration,
@@ -44,6 +49,7 @@ import {
   resumeRun,
   reviewRun,
   runStatus,
+  runTimeline,
   startLocalRun,
   stateBackup,
   statePurge,
@@ -262,6 +268,95 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         io,
         global.json === true,
         commandResult({ command: "discover", ok: true, data: report }),
+      );
+    });
+
+  const playbooks = program
+    .command("playbooks")
+    .description(
+      "inspect repository-owned playbooks without executing repository code",
+    );
+  playbooks
+    .command("list")
+    .description("list compact playbook metadata from one repository index")
+    .requiredOption(
+      "--index <path>",
+      "playbook index path inside the repository",
+    )
+    .action(async (options: { index: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const index = await loadPlaybookIndex({ root, path: options.index });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "playbooks.list",
+          ok: true,
+          data: {
+            index: { path: index.path, digest: index.digest },
+            playbooks: index.index.playbooks,
+          },
+        }),
+      );
+    });
+  playbooks
+    .command("search")
+    .description("search compact playbook metadata before loading a playbook")
+    .requiredOption(
+      "--index <path>",
+      "playbook index path inside the repository",
+    )
+    .requiredOption("--query <text>", "case-insensitive terms to match")
+    .action(async (options: { index: string; query: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const index = await loadPlaybookIndex({ root, path: options.index });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "playbooks.search",
+          ok: true,
+          data: {
+            index: { path: index.path, digest: index.digest },
+            query: options.query,
+            playbooks: searchPlaybookIndex(index, options.query),
+          },
+        }),
+      );
+    });
+  playbooks
+    .command("show")
+    .description("load and verify one indexed playbook")
+    .requiredOption(
+      "--index <path>",
+      "playbook index path inside the repository",
+    )
+    .requiredOption("--id <id>", "playbook ID")
+    .action(async (options: { index: string; id: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const index = await loadPlaybookIndex({ root, path: options.index });
+      const playbook = await loadIndexedPlaybook({
+        root,
+        index,
+        id: options.id,
+      });
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "playbooks.show",
+          ok: true,
+          data: {
+            index: { path: index.path, digest: index.digest },
+            playbook,
+          },
+        }),
       );
     });
 
@@ -1245,6 +1340,50 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         throw new MillError(
           "RUN_NOT_FOUND",
           "No durable run exists for this continuation request.",
+          ExitCode.data,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("timeline")
+    .description("project one run into a read-only integrity-checked timeline")
+    .option("--run <id>", "run identifier")
+    .action(async (options: { run?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await runTimeline({
+        root,
+        ...(options.run === undefined ? {} : { runId: options.run }),
+      });
+      const consistent = data?.integrity.status === "consistent";
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "timeline",
+          ok: consistent,
+          status: consistent ? "ok" : "blocked",
+          data: data ?? {},
+          reasons:
+            data === undefined
+              ? [
+                  {
+                    code: "RUN_NOT_FOUND",
+                    message: "No durable run exists for this timeline request.",
+                  },
+                ]
+              : data.integrity.reasons,
+        }),
+      );
+      if (data === undefined || !consistent) {
+        throw new MillError(
+          data === undefined ? "RUN_NOT_FOUND" : "TIMELINE_INTEGRITY_BLOCKED",
+          data === undefined
+            ? "No durable run exists for this timeline request."
+            : "Durable run events do not form a consistent lifecycle timeline.",
           ExitCode.data,
           { resultAlreadyEmitted: true },
         );

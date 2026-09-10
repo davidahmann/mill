@@ -26,6 +26,10 @@ import {
   type ContinuityScenarioSet,
   type ImpactManifest,
 } from "../planning/impact.js";
+import {
+  resolvePlaybookSelection,
+  type ResolvedPlaybookSelection,
+} from "./playbooks.js";
 
 export type MillConfig = z.infer<typeof millConfigSchema>;
 export type TaskPacket = z.infer<typeof taskPacketSchema>;
@@ -37,6 +41,7 @@ export interface RuntimeInputs {
   taskDigest: string;
   configDigest: string;
   protectedPaths: readonly string[];
+  playbooks?: ResolvedPlaybookSelection;
   adaptation?: { manifest: AdaptationManifest; digest: string };
   continuity?: {
     product: ContinuityProductContract;
@@ -122,6 +127,22 @@ function validateRelative(value: string, label: string): void {
   }
 }
 
+function validateCanonicalRelative(value: string, label: string): void {
+  validateRelative(value, label);
+  if (
+    value.length === 0 ||
+    value === "." ||
+    path.posix.normalize(value) !== value
+  ) {
+    throw new MillError(
+      "INVALID_RUNTIME_PATH",
+      `${label} must be a canonical in-repository relative path.`,
+      ExitCode.configuration,
+      { value },
+    );
+  }
+}
+
 function validatePathPattern(value: string, label: string): void {
   const remaining = value.endsWith("/**") ? value.slice(0, -3) : value;
   validateRelative(remaining, label);
@@ -178,6 +199,7 @@ export async function loadRuntimeInputs(
   const task = parseContract(taskSource, taskPacketSchema, taskPath);
   for (const candidate of [
     ...task.contextPaths,
+    ...(task.playbooks === undefined ? [] : [task.playbooks.index.path]),
     task.authority.productContract.path,
     task.authority.scenarioSet.path,
     task.authority.policy.path,
@@ -240,6 +262,17 @@ export async function loadRuntimeInputs(
       );
     }
   }
+  if (task.playbooks !== undefined) {
+    validateCanonicalRelative(task.playbooks.index.path, "Playbook index path");
+  }
+  const playbooks = await resolvePlaybookSelection({
+    root,
+    ...(task.playbooks === undefined ? {} : { selection: task.playbooks }),
+    maxBytes: task.budget.maxContextBytes ?? 8 * 1024 * 1024,
+  });
+  for (const playbook of playbooks?.selected ?? []) {
+    validateCanonicalRelative(playbook.path, "Playbook path");
+  }
   const selectedControlPaths = task.commandIds.flatMap(
     (commandId) => config.commands[commandId]?.controlPaths ?? [],
   );
@@ -251,6 +284,9 @@ export async function loadRuntimeInputs(
       .filter((reference) => reference !== undefined)
       .map((reference) => reference.path),
     ...task.contextPaths,
+    ...(playbooks === undefined
+      ? []
+      : [playbooks.index.path, ...playbooks.selected.map((item) => item.path)]),
     ...selectedControlPaths,
     ...dependencyLockPaths,
     ".gitattributes",
@@ -458,6 +494,7 @@ export async function loadRuntimeInputs(
     taskDigest: canonicalDigest(task as unknown as JsonValue),
     configDigest: canonicalDigest(config as unknown as JsonValue),
     protectedPaths,
+    ...(playbooks === undefined ? {} : { playbooks }),
     ...(continuity === undefined ? {} : { continuity }),
     ...(adaptation === undefined ? {} : { adaptation }),
   };

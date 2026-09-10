@@ -6,6 +6,31 @@
       "properties": {
         "schemaVersion": { "type": "string", "const": "1" },
         "repositoryIntelligence": { "type": "boolean", "const": true },
+        "playbooks": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "ids": {
+              "minItems": 1,
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          },
+          "required": ["index", "ids"],
+          "additionalProperties": false
+        },
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "title": { "type": "string", "minLength": 1 },
         "objective": { "type": "string", "minLength": 1 },
@@ -145,6 +170,31 @@
       "properties": {
         "schemaVersion": { "type": "string", "const": "2" },
         "repositoryIntelligence": { "type": "boolean", "const": true },
+        "playbooks": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": ["path", "digest"],
+              "additionalProperties": false
+            },
+            "ids": {
+              "minItems": 1,
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          },
+          "required": ["index", "ids"],
+          "additionalProperties": false
+        },
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "title": { "type": "string", "minLength": 1 },
         "objective": { "type": "string", "minLength": 1 },

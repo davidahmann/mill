@@ -1,0 +1,33 @@
+schemaVersion: "1"
+id: provider-api-adaptation
+title: Adapt a bounded provider API change
+kind: shared_migration_knowledge
+applicability:
+  - A provider has published a concrete contract change or retirement notice.
+  - Static or owner-supplied evidence identifies a potentially affected call.
+requiredInputs:
+  - The provider notice and the old and target contract.
+  - Applicability evidence tied to the repository revision.
+  - Owner-approved workflow and configuration coverage.
+procedure:
+  - Confirm that the change applies before altering implementation code.
+  - Preserve idempotency, authorization and exception behavior before changing
+    the provider call.
+  - Make the narrowest implementation change that reaches the target contract.
+  - Record exclusions for each workflow and configuration without an executable
+    check.
+verification:
+  - Run the repository-owned checks selected by the approved task and adaptation
+    matrix.
+  - Report offline fixture evidence as offline evidence and retain owner
+    acceptance as a separate state.
+stopConditions:
+  - The provider contract, repository applicability, owner-approved acceptance
+    criteria or fixture provenance is missing or stale.
+  - A required workflow/configuration pair lacks a check or an explicit approved
+    exclusion.
+boundaries:
+  - This playbook supplies reusable migration knowledge; it cannot define
+    customer acceptance criteria or declare a customer workflow accepted.
+  - It grants no network, credential, delivery, merge, deployment or release
+    authority.

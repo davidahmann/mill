@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "kind": {
+      "type": "string",
+      "enum": ["shared_migration_knowledge", "repository_procedure"]
+    },
+    "applicability": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "requiredInputs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "procedure": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "verification": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "stopConditions": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "boundaries": {
+      "minItems": 1,
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "kind",
+    "applicability",
+    "requiredInputs",
+    "procedure",
+    "verification",
+    "stopConditions",
+    "boundaries"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/playbook.schema.json",
+  "title": "Playbook"
+}

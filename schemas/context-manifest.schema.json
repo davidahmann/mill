@@ -3,6 +3,45 @@
   "type": "object",
   "properties": {
     "schemaVersion": { "type": "string", "const": "1" },
+    "playbooks": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+$"
+            },
+            "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          },
+          "required": ["path", "digest"],
+          "additionalProperties": false
+        },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+              "kind": {
+                "type": "string",
+                "enum": ["shared_migration_knowledge", "repository_procedure"]
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+$"
+              },
+              "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+            },
+            "required": ["id", "kind", "path", "digest"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["index", "selected"],
+      "additionalProperties": false
+    },
     "repositoryContext": {
       "type": "object",
       "properties": {

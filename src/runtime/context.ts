@@ -9,6 +9,7 @@ import { safeReadText } from "../security/safe-path.js";
 import type { MillConfig, TaskPacket } from "./inputs.js";
 import { textDigest } from "./inputs.js";
 import { discoverRepository } from "../repository/intelligence.js";
+import { resolvePlaybookSelection } from "./playbooks.js";
 
 export type ContextManifest = z.infer<typeof contextManifestSchema>;
 
@@ -66,6 +67,7 @@ export async function buildContextManifest(
   taskDigest: string,
 ): Promise<{ manifest: ContextManifest; digest: string }> {
   const included: { path: string; digest: string }[] = [];
+  const includedPaths = new Set<string>();
   let contextBytes = 0;
   const instructions = await effectiveInstructionPaths(worktree);
   for (const instruction of instructions) {
@@ -80,9 +82,9 @@ export async function buildContextManifest(
   const authorityPaths = Object.values(task.authority)
     .filter((reference) => reference !== undefined)
     .map((reference) => reference.path);
-  for (const contextPath of [
-    ...new Set([...task.contextPaths, ...authorityPaths, ...instructions]),
-  ].sort()) {
+  const maximumContextBytes = task.budget.maxContextBytes ?? 8 * 1024 * 1024;
+  const includeContextPath = async (contextPath: string): Promise<void> => {
+    if (includedPaths.has(contextPath)) return;
     if (sensitive(contextPath, config.sensitivePaths)) {
       throw new MillError(
         "SENSITIVE_CONTEXT_FORBIDDEN",
@@ -100,7 +102,7 @@ export async function buildContextManifest(
     }
     const source = await safeReadText(worktree, contextPath, 2 * 1024 * 1024);
     contextBytes += Buffer.byteLength(source, "utf8");
-    if (contextBytes > (task.budget.maxContextBytes ?? 8 * 1024 * 1024)) {
+    if (contextBytes > maximumContextBytes) {
       throw new MillError(
         "CONTEXT_BUDGET_EXCEEDED",
         "Frozen priority context exceeds the approved byte budget; narrow context before model spend.",
@@ -108,6 +110,28 @@ export async function buildContextManifest(
       );
     }
     included.push({ path: contextPath, digest: textDigest(source) });
+    includedPaths.add(contextPath);
+  };
+  for (const contextPath of [
+    ...new Set([...task.contextPaths, ...authorityPaths, ...instructions]),
+  ].sort()) {
+    await includeContextPath(contextPath);
+  }
+  const playbooks = await resolvePlaybookSelection({
+    root: worktree,
+    ...(task.playbooks === undefined ? {} : { selection: task.playbooks }),
+    maxBytes: maximumContextBytes - contextBytes,
+    alreadyIncludedPaths: [...includedPaths],
+  });
+  for (const contextPath of [
+    ...new Set(
+      (playbooks === undefined
+        ? []
+        : [playbooks.index.path, ...playbooks.selected.map((item) => item.path)]
+      ).filter((contextPath) => !includedPaths.has(contextPath)),
+    ),
+  ].sort()) {
+    await includeContextPath(contextPath);
   }
   const effectiveInstructions = instructions.map((instruction) => {
     const frozen = included.find((item) => item.path === instruction);
@@ -167,7 +191,7 @@ export async function buildContextManifest(
     };
     if (
       contextBytes + Buffer.byteLength(JSON.stringify(repositoryContext)) >
-      (task.budget.maxContextBytes ?? 8 * 1024 * 1024)
+      maximumContextBytes
     )
       throw new MillError(
         "CONTEXT_BUDGET_EXCEEDED",
@@ -181,11 +205,13 @@ export async function buildContextManifest(
     included,
     effectiveInstructions,
     providerVisibleScope,
+    ...(playbooks === undefined ? {} : { playbooks }),
     ...(repositoryContext === undefined ? {} : { repositoryContext }),
-  });
+  } as unknown as JsonValue);
   const manifest = contextManifestSchema.parse({
     schemaVersion: "1",
     ...(repositoryContext === undefined ? {} : { repositoryContext }),
+    ...(playbooks === undefined ? {} : { playbooks }),
     taskDigest,
     baseCommit,
     provider: "openai",

@@ -8,13 +8,25 @@ export {
 export {
   contractSchemas,
   adaptationManifestSchema,
+  playbookIndexSchema,
+  playbookSchema,
   repositoryIntelligenceSchema,
+  runTimelineSchema,
   type ContractKind,
 } from "./contracts/schemas.js";
 export {
   assessAdaptation,
   type AdaptationManifest,
 } from "./planning/adaptation.js";
+export {
+  loadIndexedPlaybook,
+  loadPlaybookIndex,
+  resolvePlaybookSelection,
+  searchPlaybookIndex,
+  type ResolvedPlaybook,
+  type ResolvedPlaybookIndex,
+  type ResolvedPlaybookSelection,
+} from "./runtime/playbooks.js";
 export {
   doctor,
   doctorReady,
@@ -98,6 +110,7 @@ export {
   reviewRun,
   runInventory,
   runStatus,
+  runTimeline,
   startLocalRun,
   stateBackup,
   statePurge,
@@ -105,6 +118,7 @@ export {
   supportBundle,
   verifyRun,
 } from "./runtime/lifecycle.js";
+export { projectRunTimeline, type RunTimeline } from "./runtime/timeline.js";
 export {
   continuationPacket,
   type ContinuationAction,

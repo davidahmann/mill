@@ -13,6 +13,25 @@ const stableInvariantIdSchema = z.string().regex(/^INV-[A-Z0-9][A-Z0-9-]*$/u);
 const stableSourceIdSchema = z.string().regex(/^SRC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableDecisionIdSchema = z.string().regex(/^DEC-[A-Z0-9][A-Z0-9-]*$/u);
 const stableOutcomeIdSchema = z.string().regex(/^OUT-[A-Z0-9][A-Z0-9-]*$/u);
+const runStatusSchema = z.enum([
+  "approved",
+  "ready",
+  "running",
+  "committed",
+  "verified",
+  "reviewed",
+  "proposing",
+  "effect_unknown",
+  "awaiting_ci",
+  "awaiting_human",
+  "merged",
+  "post_merge_verified",
+  "closed",
+  "blocked",
+  "cancelled",
+  "failed",
+  "stale",
+]);
 const uniqueNonemptyStringArraySchema = z
   .array(z.string().min(1))
   .min(1)
@@ -373,6 +392,10 @@ const repositoryPathPatternSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+(?:\/\*\*)?$/u);
 
+const repositoryFilePathSchema = z
+  .string()
+  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]\\]+$/u);
+
 const repositoryMountDirectorySchema = z
   .string()
   .regex(
@@ -556,6 +579,52 @@ const authorityReferenceSchema = z.strictObject({
   digest: digestSchema,
 });
 
+const playbookKindSchema = z.enum([
+  "shared_migration_knowledge",
+  "repository_procedure",
+]);
+
+export const playbookSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+  title: z.string().min(1),
+  kind: playbookKindSchema,
+  applicability: z.array(z.string().min(1)).min(1),
+  requiredInputs: z.array(z.string().min(1)),
+  procedure: z.array(z.string().min(1)).min(1),
+  verification: z.array(z.string().min(1)).min(1),
+  stopConditions: z.array(z.string().min(1)).min(1),
+  boundaries: z.array(z.string().min(1)).min(1),
+});
+
+export const playbookIndexSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  playbooks: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+        title: z.string().min(1),
+        summary: z.string().min(1),
+        kind: playbookKindSchema,
+        tags: uniqueNonemptyStringArraySchema,
+        path: repositoryFilePathSchema,
+        digest: digestSchema,
+      }),
+    )
+    .min(1)
+    .refine(
+      (playbooks) =>
+        new Set(playbooks.map((playbook) => playbook.id)).size ===
+        playbooks.length,
+      { message: "playbook IDs must be unique" },
+    ),
+});
+
+const playbookSelectionSchema = z.strictObject({
+  index: authorityReferenceSchema,
+  ids: uniqueNonemptyStringArraySchema,
+});
+
 const adaptationCellSchema = z.discriminatedUnion("disposition", [
   z.strictObject({
     workflowId: z.string().min(1),
@@ -659,6 +728,7 @@ const evidenceDispositionSchema = z.discriminatedUnion("mode", [
 
 const taskPacketCommonShape = {
   repositoryIntelligence: z.literal(true).optional(),
+  playbooks: playbookSelectionSchema.optional(),
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
   title: z.string().min(1),
   objective: z.string().min(1),
@@ -800,8 +870,62 @@ export const workerInvocationSchema = z.strictObject({
   maxOutputBytes: z.number().int().min(1024).max(10_000_000),
 });
 
+export const runTimelineSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  run: z.strictObject({
+    id: z.uuid(),
+    taskId: z.string().min(1),
+    status: runStatusSchema,
+    baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    candidateCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+    cancelRequested: z.boolean(),
+    repairCount: z.number().int().min(0),
+    attemptCount: z.number().int().min(0),
+    blockCode: z.string().min(1).optional(),
+  }),
+  events: z.array(
+    z.strictObject({
+      sequence: z.number().int().positive(),
+      occurredAt: z.iso.datetime(),
+      type: z.string().min(1),
+      transition: z
+        .strictObject({ from: runStatusSchema, to: runStatusSchema })
+        .optional(),
+    }),
+  ),
+  integrity: z.strictObject({
+    status: z.enum(["consistent", "inconsistent"]),
+    reasons: z.array(
+      z.strictObject({
+        code: z.string().min(1),
+        message: z.string().min(1),
+        sequence: z.number().int().positive().optional(),
+      }),
+    ),
+  }),
+});
+
 export const contextManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
+  playbooks: z
+    .strictObject({
+      index: z.strictObject({
+        path: repositoryFilePathSchema,
+        digest: digestSchema,
+      }),
+      selected: z.array(
+        z.strictObject({
+          id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+          kind: playbookKindSchema,
+          path: repositoryFilePathSchema,
+          digest: digestSchema,
+        }),
+      ),
+    })
+    .optional(),
   repositoryContext: z
     .strictObject({
       authority: z.literal("derived_read_only"),
@@ -1383,12 +1507,15 @@ export const contractSchemas = {
   millConfig: millConfigSchema,
   millLock: millLockSchema,
   outcomePlan: outcomePlanSchema,
+  playbook: playbookSchema,
+  playbookIndex: playbookIndexSchema,
   productContract: productContractSchema,
   recipeManifest: recipeManifestSchema,
   releaseEvidence: releaseEvidenceSchema,
   repositoryIntelligence: repositoryIntelligenceSchema,
   repositoryIntegrationPlan: repositoryIntegrationPlanSchema,
   reviewResult: reviewResultSchema,
+  runTimeline: runTimelineSchema,
   scenarioSet: scenarioSetSchema,
   sourceManifest: sourceManifestSchema,
   supportTuple: supportTupleSchema,

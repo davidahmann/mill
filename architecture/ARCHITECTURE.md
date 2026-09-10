@@ -252,6 +252,16 @@ configured sensitive paths, Git replacement refs, and graft metadata before
 creating the worktree; lifecycle Git commands also disable replacement objects.
 Secrets must remain untracked and outside the repository.
 
+Repository playbooks add an optional context layer. A task binds one indexed
+repository file and explicit playbook IDs; admission validates the index bytes,
+each selected file's digest and matching identity, adds only those files to
+frozen priority context, and records the retrieval in the context manifest.
+Index search is read-only metadata discovery. It does not observe agent file
+reads, create a tool registry, provide MCP access, or make a playbook part of
+the acceptance oracle. Shared migration knowledge and repository procedures are
+both subordinate to the task's approved product, scenario, impact and command
+authority.
+
 Baseline qualification is part of build authority, not static inspection. The
 runtime enforces the repository trust ceiling before OCI discovery or command
 execution. Verifier preflight and commands inherit the caller's same absolute
@@ -295,6 +305,13 @@ when a completed provider event supplied each integer field. Routine release
 qualification additionally runs the verifier and artifact canary pinned to the
 qualified v0.1.5 commit; candidate checks do not replace that independent
 policy.
+
+The read-only run timeline projects the existing append-only local event journal
+into schema-backed event sequence, timestamps, types and state transitions. It
+checks monotonic ordering, creation, transition continuity, legal transition
+edges and agreement with the durable run status. Timeline output contains no
+event payloads, prompts, command output, paths or telemetry export. It is
+diagnostic evidence, never a lifecycle mutator, repair path or effect authority.
 
 Only one writer lease may mutate a repository namespace. The lease is a
 dedicated SQLite exclusive transaction: kernel ownership makes acquisition
