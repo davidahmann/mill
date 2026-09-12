@@ -230,9 +230,13 @@ function adaptationEvidenceMatchesCommands(
       const scenario = semantic.items.find(
         (item) => item.kind === "scenario" && item.id === cell.scenarioId,
       );
-      if (scenario?.status !== "passed") return false;
-      if (!scenario.evidenceRefs.includes(`command:${cell.commandId}`))
+      if (cell.status === "passed") {
+        if (scenario?.status !== "passed") return false;
+        if (!scenario.evidenceRefs.includes(`command:${cell.commandId}`))
+          return false;
+      } else if (scenario?.status !== "blocked") {
         return false;
+      }
       if (commandIds.has(cell.commandId)) return false;
       commandIds.add(cell.commandId);
       const results = commands.filter(
@@ -602,14 +606,12 @@ function deliveryReceiptsMatch(
       !delivery.allowedMergeMethods.includes(delivery.merge.method))
   )
     return false;
-  const mergeReceiptRequired = [
-    "merged",
-    "post_merge_verified",
-    "closed",
-  ].includes(run.status);
-  const postMergeChecksRequired = ["post_merge_verified", "closed"].includes(
-    run.status,
-  );
+  const mergeReceiptRequired =
+    ["merged", "post_merge_verified", "closed"].includes(run.status) ||
+    ["merged", "post_merge_verified", "closed"].includes(delivery.state);
+  const postMergeChecksRequired =
+    ["post_merge_verified", "closed"].includes(run.status) ||
+    ["post_merge_verified", "closed"].includes(delivery.state);
   if (mergeReceiptRequired && delivery.merge === null) return false;
   return (
     awaitingHumanEvidencePasses(delivery) &&
@@ -680,6 +682,22 @@ function parseStored<T>(
   }
 }
 
+function candidateEventMatches(
+  run: PublicRunRecord,
+  events: readonly Record<string, unknown>[],
+): boolean {
+  const committed = events.filter(
+    (event) => event.type === "candidate.committed",
+  );
+  if (run.candidateCommit === undefined || run.candidateTree === undefined)
+    return committed.length === 0;
+  const latest = committed.at(-1);
+  const data = latest === undefined ? undefined : record(latest.data);
+  return (
+    data?.commit === run.candidateCommit && data.tree === run.candidateTree
+  );
+}
+
 /**
  * Projects one run's stored evidence without returning payloads, paths or prose.
  * Consistency describes record integrity only; it never certifies acceptance.
@@ -687,6 +705,7 @@ function parseStored<T>(
 export function projectRunOutcome(input: {
   run: RunRecord;
   timeline: RunTimeline;
+  events: readonly Record<string, unknown>[];
   usage: ContinuationUsage;
 }): RunOutcome {
   const run: PublicRunRecord = input.run;
@@ -696,6 +715,14 @@ export function projectRunOutcome(input: {
       reason(
         "OUTCOME_TIMELINE_INCONSISTENT",
         "The run lifecycle timeline is not internally consistent.",
+      ),
+    );
+  }
+  if (!candidateEventMatches(run, input.events)) {
+    reasons.push(
+      reason(
+        "OUTCOME_CANDIDATE_EVENT_MISMATCH",
+        "The current candidate does not match the latest committed-candidate event.",
       ),
     );
   }

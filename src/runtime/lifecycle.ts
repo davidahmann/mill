@@ -1488,6 +1488,7 @@ export async function runOutcome(input: {
     return projectRunOutcome({
       run: snapshot.run,
       timeline,
+      events: snapshot.events,
       usage: summarizeUsage(snapshot.events),
     });
   } finally {

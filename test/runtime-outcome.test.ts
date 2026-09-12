@@ -157,7 +157,12 @@ function events(
       sequence: 4,
       occurredAt: "2026-09-11T12:00:03.000Z",
       type: "candidate.committed",
-      data: { from: "running", to: "committed" },
+      data: {
+        from: "running",
+        to: "committed",
+        commit: candidateCommit,
+        tree: candidateTree,
+      },
     },
     {
       sequence: 5,
@@ -319,6 +324,7 @@ function outcome(
       run: record,
       events: recordedEvents,
     }),
+    events: recordedEvents,
     usage: {
       source: "unavailable",
       admittedCalls: 1,
@@ -404,6 +410,25 @@ describe("run outcome projection", () => {
         { code: "OUTCOME_REVIEW_MISSING" },
       ],
     });
+  });
+
+  it("binds the current candidate to the committed-candidate event", () => {
+    const committed = run();
+    committed.status = "committed";
+    delete committed.validationJson;
+    delete committed.reviewJson;
+    const committedEvents = events("reviewed").slice(0, 4);
+
+    expect(outcome(committed, committedEvents).integrity.status).toBe(
+      "consistent",
+    );
+
+    const mismatched = { ...committed, candidateTree: "e".repeat(40) };
+    expect(
+      outcome(mismatched, committedEvents).integrity.reasons,
+    ).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_CANDIDATE_EVENT_MISMATCH" }),
+    );
   });
 
   it("blocks contradictory validation and review records", () => {
@@ -709,6 +734,64 @@ describe("run outcome projection", () => {
     expect(unresolvedOutcome.delivery.status).toBe("effect_unknown");
     expect(unresolvedOutcome.integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_DELIVERY_EFFECT_UNRESOLVED" }),
+    );
+  });
+
+  it("retains failed adaptation evidence without requiring passing semantics", () => {
+    const failed = run();
+    failed.status = "blocked";
+    const validation = JSON.parse(failed.validationJson ?? "null") as {
+      commands: {
+        commandId: string;
+        status: "passed" | "failed" | "blocked";
+        exitCode: number | null;
+      }[];
+      semantic: {
+        items: {
+          id: string;
+          status: "passed" | "attested" | "blocked";
+          evidenceRefs: string[];
+        }[];
+        newBehaviorPassed: boolean;
+        passed: boolean;
+      };
+      adaptation: {
+        matrix: { status: "passed" | "failed" | "blocked" | "excluded" }[];
+      };
+      passed: boolean;
+    };
+    const command = validation.commands.find(
+      (item) => item.commandId === "custom-owner",
+    );
+    const scenario = validation.semantic.items.find(
+      (item) => item.id === "SCN-CUSTOM",
+    );
+    const cell = validation.adaptation.matrix[0];
+    if (command === undefined || scenario === undefined || cell === undefined)
+      throw new Error("fixture lacks custom adaptation evidence");
+    command.status = "failed";
+    command.exitCode = 1;
+    scenario.status = "blocked";
+    scenario.evidenceRefs = [];
+    validation.semantic.newBehaviorPassed = false;
+    validation.semantic.passed = false;
+    cell.status = "failed";
+    validation.passed = false;
+    failed.validationJson = JSON.stringify(validation);
+    const failureEvents = [
+      ...events("reviewed").slice(0, 4),
+      {
+        sequence: 5,
+        occurredAt: "2026-09-11T12:00:04.000Z",
+        type: "validation.failed",
+        data: { from: "committed", to: "blocked" },
+      },
+    ];
+
+    const value = outcome(failed, failureEvents);
+    expect(value.validation.status).toBe("failed");
+    expect(value.integrity.reasons).not.toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_ADAPTATION_COMMAND_MISMATCH" }),
     );
   });
 
@@ -1028,6 +1111,15 @@ describe("run outcome projection", () => {
     missingMerge.state = "merged";
     unreceipted.deliveryJson = JSON.stringify(missingMerge);
     expect(outcome(unreceipted).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
+    const blockedWithClosedDelivery = run();
+    blockedWithClosedDelivery.status = "blocked";
+    const closedDelivery = awaitingHumanDelivery();
+    closedDelivery.state = "closed";
+    blockedWithClosedDelivery.deliveryJson = JSON.stringify(closedDelivery);
+    expect(outcome(blockedWithClosedDelivery).integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
     );
 
