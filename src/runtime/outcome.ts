@@ -7,6 +7,7 @@ import {
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
 import type { ContinuationUsage } from "./continuation.js";
+import { externalEffectBoundary } from "./effect-boundary.js";
 import type { PublicRunRecord, RunRecord, RunStatus } from "./state.js";
 import type { RunTimeline } from "./timeline.js";
 
@@ -63,24 +64,249 @@ const deliveryRequiredStatuses = new Set<RunStatus>([
   "closed",
 ]);
 
+function commandEvidenceConsistent(
+  commands: z.infer<typeof validationEvidenceSchema>["commands"],
+): boolean {
+  return commands.every(
+    (command) => command.status !== "passed" || command.exitCode === 0,
+  );
+}
+
+function adaptationEvidenceMatchesCommands(
+  adaptation: z.infer<typeof validationEvidenceSchema>["adaptation"],
+  commands: z.infer<typeof validationEvidenceSchema>["commands"],
+): boolean {
+  if (adaptation === undefined) return true;
+  if (adaptation.workflows === undefined) return false;
+  const workflowIds = new Set(adaptation.workflows);
+  const configurationIds = new Set(
+    adaptation.configurations.map((configuration) => configuration.id),
+  );
+  const pairs = new Set<string>();
+  const commandIds = new Set<string>();
+  if (
+    workflowIds.size !== adaptation.workflows.length ||
+    configurationIds.size !== adaptation.configurations.length
+  )
+    return false;
+  return (
+    adaptation.matrix.some((cell) => cell.status !== "excluded") &&
+    adaptation.matrix.every((cell) => {
+      if (
+        !workflowIds.has(cell.workflowId) ||
+        !configurationIds.has(cell.configurationId)
+      )
+        return false;
+      const pair = JSON.stringify([cell.workflowId, cell.configurationId]);
+      if (pairs.has(pair)) return false;
+      pairs.add(pair);
+      if (cell.status === "excluded") return true;
+      if (cell.commandId === undefined || cell.outputDigest === undefined)
+        return false;
+      if (commandIds.has(cell.commandId)) return false;
+      commandIds.add(cell.commandId);
+      const results = commands.filter(
+        (command) => command.commandId === cell.commandId,
+      );
+      const result = results[0];
+      if (result === undefined) return false;
+      return (
+        results.length === 1 &&
+        result.required &&
+        result.status === cell.status &&
+        result.outputDigest === cell.outputDigest
+      );
+    }) &&
+    pairs.size === workflowIds.size * configurationIds.size
+  );
+}
+
+function semanticEvidenceMatchesCommands(
+  semantic: NonNullable<z.infer<typeof validationEvidenceSchema>["semantic"]>,
+  commands: z.infer<typeof validationEvidenceSchema>["commands"],
+): boolean {
+  const commandsById = new Map<string, (typeof commands)[number]>();
+  for (const command of commands) {
+    if (commandsById.has(command.commandId)) return false;
+    commandsById.set(command.commandId, command);
+  }
+  const itemsByKey = new Map<string, (typeof semantic.items)[number]>();
+  for (const item of semantic.items) {
+    const key = `${item.kind}\u0000${item.id}`;
+    if (itemsByKey.has(key)) return false;
+    itemsByKey.set(key, item);
+  }
+  const newBehavior = semantic.items.filter(
+    (item) => item.coverage === "new_behavior" || item.coverage === "both",
+  );
+  const preservation = semantic.items.filter(
+    (item) => item.coverage === "preservation" || item.coverage === "both",
+  );
+  const newBehaviorPassed =
+    newBehavior.length > 0 &&
+    newBehavior.every((item) => item.status !== "blocked");
+  const preservationPassed =
+    preservation.length === 0 ||
+    preservation.every((item) => item.status !== "blocked");
+  if (
+    semantic.newBehaviorPassed !== newBehaviorPassed ||
+    semantic.preservationPassed !== preservationPassed ||
+    semantic.passed !== (newBehaviorPassed && preservationPassed)
+  )
+    return false;
+
+  return semantic.items.every((item) => {
+    const references = new Set(item.evidenceRefs);
+    if (references.size !== item.evidenceRefs.length) return false;
+    let hasPassingCommand = false;
+    let hasAttestedAuthority = false;
+    for (const reference of references) {
+      if (reference.startsWith("command:")) {
+        const command = commandsById.get(reference.slice("command:".length));
+        if (command === undefined) return false;
+        if (item.status !== "blocked") {
+          if (command.status !== "passed" || command.exitCode !== 0)
+            return false;
+          hasPassingCommand = true;
+        }
+      } else if (reference.startsWith("acceptance:")) {
+        const acceptance = itemsByKey.get(
+          `acceptance\u0000${reference.slice("acceptance:".length)}`,
+        );
+        if (acceptance === undefined) return false;
+        if (item.status !== "blocked" && acceptance.status === "blocked")
+          return false;
+      } else if (reference.startsWith("attestation:")) {
+        const parts = reference.split(":");
+        if (parts.length < 3 || parts.some((part) => part.length === 0))
+          return false;
+        hasAttestedAuthority = true;
+      } else if (reference.startsWith("exception:")) {
+        const parts = reference.split(":");
+        if (parts.length !== 2 || parts.some((part) => part.length === 0))
+          return false;
+        hasAttestedAuthority = true;
+      } else {
+        return false;
+      }
+    }
+    return (
+      item.status === "blocked" ||
+      (item.status === "passed" && hasPassingCommand) ||
+      (item.status === "attested" && hasAttestedAuthority)
+    );
+  });
+}
+
 function validationPassedByEvidence(
   evidence: z.infer<typeof validationEvidenceSchema>,
 ): boolean {
-  const commandsPassed = evidence.commands
-    .filter((command) => command.required)
-    .every((command) => command.status === "passed");
+  const commandsPassed =
+    evidence.commands.length > 0 &&
+    evidence.commands
+      .filter((command) => command.required)
+      .every(
+        (command) => command.status === "passed" && command.exitCode === 0,
+      );
   const semanticPassed =
     evidence.semantic === undefined ||
     (evidence.semantic.passed &&
-      evidence.semantic.newBehaviorPassed &&
-      evidence.semantic.preservationPassed &&
-      evidence.semantic.items.every((item) => item.status !== "blocked"));
+      semanticEvidenceMatchesCommands(evidence.semantic, evidence.commands));
   const adaptationPassed =
-    evidence.adaptation === undefined ||
-    evidence.adaptation.matrix.every(
-      (cell) => cell.status === "passed" || cell.status === "excluded",
+    evidence.adaptation === undefined
+      ? true
+      : evidence.adaptation.matrix.every(
+          (cell) => cell.status === "passed" || cell.status === "excluded",
+        ) &&
+        adaptationEvidenceMatchesCommands(
+          evidence.adaptation,
+          evidence.commands,
+        );
+  return (
+    commandEvidenceConsistent(evidence.commands) &&
+    commandsPassed &&
+    semanticPassed &&
+    adaptationPassed
+  );
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function closedDeliveryChecksPass(
+  delivery: z.infer<typeof deliveryRecordSchema>,
+): boolean {
+  if (delivery.state !== "closed") return true;
+  const mergeCommit = delivery.merge?.commit;
+  const observation = record(delivery.observation);
+  const checks = observation?.mergeChecks;
+  if (mergeCommit === undefined || !Array.isArray(checks)) return false;
+  const required = delivery.postMergeRequiredChecks ?? delivery.requiredChecks;
+  return required.every((name) => {
+    const producer = delivery.checkProducers?.[name];
+    const matching = checks.filter((value) => {
+      const check = record(value);
+      if (check?.name !== name) return false;
+      if (delivery.checkProducers === undefined) return true;
+      return (
+        producer !== undefined &&
+        check.appId === producer.appId &&
+        check.workflowPath === producer.workflowPath &&
+        check.event === "push" &&
+        check.headSha === mergeCommit
+      );
+    });
+    return (
+      matching.length > 0 &&
+      matching.every((value) => {
+        const check = record(value);
+        return check?.status === "completed" && check.conclusion === "success";
+      })
     );
-  return commandsPassed && semanticPassed && adaptationPassed;
+  });
+}
+
+function deliveryReceiptsMatch(
+  delivery: z.infer<typeof deliveryRecordSchema>,
+  run: PublicRunRecord,
+): boolean {
+  const validStatesByRun: Partial<
+    Record<RunStatus, z.infer<typeof deliveryRecordSchema>["state"][]>
+  > = {
+    proposing: ["planned", "proposing"],
+    effect_unknown: ["effect_unknown"],
+    awaiting_ci: ["awaiting_ci"],
+    awaiting_human: ["awaiting_human"],
+    merged: ["merged"],
+    post_merge_verified: ["merged", "post_merge_verified", "closed"],
+    closed: ["closed"],
+  };
+  const validStates = validStatesByRun[run.status];
+  if (validStates !== undefined && !validStates.includes(delivery.state))
+    return false;
+  const requiresPullRequest = [
+    "awaiting_ci",
+    "awaiting_human",
+    "merged",
+    "post_merge_verified",
+    "closed",
+  ].includes(delivery.state);
+  const requiresMerge = ["merged", "post_merge_verified", "closed"].includes(
+    delivery.state,
+  );
+  if (
+    requiresPullRequest &&
+    (delivery.pullRequest === null ||
+      delivery.remoteHeadCommit !== delivery.candidateCommit)
+  )
+    return false;
+  if (requiresMerge && delivery.merge?.tree !== delivery.candidateTree)
+    return false;
+  if (delivery.state === "closed" && run.status !== "closed") return false;
+  return closedDeliveryChecksPass(delivery);
 }
 
 function validationSummary(
@@ -190,6 +416,14 @@ export function projectRunOutcome(input: {
   } else if (validationStored.value !== undefined) {
     const evidence = validationStored.value;
     const candidateMatches = sameCandidate(run, evidence.candidateCommit);
+    const commandRecordsMatch = commandEvidenceConsistent(evidence.commands);
+    const adaptationCommandsMatch = adaptationEvidenceMatchesCommands(
+      evidence.adaptation,
+      evidence.commands,
+    );
+    const semanticRecordsMatch =
+      evidence.semantic === undefined ||
+      semanticEvidenceMatchesCommands(evidence.semantic, evidence.commands);
     const passedByEvidence = validationPassedByEvidence(evidence);
     const resultMatches = evidence.passed === passedByEvidence;
     if (!candidateMatches) {
@@ -197,6 +431,30 @@ export function projectRunOutcome(input: {
         reason(
           "OUTCOME_VALIDATION_CANDIDATE_MISMATCH",
           "Stored validation evidence is bound to a different candidate.",
+        ),
+      );
+    }
+    if (!commandRecordsMatch) {
+      reasons.push(
+        reason(
+          "OUTCOME_VALIDATION_COMMAND_MISMATCH",
+          "Stored command status disagrees with its recorded exit evidence.",
+        ),
+      );
+    }
+    if (!adaptationCommandsMatch) {
+      reasons.push(
+        reason(
+          "OUTCOME_ADAPTATION_COMMAND_MISMATCH",
+          "Adaptation evidence lacks a complete command-bound configuration matrix.",
+        ),
+      );
+    }
+    if (!semanticRecordsMatch) {
+      reasons.push(
+        reason(
+          "OUTCOME_VALIDATION_SEMANTIC_MISMATCH",
+          "Semantic evidence does not match its command or acceptance references.",
         ),
       );
     }
@@ -243,7 +501,12 @@ export function projectRunOutcome(input: {
     }
     validation = {
       status:
-        !candidateMatches || !resultMatches || !adaptationCurrent
+        !candidateMatches ||
+        !commandRecordsMatch ||
+        !adaptationCommandsMatch ||
+        !semanticRecordsMatch ||
+        !resultMatches ||
+        !adaptationCurrent
           ? "inconsistent"
           : evidence.passed
             ? "passed"
@@ -286,8 +549,7 @@ export function projectRunOutcome(input: {
     const candidateMatches = sameCandidate(run, evidence.candidateCommit);
     const scopeMatches =
       evidence.scope === undefined ||
-      (evidence.scope.baseCommit === run.baseCommit &&
-        evidence.scope.candidateCommit === evidence.candidateCommit &&
+      (evidence.scope.candidateCommit === evidence.candidateCommit &&
         evidence.scope.candidateCommit === run.candidateCommit &&
         evidence.scope.candidateTree === run.candidateTree);
     const cleanReviewRequired = reviewRequiredStatuses.has(run.status);
@@ -355,6 +617,8 @@ export function projectRunOutcome(input: {
     const matches =
       evidence.runId === run.id &&
       sameCandidate(run, evidence.candidateCommit, evidence.candidateTree);
+    const receiptsMatch = deliveryReceiptsMatch(evidence, run);
+    const effects = externalEffectBoundary(input.run);
     if (!matches) {
       reasons.push(
         reason(
@@ -363,8 +627,29 @@ export function projectRunOutcome(input: {
         ),
       );
     }
+    if (!receiptsMatch) {
+      reasons.push(
+        reason(
+          "OUTCOME_DELIVERY_RECEIPT_MISMATCH",
+          "Stored delivery state lacks the required pull-request or merge receipts.",
+        ),
+      );
+    }
+    if (effects.unresolved) {
+      reasons.push(
+        reason(
+          "OUTCOME_DELIVERY_EFFECT_UNRESOLVED",
+          "Stored delivery evidence requires external-effect reconciliation.",
+        ),
+      );
+    }
     delivery = {
-      status: matches ? evidence.state : "inconsistent",
+      status:
+        !matches || !receiptsMatch
+          ? "inconsistent"
+          : effects.unresolved
+            ? "effect_unknown"
+            : evidence.state,
       candidateCommit: evidence.candidateCommit,
     };
   }

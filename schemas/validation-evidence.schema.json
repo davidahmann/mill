@@ -45,6 +45,11 @@
           "required": ["id", "from", "to", "notice"],
           "additionalProperties": false
         },
+        "workflows": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "configurations": {
           "minItems": 1,
           "maxItems": 32,

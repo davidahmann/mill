@@ -103,6 +103,7 @@ export function adaptationEvidence(
     assurance: "offline_fixture_execution",
     ownerAcceptance: "not_recorded",
     provider: manifest.provider,
+    workflows: manifest.workflows,
     configurations: manifest.configurations,
     fixtures: manifest.fixtures,
     matrix: manifest.matrix.map((cell) => {

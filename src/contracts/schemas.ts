@@ -680,6 +680,7 @@ export const adaptationEvidenceSchema = z.strictObject({
   assurance: z.literal("offline_fixture_execution"),
   ownerAcceptance: z.literal("not_recorded"),
   provider: adaptationManifestSchema.shape.provider,
+  workflows: z.array(z.string().min(1)).min(1).optional(),
   configurations: adaptationManifestSchema.shape.configurations,
   fixtures: adaptationManifestSchema.shape.fixtures,
   matrix: z.array(
