@@ -166,6 +166,26 @@ function events(
     },
   ];
   if (status === "awaiting_human") return deliveryEvents;
+  if (status === "blocked")
+    return [
+      ...deliveryEvents,
+      {
+        sequence: 10,
+        occurredAt: "2026-09-11T12:00:09.000Z",
+        type: "run.blocked",
+        data: { from: "awaiting_human", to: "blocked" },
+      },
+    ];
+  if (status === "cancelled")
+    return [
+      ...recorded,
+      {
+        sequence: 7,
+        occurredAt: "2026-09-11T12:00:06.000Z",
+        type: "run.cancelled",
+        data: { from: "reviewed", to: "cancelled" },
+      },
+    ];
   return [
     ...deliveryEvents,
     {
@@ -630,7 +650,22 @@ describe("run outcome projection", () => {
     );
   });
 
-  it("requires exact-head CI and review evidence before human merge readiness", () => {
+  it("requires current PR, CI and review evidence before human merge readiness", () => {
+    const legacyStatus = run();
+    legacyStatus.status = "awaiting_human";
+    const legacyDelivery = awaitingHumanDelivery();
+    legacyDelivery.observation = {
+      headSha: candidateCommit,
+      branchSha: candidateCommit,
+      checks: [
+        { name: "validate", status: "completed", conclusion: "success" },
+      ],
+      reviews: [],
+      feedback: [],
+    };
+    legacyStatus.deliveryJson = JSON.stringify(legacyDelivery);
+    expect(outcome(legacyStatus).integrity.status).toBe("consistent");
+
     const ready = run();
     ready.status = "awaiting_human";
     const delivery = awaitingHumanDelivery();
@@ -706,6 +741,53 @@ describe("run outcome projection", () => {
     merged.deliveryJson = JSON.stringify(mergedDelivery);
     expect(outcome(merged).delivery.status).toBe("merged");
     expect(outcome(merged).integrity.status).toBe("consistent");
+
+    const wrongMerge = run();
+    wrongMerge.status = "awaiting_human";
+    const wrongDelivery = JSON.parse(JSON.stringify(mergedDelivery)) as Record<
+      string,
+      unknown
+    >;
+    const approval = wrongDelivery.mergeApproval as {
+      plan: { headCommit: string };
+    };
+    approval.plan.headCommit = "e".repeat(40);
+    wrongMerge.deliveryJson = JSON.stringify(wrongDelivery);
+    expect(outcome(wrongMerge).delivery.status).toBe("inconsistent");
+    expect(outcome(wrongMerge).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+  });
+
+  it("retains required evidence after a blocked or cancelled lifecycle", () => {
+    const blocked = run();
+    blocked.status = "blocked";
+    delete blocked.validationJson;
+    delete blocked.reviewJson;
+    delete blocked.deliveryJson;
+    const blockedOutcome = outcome(blocked);
+    expect(blockedOutcome.integrity.reasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "OUTCOME_VALIDATION_MISSING" }),
+        expect.objectContaining({ code: "OUTCOME_REVIEW_MISSING" }),
+        expect.objectContaining({ code: "OUTCOME_DELIVERY_MISSING" }),
+      ]),
+    );
+
+    const cancelled = run();
+    cancelled.status = "cancelled";
+    delete cancelled.validationJson;
+    delete cancelled.reviewJson;
+    const cancelledOutcome = outcome(cancelled);
+    expect(cancelledOutcome.integrity.reasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "OUTCOME_VALIDATION_MISSING" }),
+        expect.objectContaining({ code: "OUTCOME_REVIEW_MISSING" }),
+      ]),
+    );
+    expect(cancelledOutcome.integrity.reasons).not.toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_MISSING" }),
+    );
   });
 
   it("blocks stale adaptation evidence without relabeling the run accepted", () => {
@@ -801,6 +883,23 @@ describe("run outcome projection", () => {
     });
     reusedCommand.validationJson = JSON.stringify(reusedValidation);
     expect(outcome(reusedCommand).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_ADAPTATION_COMMAND_MISMATCH" }),
+    );
+
+    const malformed = run();
+    const malformedValidation = JSON.parse(
+      malformed.validationJson ?? "null",
+    ) as {
+      adaptation: { matrix: Record<string, unknown>[] };
+    };
+    const malformedCell = malformedValidation.adaptation.matrix[0];
+    if (malformedCell === undefined)
+      throw new Error("expected adaptation cell");
+    malformedCell.workflowId = "";
+    malformed.validationJson = JSON.stringify(malformedValidation);
+    const malformedOutcome = outcome(malformed);
+    expect(malformedOutcome.validation.adaptation).toBeNull();
+    expect(malformedOutcome.integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_ADAPTATION_COMMAND_MISMATCH" }),
     );
   });

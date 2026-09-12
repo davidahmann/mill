@@ -66,6 +66,72 @@ const deliveryRequiredStatuses = new Set<RunStatus>([
   "closed",
 ]);
 
+function evidenceRequired(
+  run: PublicRunRecord,
+  timeline: RunTimeline,
+  statuses: ReadonlySet<RunStatus>,
+  resetTypes: ReadonlySet<string>,
+): boolean {
+  if (statuses.has(run.status)) return true;
+  let start = 0;
+  for (const [index, event] of timeline.events.entries()) {
+    if (resetTypes.has(event.type)) start = index + 1;
+  }
+  return timeline.events
+    .slice(start)
+    .some((event) =>
+      event.transition === undefined
+        ? false
+        : statuses.has(event.transition.to),
+    );
+}
+
+function validationEvidenceRequired(
+  run: PublicRunRecord,
+  timeline: RunTimeline,
+): boolean {
+  return evidenceRequired(
+    run,
+    timeline,
+    validationRequiredStatuses,
+    new Set(["builder.started", "builder.resumed", "repair.started"]),
+  );
+}
+
+function reviewEvidenceRequired(
+  run: PublicRunRecord,
+  timeline: RunTimeline,
+): boolean {
+  return evidenceRequired(
+    run,
+    timeline,
+    reviewRequiredStatuses,
+    new Set([
+      "builder.started",
+      "builder.resumed",
+      "repair.started",
+      "review.refresh_prepared",
+    ]),
+  );
+}
+
+function deliveryEvidenceRequired(
+  run: PublicRunRecord,
+  timeline: RunTimeline,
+): boolean {
+  return evidenceRequired(
+    run,
+    timeline,
+    deliveryRequiredStatuses,
+    new Set([
+      "builder.started",
+      "builder.resumed",
+      "repair.started",
+      "review.refresh_prepared",
+    ]),
+  );
+}
+
 function commandEvidenceConsistent(
   commands: z.infer<typeof validationEvidenceSchema>["commands"],
 ): boolean {
@@ -331,9 +397,6 @@ function awaitingHumanEvidencePasses(
   const checks = recordedChecks(observation.checks);
   return (
     checks !== undefined &&
-    checks
-      .filter((check) => delivery.requiredChecks.includes(check.name))
-      .every((check) => check.headSha === delivery.candidateCommit) &&
     checkDecision(
       delivery.requiredChecks,
       checks,
@@ -343,6 +406,25 @@ function awaitingHumanEvidencePasses(
     ).status === "passed" &&
     recordedReviewsPass(observation.reviews, delivery) &&
     recordedFeedbackIsClear(observation.feedback, delivery)
+  );
+}
+
+function nestedMergedReceiptMatches(
+  delivery: z.infer<typeof deliveryRecordSchema>,
+): boolean {
+  const approval = delivery.mergeApproval;
+  if (approval?.state !== "merged") return true;
+  const plan = approval.plan;
+  return (
+    approval.approvalSource === "attended_operator" &&
+    delivery.pullRequest !== null &&
+    plan.repositoryNodeId === delivery.target.repositoryNodeId &&
+    plan.pullRequestNumber === delivery.pullRequest.number &&
+    plan.pullRequestNodeId === delivery.pullRequest.nodeId &&
+    plan.headCommit === delivery.candidateCommit &&
+    plan.candidateTree === delivery.candidateTree &&
+    plan.actorLogin === delivery.target.actorLogin &&
+    plan.actorId === delivery.target.actorId
   );
 }
 
@@ -417,7 +499,9 @@ function deliveryReceiptsMatch(
     return false;
   if (delivery.state === "closed" && run.status !== "closed") return false;
   return (
-    awaitingHumanEvidencePasses(delivery) && closedDeliveryChecksPass(delivery)
+    awaitingHumanEvidencePasses(delivery) &&
+    closedDeliveryChecksPass(delivery) &&
+    nestedMergedReceiptMatches(delivery)
   );
 }
 
@@ -439,6 +523,16 @@ function compactAdaptation(
 ): RunOutcome["validation"]["adaptation"] {
   const adaptation = value.adaptation;
   if (adaptation === undefined) return null;
+  if (
+    adaptation.matrix.some(
+      (cell) =>
+        cell.workflowId.length === 0 ||
+        cell.configurationId.length === 0 ||
+        cell.commandId === "" ||
+        cell.scenarioId === "",
+    )
+  )
+    return null;
   return {
     manifestDigest: adaptation.manifestDigest,
     observedAt: adaptation.observedAt,
@@ -516,7 +610,7 @@ export function projectRunOutcome(input: {
     validation = { ...validation, status: "inconsistent" };
   } else if (
     validationStored.value === undefined &&
-    validationRequiredStatuses.has(run.status)
+    validationEvidenceRequired(run, input.timeline)
   ) {
     reasons.push(
       reason(
@@ -578,7 +672,7 @@ export function projectRunOutcome(input: {
         ),
       );
     }
-    if (validationRequiredStatuses.has(run.status) && !evidence.passed) {
+    if (validationEvidenceRequired(run, input.timeline) && !evidence.passed) {
       reasons.push(
         reason(
           "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
@@ -647,7 +741,7 @@ export function projectRunOutcome(input: {
     review = { ...review, status: "inconsistent" };
   } else if (
     reviewStored.value === undefined &&
-    reviewRequiredStatuses.has(run.status)
+    reviewEvidenceRequired(run, input.timeline)
   ) {
     reasons.push(
       reason(
@@ -664,7 +758,7 @@ export function projectRunOutcome(input: {
       (evidence.scope.candidateCommit === evidence.candidateCommit &&
         evidence.scope.candidateCommit === run.candidateCommit &&
         evidence.scope.candidateTree === run.candidateTree);
-    const cleanReviewRequired = reviewRequiredStatuses.has(run.status);
+    const cleanReviewRequired = reviewEvidenceRequired(run, input.timeline);
     if (!candidateMatches || !scopeMatches) {
       reasons.push(
         reason(
@@ -715,7 +809,7 @@ export function projectRunOutcome(input: {
     delivery = { ...delivery, status: "inconsistent" };
   } else if (
     deliveryStored.value === undefined &&
-    deliveryRequiredStatuses.has(run.status)
+    deliveryEvidenceRequired(run, input.timeline)
   ) {
     reasons.push(
       reason(
