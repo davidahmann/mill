@@ -166,6 +166,26 @@ function events(
     },
   ];
   if (status === "awaiting_human") return deliveryEvents;
+  const mergeEvents = [
+    ...deliveryEvents,
+    {
+      sequence: 10,
+      occurredAt: "2026-09-11T12:00:09.000Z",
+      type: "delivery.merged",
+      data: { from: "awaiting_human", to: "merged" },
+    },
+  ];
+  if (status === "merged") return mergeEvents;
+  const postMergeEvents = [
+    ...mergeEvents,
+    {
+      sequence: 11,
+      occurredAt: "2026-09-11T12:00:10.000Z",
+      type: "delivery.post_merge_verified",
+      data: { from: "merged", to: "post_merge_verified" },
+    },
+  ];
+  if (status === "post_merge_verified") return postMergeEvents;
   if (status === "blocked")
     return [
       ...deliveryEvents,
@@ -187,19 +207,7 @@ function events(
       },
     ];
   return [
-    ...deliveryEvents,
-    {
-      sequence: 10,
-      occurredAt: "2026-09-11T12:00:09.000Z",
-      type: "delivery.merged",
-      data: { from: "awaiting_human", to: "merged" },
-    },
-    {
-      sequence: 11,
-      occurredAt: "2026-09-11T12:00:10.000Z",
-      type: "delivery.post_merge_verified",
-      data: { from: "merged", to: "post_merge_verified" },
-    },
+    ...postMergeEvents,
     {
       sequence: 12,
       occurredAt: "2026-09-11T12:00:11.000Z",
@@ -622,6 +630,21 @@ describe("run outcome projection", () => {
       expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
     );
 
+    closedDelivery.observation = {
+      mergeChecks: [
+        {
+          name: "validate",
+          status: "completed",
+          conclusion: "success",
+          headSha: "f".repeat(40),
+        },
+      ],
+    };
+    closedWithChecks.deliveryJson = JSON.stringify(closedDelivery);
+    expect(outcome(closedWithChecks).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
     const unresolvedMerge = run();
     unresolvedMerge.status = "awaiting_human";
     const unresolvedDelivery = awaitingHumanDelivery();
@@ -860,6 +883,21 @@ describe("run outcome projection", () => {
       }),
     );
 
+    const contradictoryValidation = run();
+    contradictoryValidation.status = "blocked";
+    const contradictoryValidationOutcome = outcome(
+      contradictoryValidation,
+      validationFailureEvents,
+    );
+    expect(contradictoryValidationOutcome.validation.status).toBe(
+      "inconsistent",
+    );
+    expect(contradictoryValidationOutcome.integrity.reasons).toContainEqual(
+      expect.objectContaining({
+        code: "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
+      }),
+    );
+
     const reviewFailed = run();
     reviewFailed.status = "blocked";
     delete reviewFailed.reviewJson;
@@ -901,6 +939,17 @@ describe("run outcome projection", () => {
     expect(retainedReviewOutcome.integrity.reasons).not.toContainEqual(
       expect.objectContaining({ code: "OUTCOME_REVIEW_RESULT_MISMATCH" }),
     );
+
+    const contradictoryReview = run();
+    contradictoryReview.status = "blocked";
+    const contradictoryReviewOutcome = outcome(
+      contradictoryReview,
+      reviewFailureEvents,
+    );
+    expect(contradictoryReviewOutcome.review.status).toBe("inconsistent");
+    expect(contradictoryReviewOutcome.integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_REVIEW_RESULT_MISMATCH" }),
+    );
   });
 
   it("rejects an incompatible retained merge receipt", () => {
@@ -919,6 +968,39 @@ describe("run outcome projection", () => {
     const value = outcome(blocked);
     expect(value.delivery.status).toBe("inconsistent");
     expect(value.integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+  });
+
+  it("requires merge and resulting-main evidence at their lifecycle milestones", () => {
+    const unreceipted = run();
+    unreceipted.status = "merged";
+    const missingMerge = awaitingHumanDelivery();
+    missingMerge.state = "merged";
+    unreceipted.deliveryJson = JSON.stringify(missingMerge);
+    expect(outcome(unreceipted).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
+    const unverified = run();
+    unverified.status = "post_merge_verified";
+    const failedPostMerge = awaitingHumanDelivery();
+    failedPostMerge.state = "merged";
+    failedPostMerge.merge = {
+      commit: "e".repeat(40),
+      tree: candidateTree,
+      method: "merge",
+      mergedByLogin: "operator",
+      mergedAt: "2026-09-11T12:00:10.000Z",
+      defaultBranchHead: "e".repeat(40),
+    };
+    failedPostMerge.observation = {
+      mergeChecks: [
+        { name: "validate", status: "completed", conclusion: "failure" },
+      ],
+    };
+    unverified.deliveryJson = JSON.stringify(failedPostMerge);
+    expect(outcome(unverified).integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
     );
   });
@@ -1034,6 +1116,27 @@ describe("run outcome projection", () => {
     expect(malformedOutcome.validation.adaptation).toBeNull();
     expect(malformedOutcome.integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_ADAPTATION_COMMAND_MISMATCH" }),
+    );
+
+    const malformedScenario = run();
+    const malformedScenarioValidation = JSON.parse(
+      malformedScenario.validationJson ?? "null",
+    ) as {
+      adaptation: { matrix: Record<string, unknown>[] };
+    };
+    const scenarioCell = malformedScenarioValidation.adaptation.matrix[0];
+    if (scenarioCell === undefined) throw new Error("expected adaptation cell");
+    scenarioCell.scenarioId = "";
+    malformedScenario.validationJson = JSON.stringify(
+      malformedScenarioValidation,
+    );
+    const malformedScenarioOutcome = outcome(malformedScenario);
+    expect(malformedScenarioOutcome.validation.status).toBe("inconsistent");
+    expect(malformedScenarioOutcome.validation.adaptation).toMatchObject({
+      matrix: [expect.objectContaining({ scenarioId: null })],
+    });
+    expect(malformedScenarioOutcome.integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_ADAPTATION_MALFORMED" }),
     );
   });
 });

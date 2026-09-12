@@ -167,6 +167,20 @@ function deliveryEvidenceRequired(
   );
 }
 
+function latestPhaseCompletion(
+  timeline: RunTimeline,
+  resetTypes: ReadonlySet<string>,
+  completionTypes: ReadonlySet<string>,
+): string | undefined {
+  let start = 0;
+  for (const [index, event] of timeline.events.entries()) {
+    if (resetTypes.has(event.type)) start = index + 1;
+  }
+  return timeline.events
+    .slice(start)
+    .findLast((event) => completionTypes.has(event.type))?.type;
+}
+
 function commandEvidenceConsistent(
   commands: z.infer<typeof validationEvidenceSchema>["commands"],
 ): boolean {
@@ -204,7 +218,12 @@ function adaptationEvidenceMatchesCommands(
       if (pairs.has(pair)) return false;
       pairs.add(pair);
       if (cell.status === "excluded") return true;
-      if (cell.commandId === undefined || cell.outputDigest === undefined)
+      if (
+        cell.commandId === undefined ||
+        cell.scenarioId === undefined ||
+        cell.scenarioId.length === 0 ||
+        cell.outputDigest === undefined
+      )
         return false;
       if (commandIds.has(cell.commandId)) return false;
       commandIds.add(cell.commandId);
@@ -221,6 +240,22 @@ function adaptationEvidenceMatchesCommands(
       );
     }) &&
     pairs.size === workflowIds.size * configurationIds.size
+  );
+}
+
+function adaptationFieldsAreProjectable(
+  adaptation: z.infer<typeof validationEvidenceSchema>["adaptation"],
+): boolean {
+  return (
+    adaptation === undefined ||
+    adaptation.matrix.every(
+      (cell) =>
+        cell.workflowId.length > 0 &&
+        cell.configurationId.length > 0 &&
+        cell.commandId !== "" &&
+        cell.scenarioId !== "" &&
+        (cell.status === "excluded" || cell.scenarioId !== undefined),
+    )
   );
 }
 
@@ -470,17 +505,27 @@ function nestedMergedReceiptMatches(
   );
 }
 
-function closedDeliveryChecksPass(
+function postMergeDeliveryChecksPass(
   delivery: z.infer<typeof deliveryRecordSchema>,
+  required: boolean,
 ): boolean {
-  if (delivery.state !== "closed") return true;
+  if (!required) return true;
   const mergeCommit = delivery.merge?.commit;
   const observation = record(delivery.observation);
   const checks = observation?.mergeChecks;
   if (mergeCommit === undefined || !Array.isArray(checks)) return false;
-  const required = delivery.postMergeRequiredChecks ?? delivery.requiredChecks;
-  return required.every((name) => {
+  const requiredChecks =
+    delivery.postMergeRequiredChecks ?? delivery.requiredChecks;
+  return requiredChecks.every((name) => {
     const producer = delivery.checkProducers?.[name];
+    const named = checks.filter((value) => record(value)?.name === name);
+    if (
+      named.some((value) => {
+        const check = record(value);
+        return check?.headSha !== undefined && check.headSha !== mergeCommit;
+      })
+    )
+      return false;
     const matching = checks.filter((value) => {
       const check = record(value);
       if (check?.name !== name) return false;
@@ -537,9 +582,18 @@ function deliveryReceiptsMatch(
   if (delivery.merge !== null && delivery.merge.tree !== delivery.candidateTree)
     return false;
   if (delivery.state === "closed" && run.status !== "closed") return false;
+  const mergeReceiptRequired = [
+    "merged",
+    "post_merge_verified",
+    "closed",
+  ].includes(run.status);
+  const postMergeChecksRequired = ["post_merge_verified", "closed"].includes(
+    run.status,
+  );
+  if (mergeReceiptRequired && delivery.merge === null) return false;
   return (
     awaitingHumanEvidencePasses(delivery) &&
-    closedDeliveryChecksPass(delivery) &&
+    postMergeDeliveryChecksPass(delivery, postMergeChecksRequired) &&
     nestedMergedReceiptMatches(delivery)
   );
 }
@@ -565,10 +619,7 @@ function compactAdaptation(
   if (
     adaptation.matrix.some(
       (cell) =>
-        cell.workflowId.length === 0 ||
-        cell.configurationId.length === 0 ||
-        cell.commandId === "" ||
-        cell.scenarioId === "",
+        cell.workflowId.length === 0 || cell.configurationId.length === 0,
     )
   )
     return null;
@@ -591,8 +642,8 @@ function compactAdaptation(
       workflowId: cell.workflowId,
       configurationId: cell.configurationId,
       status: cell.status,
-      commandId: cell.commandId ?? null,
-      scenarioId: cell.scenarioId ?? null,
+      commandId: cell.commandId === "" ? null : (cell.commandId ?? null),
+      scenarioId: cell.scenarioId === "" ? null : (cell.scenarioId ?? null),
     })),
   };
 }
@@ -669,8 +720,18 @@ export function projectRunOutcome(input: {
     const semanticRecordsMatch =
       evidence.semantic === undefined ||
       semanticEvidenceMatchesCommands(evidence.semantic, evidence.commands);
+    const adaptationFieldsProjectable = adaptationFieldsAreProjectable(
+      evidence.adaptation,
+    );
     const passedByEvidence = validationPassedByEvidence(evidence);
     const resultMatches = evidence.passed === passedByEvidence;
+    const validationCompletion = latestPhaseCompletion(
+      input.timeline,
+      new Set(["builder.started", "builder.resumed", "repair.started"]),
+      new Set(["validation.passed", "validation.failed"]),
+    );
+    const validationCompletionMatches =
+      validationCompletion !== "validation.failed" || !evidence.passed;
     if (!candidateMatches) {
       reasons.push(
         reason(
@@ -695,6 +756,14 @@ export function projectRunOutcome(input: {
         ),
       );
     }
+    if (!adaptationFieldsProjectable) {
+      reasons.push(
+        reason(
+          "OUTCOME_ADAPTATION_MALFORMED",
+          "Adaptation evidence contains identifiers that cannot support a stable outcome projection.",
+        ),
+      );
+    }
     if (!semanticRecordsMatch) {
       reasons.push(
         reason(
@@ -716,6 +785,14 @@ export function projectRunOutcome(input: {
         reason(
           "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
           "The recorded lifecycle requires successful validation evidence.",
+        ),
+      );
+    }
+    if (!validationCompletionMatches) {
+      reasons.push(
+        reason(
+          "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
+          "Stored validation evidence disagrees with the recorded failed validation completion.",
         ),
       );
     }
@@ -749,8 +826,10 @@ export function projectRunOutcome(input: {
         !candidateMatches ||
         !commandRecordsMatch ||
         !adaptationCommandsMatch ||
+        !adaptationFieldsProjectable ||
         !semanticRecordsMatch ||
         !resultMatches ||
+        !validationCompletionMatches ||
         !adaptationCurrent
           ? "inconsistent"
           : evidence.passed
@@ -798,6 +877,18 @@ export function projectRunOutcome(input: {
         evidence.scope.candidateCommit === run.candidateCommit &&
         evidence.scope.candidateTree === run.candidateTree);
     const reviewMustBeClean = cleanReviewRequired(run, input.timeline);
+    const reviewCompletion = latestPhaseCompletion(
+      input.timeline,
+      new Set([
+        "builder.started",
+        "builder.resumed",
+        "repair.started",
+        "review.refresh_prepared",
+      ]),
+      new Set(["review.passed", "review.blocked"]),
+    );
+    const reviewCompletionMatches =
+      reviewCompletion !== "review.blocked" || evidence.findings.length > 0;
     if (!candidateMatches || !scopeMatches) {
       reasons.push(
         reason(
@@ -814,13 +905,22 @@ export function projectRunOutcome(input: {
         ),
       );
     }
+    if (!reviewCompletionMatches) {
+      reasons.push(
+        reason(
+          "OUTCOME_REVIEW_RESULT_MISMATCH",
+          "Stored review evidence disagrees with the recorded blocked review completion.",
+        ),
+      );
+    }
     const findingCounts = { P0: 0, P1: 0, P2: 0, P3: 0 };
     for (const finding of evidence.findings) findingCounts[finding.severity]++;
     review = {
       status:
         !candidateMatches ||
         !scopeMatches ||
-        (reviewMustBeClean && evidence.findings.length !== 0)
+        (reviewMustBeClean && evidence.findings.length !== 0) ||
+        !reviewCompletionMatches
           ? "inconsistent"
           : evidence.findings.length === 0
             ? "clean"
@@ -895,7 +995,9 @@ export function projectRunOutcome(input: {
           : effects.unresolved
             ? "effect_unknown"
             : effects.merged
-              ? "merged"
+              ? evidence.state === "blocked"
+                ? "blocked"
+                : "merged"
               : evidence.state,
       candidateCommit: evidence.candidateCommit,
     };
