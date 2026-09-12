@@ -143,8 +143,8 @@ function events(
       data: { from: "verified", to: "reviewed" },
     },
   ];
-  if (status !== "closed") return recorded;
-  return [
+  if (status === "reviewed") return recorded;
+  const deliveryEvents = [
     ...recorded,
     {
       sequence: 7,
@@ -164,6 +164,10 @@ function events(
       type: "delivery.awaiting_human",
       data: { from: "awaiting_ci", to: "awaiting_human" },
     },
+  ];
+  if (status === "awaiting_human") return deliveryEvents;
+  return [
+    ...deliveryEvents,
     {
       sequence: 10,
       occurredAt: "2026-09-11T12:00:09.000Z",
@@ -221,6 +225,31 @@ function deliveryRecord(state: string): Record<string, unknown> {
     createdAt: "2026-09-11T12:00:00.000Z",
     updatedAt: "2026-09-11T12:00:05.000Z",
   };
+}
+
+function awaitingHumanDelivery(): Record<string, unknown> {
+  const delivery = deliveryRecord("awaiting_human");
+  delivery.remoteHeadCommit = candidateCommit;
+  delivery.pullRequest = {
+    number: 1,
+    nodeId: "PR_example",
+    url: "https://github.com/example/app/pull/1",
+  };
+  delivery.observation = {
+    headSha: candidateCommit,
+    branchSha: candidateCommit,
+    checks: [
+      {
+        name: "validate",
+        status: "completed",
+        conclusion: "success",
+        headSha: candidateCommit,
+      },
+    ],
+    reviews: [],
+    feedback: [],
+  };
+  return delivery;
 }
 
 function outcome(record = run()) {
@@ -494,7 +523,7 @@ describe("run outcome projection", () => {
           id: "INV-EXCEPTION",
           coverage: "preservation",
           status: "attested",
-          evidenceRefs: ["exception:EX-PRESERVATION"],
+          evidenceRefs: ["exception:risk:provider-v2"],
         },
       ],
       newBehaviorPassed: true,
@@ -572,13 +601,7 @@ describe("run outcome projection", () => {
 
     const unresolvedMerge = run();
     unresolvedMerge.status = "awaiting_human";
-    const unresolvedDelivery = deliveryRecord("awaiting_human");
-    unresolvedDelivery.remoteHeadCommit = candidateCommit;
-    unresolvedDelivery.pullRequest = {
-      number: 1,
-      nodeId: "PR_example",
-      url: "https://github.com/example/app/pull/1",
-    };
+    const unresolvedDelivery = awaitingHumanDelivery();
     unresolvedDelivery.mergeApproval = {
       plan: {
         schemaVersion: "1",
@@ -605,6 +628,84 @@ describe("run outcome projection", () => {
     expect(unresolvedOutcome.integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_DELIVERY_EFFECT_UNRESOLVED" }),
     );
+  });
+
+  it("requires exact-head CI and review evidence before human merge readiness", () => {
+    const ready = run();
+    ready.status = "awaiting_human";
+    const delivery = awaitingHumanDelivery();
+    delivery.reviewPolicy = {
+      mode: "github_required",
+      requiredReviewerLogins: ["reviewer"],
+    };
+    delivery.observation = {
+      headSha: candidateCommit,
+      branchSha: candidateCommit,
+      checks: [
+        {
+          name: "validate",
+          status: "completed",
+          conclusion: "success",
+          headSha: candidateCommit,
+        },
+      ],
+      reviews: [
+        {
+          actorLogin: "reviewer",
+          state: "APPROVED",
+          commitId: candidateCommit,
+        },
+      ],
+      feedback: [],
+    };
+    ready.deliveryJson = JSON.stringify(delivery);
+    expect(outcome(ready).integrity.status).toBe("consistent");
+
+    delivery.observation = {
+      headSha: candidateCommit,
+      branchSha: candidateCommit,
+      checks: [
+        {
+          name: "validate",
+          status: "completed",
+          conclusion: "failure",
+          headSha: candidateCommit,
+        },
+      ],
+      reviews: [],
+      feedback: [],
+    };
+    ready.deliveryJson = JSON.stringify(delivery);
+    expect(outcome(ready).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
+    const merged = run();
+    merged.status = "awaiting_human";
+    const mergedDelivery = awaitingHumanDelivery();
+    mergedDelivery.mergeApproval = {
+      plan: {
+        schemaVersion: "1",
+        repositoryNodeId: "R_example",
+        pullRequestNumber: 1,
+        pullRequestNodeId: "PR_example",
+        headCommit: candidateCommit,
+        baseCommit,
+        candidateTree,
+        actorLogin: "operator",
+        actorId: 1,
+        policyDigest: digest,
+        method: "merge",
+        markReady: false,
+        expiresAt: "2026-09-12T12:00:00.000Z",
+      },
+      digest,
+      state: "merged",
+      approvalSource: "attended_operator",
+    };
+    merged.deliveryJson = JSON.stringify(mergedDelivery);
+    expect(outcome(merged).delivery.status).toBe("merged");
+    expect(outcome(merged).integrity.status).toBe("consistent");
   });
 
   it("blocks stale adaptation evidence without relabeling the run accepted", () => {

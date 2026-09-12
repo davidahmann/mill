@@ -7,7 +7,9 @@ import {
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
 import type { ContinuationUsage } from "./continuation.js";
+import { checkDecision } from "./delivery.js";
 import { externalEffectBoundary } from "./effect-boundary.js";
+import type { GitHubCheck } from "./github.js";
 import type { PublicRunRecord, RunRecord, RunStatus } from "./state.js";
 import type { RunTimeline } from "./timeline.js";
 
@@ -182,9 +184,7 @@ function semanticEvidenceMatchesCommands(
           return false;
         hasAttestedAuthority = true;
       } else if (reference.startsWith("exception:")) {
-        const parts = reference.split(":");
-        if (parts.length !== 2 || parts.some((part) => part.length === 0))
-          return false;
+        if (reference.slice("exception:".length).length === 0) return false;
         hasAttestedAuthority = true;
       } else {
         return false;
@@ -234,6 +234,116 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function recordedChecks(value: unknown): GitHubCheck[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const checks: GitHubCheck[] = [];
+  for (const entry of value) {
+    const check = record(entry);
+    if (
+      check === undefined ||
+      typeof check.name !== "string" ||
+      typeof check.status !== "string" ||
+      (check.conclusion !== null && typeof check.conclusion !== "string") ||
+      (check.appId !== undefined &&
+        (typeof check.appId !== "number" || !Number.isInteger(check.appId))) ||
+      (check.headSha !== undefined && typeof check.headSha !== "string") ||
+      (check.workflowPath !== undefined &&
+        typeof check.workflowPath !== "string") ||
+      (check.event !== undefined && typeof check.event !== "string")
+    )
+      return undefined;
+    checks.push({
+      name: check.name,
+      status: check.status,
+      conclusion: check.conclusion,
+      ...(check.appId === undefined ? {} : { appId: check.appId }),
+      ...(check.headSha === undefined ? {} : { headSha: check.headSha }),
+      ...(check.workflowPath === undefined
+        ? {}
+        : { workflowPath: check.workflowPath }),
+      ...(check.event === undefined ? {} : { event: check.event }),
+    });
+  }
+  return checks;
+}
+
+function recordedReviewsPass(
+  value: unknown,
+  delivery: z.infer<typeof deliveryRecordSchema>,
+): boolean {
+  if (delivery.reviewPolicy.mode === "local_only") return true;
+  if (!Array.isArray(value)) return false;
+  return delivery.reviewPolicy.requiredReviewerLogins.every((login) => {
+    let latest: string | undefined;
+    for (const entry of value) {
+      const review = record(entry);
+      if (
+        review === undefined ||
+        typeof review.actorLogin !== "string" ||
+        typeof review.state !== "string" ||
+        (review.commitId !== null && typeof review.commitId !== "string")
+      )
+        return false;
+      if (
+        review.actorLogin === login &&
+        review.commitId === delivery.candidateCommit
+      )
+        latest = review.state;
+    }
+    return latest === "APPROVED" || latest === "COMMENTED";
+  });
+}
+
+function recordedFeedbackIsClear(
+  value: unknown,
+  delivery: z.infer<typeof deliveryRecordSchema>,
+): boolean {
+  if (delivery.reviewPolicy.mode === "local_only") return true;
+  if (!Array.isArray(value)) return false;
+  return value.every((entry) => {
+    const feedback = record(entry);
+    if (
+      feedback === undefined ||
+      typeof feedback.actorLogin !== "string" ||
+      typeof feedback.commitId !== "string" ||
+      typeof feedback.priority !== "string"
+    )
+      return false;
+    return !(
+      feedback.commitId === delivery.candidateCommit &&
+      delivery.reviewPolicy.requiredReviewerLogins.includes(
+        feedback.actorLogin,
+      ) &&
+      feedback.priority !== "P3"
+    );
+  });
+}
+
+function awaitingHumanEvidencePasses(
+  delivery: z.infer<typeof deliveryRecordSchema>,
+): boolean {
+  if (delivery.state !== "awaiting_human") return true;
+  const observation = record(delivery.observation);
+  if (observation?.headSha !== delivery.candidateCommit) return false;
+  if (observation.branchSha !== delivery.candidateCommit) return false;
+  const checks = recordedChecks(observation.checks);
+  return (
+    checks !== undefined &&
+    checks
+      .filter((check) => delivery.requiredChecks.includes(check.name))
+      .every((check) => check.headSha === delivery.candidateCommit) &&
+    checkDecision(
+      delivery.requiredChecks,
+      checks,
+      delivery.checkProducers,
+      "pull_request",
+      delivery.candidateCommit,
+    ).status === "passed" &&
+    recordedReviewsPass(observation.reviews, delivery) &&
+    recordedFeedbackIsClear(observation.feedback, delivery)
+  );
 }
 
 function closedDeliveryChecksPass(
@@ -306,7 +416,9 @@ function deliveryReceiptsMatch(
   if (requiresMerge && delivery.merge?.tree !== delivery.candidateTree)
     return false;
   if (delivery.state === "closed" && run.status !== "closed") return false;
-  return closedDeliveryChecksPass(delivery);
+  return (
+    awaitingHumanEvidencePasses(delivery) && closedDeliveryChecksPass(delivery)
+  );
 }
 
 function validationSummary(
@@ -649,7 +761,9 @@ export function projectRunOutcome(input: {
           ? "inconsistent"
           : effects.unresolved
             ? "effect_unknown"
-            : evidence.state,
+            : effects.merged
+              ? "merged"
+              : evidence.state,
       candidateCommit: evidence.candidateCommit,
     };
   }
