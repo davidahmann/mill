@@ -1,6 +1,6 @@
 # Mill delivery plan
 
-Status: public-alpha scope complete; integration-adaptation qualification landed
+Status: public-alpha scope complete; outcome-evidence replay next
 
 Owner: David Ahmann
 
@@ -16,11 +16,17 @@ authority. Its contract, impact, and local fixture evaluation are recorded in
 `product/brownfield-contract.yaml`, `quality/brownfield-scenarios.yaml`, and
 `docs/canaries/brownfield-discovery.md`.
 
-The next source-only increment is
-[repository playbook context](playbook-context.md): a compact, digest-pinned
-index and explicit task selection for reusable operational knowledge. It does
-not add a centralized service, MCP interface, automatic updates, customer
-acceptance or public-alpha support claim.
+Repository [playbook context](playbook-context.md) is landed source-only: it
+adds a compact, digest-pinned index and explicit task selection for reusable
+operational knowledge without adding a centralized service, MCP interface,
+automatic updates, customer acceptance or public-alpha support claim.
+
+The current source-only increment is
+[outcome evidence and replay qualification](outcome-evidence-replay.md). It adds
+a redacted, read-only projection of what a bounded adaptation run actually
+recorded and qualifies a second synthetic provider-change fixture. It does not
+turn local evidence into customer acceptance, introduce provider monitoring or
+customer systems, or expand public-alpha support.
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.

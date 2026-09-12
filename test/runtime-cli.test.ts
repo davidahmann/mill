@@ -220,6 +220,28 @@ describe("runtime CLI contracts", () => {
         ]),
       ).toMatchObject({ exitCode: 0, value: { ok: true } });
 
+      const outcome = await jsonCommand([
+        "--cwd",
+        fixture.root,
+        "outcome",
+        "--run",
+        runId,
+      ]);
+      expect(outcome).toMatchObject({
+        exitCode: 0,
+        value: {
+          command: "outcome",
+          data: {
+            run: { id: runId, status: "reviewed" },
+            validation: { status: "passed" },
+            review: { status: "clean" },
+            ownerAcceptance: "not_recorded",
+            integrity: { status: "consistent", reasons: [] },
+          },
+        },
+      });
+      expect(JSON.stringify(outcome.value)).not.toContain(fixture.stateHome);
+
       const support = await jsonCommand([
         "--cwd",
         fixture.root,

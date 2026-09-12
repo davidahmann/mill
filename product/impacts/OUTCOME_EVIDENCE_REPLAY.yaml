@@ -1,0 +1,31 @@
+schemaVersion: "2"
+id: mill-outcome-evidence-replay
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended conversation on 2026-09-11 authorizing planning, implementation,
+  testing, validation and shipping through green CI, without a release.
+source_base: 774a5353a08c7411bcd75b5eb9d158949038f9ea
+authority: product/outcome-evidence-replay.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Read-only outcome projections summarize lifecycle, validation, review,
+    adaptation and measured-usage evidence without exposing raw run state.
+  - Missing, malformed, stale or cross-candidate evidence blocks the projection
+    instead of producing a green or accepted result.
+  - A second synthetic provider-change fixture uses its own authority, workflow,
+    configurations and failure behavior.
+verification:
+  - positive and negative projection, redaction, evidence-binding and CLI tests
+  - second synthetic adaptation lifecycle fixture with independent frozen checks
+  - native check, packed package, schema generation and clean-candidate audit
+  - independent complete-diff review and green pull-request checks
+exceptions:
+  - Native maintainer may update contracts, documentation and regression tests
+    in the approved paths.
+  - Owner or customer acceptance remains an explicit human decision and is
+    reported as not recorded when no separate attestation exists.

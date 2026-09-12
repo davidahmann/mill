@@ -83,7 +83,7 @@ For its one qualified shape, Mill can:
     specification in this alpha. The operator supplies the structured proposal
     that Mill assesses and freezes.
 
-## Repository playbooks and run timelines (unreleased source)
+## Repository playbooks, run timelines and outcomes (unreleased source)
 
 The source branch can index small repository-owned playbooks, search compact
 metadata, and bind a selected set into a task's frozen context. A playbook can
@@ -97,6 +97,13 @@ mismatched index or playbook bytes block admission. See
 events into a schema-checked timeline. It includes lifecycle facts only, never
 event payloads, and marks malformed, discontinuous, forbidden, or stale state
 evidence as inconsistent. See [run timelines](docs/run-timeline.md).
+
+`millctl --json outcome` projects the same durable run into a redacted outcome
+record. It binds local lifecycle, validation, review, delivery and measured
+usage facts, and summarizes adaptation provider/configuration matrix evidence
+when present. It reports owner acceptance as `not_recorded`; checks, review and
+delivery cannot certify that decision. Invalid, stale or cross-candidate records
+block the projection. See [run outcomes](docs/run-outcome.md).
 
 These source capabilities are not part of the current public-alpha support claim
 or the published `0.3.2` package until they receive their own qualification and

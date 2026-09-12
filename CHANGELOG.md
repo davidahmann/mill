@@ -11,6 +11,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   the context manifest.
 - Add a schema-backed, read-only run timeline that validates durable event
   ordering and lifecycle transitions without exposing event payloads.
+- Add a schema-backed, read-only run outcome projection that summarizes bound
+  lifecycle, validation, review, delivery, adaptation and usage evidence without
+  exposing raw state or inferring owner acceptance.
+- Add a second deterministic synthetic webhook adaptation replay with separate
+  provider authority, configurations and frozen failure behavior.
 
 ### Changed
 

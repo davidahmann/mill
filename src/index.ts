@@ -12,6 +12,7 @@ export {
   playbookSchema,
   repositoryIntelligenceSchema,
   runTimelineSchema,
+  runOutcomeSchema,
   type ContractKind,
 } from "./contracts/schemas.js";
 export {
@@ -109,6 +110,7 @@ export {
   resumeRun,
   reviewRun,
   runInventory,
+  runOutcome,
   runStatus,
   runTimeline,
   startLocalRun,
@@ -119,6 +121,7 @@ export {
   verifyRun,
 } from "./runtime/lifecycle.js";
 export { projectRunTimeline, type RunTimeline } from "./runtime/timeline.js";
+export { projectRunOutcome, type RunOutcome } from "./runtime/outcome.js";
 export {
   continuationPacket,
   type ContinuationAction,
