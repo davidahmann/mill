@@ -7,7 +7,7 @@ import {
   validationEvidenceSchema,
 } from "../contracts/schemas.js";
 import type { ContinuationUsage } from "./continuation.js";
-import type { PublicRunRecord, RunRecord } from "./state.js";
+import type { PublicRunRecord, RunRecord, RunStatus } from "./state.js";
 import type { RunTimeline } from "./timeline.js";
 
 export type RunOutcome = z.infer<typeof runOutcomeSchema>;
@@ -28,6 +28,59 @@ function sameCandidate(
     run.candidateCommit === candidateCommit &&
     (candidateTree === undefined || run.candidateTree === candidateTree)
   );
+}
+
+const validationRequiredStatuses = new Set<RunStatus>([
+  "verified",
+  "reviewed",
+  "proposing",
+  "effect_unknown",
+  "awaiting_ci",
+  "awaiting_human",
+  "merged",
+  "post_merge_verified",
+  "closed",
+]);
+
+const reviewRequiredStatuses = new Set<RunStatus>([
+  "reviewed",
+  "proposing",
+  "effect_unknown",
+  "awaiting_ci",
+  "awaiting_human",
+  "merged",
+  "post_merge_verified",
+  "closed",
+]);
+
+const deliveryRequiredStatuses = new Set<RunStatus>([
+  "proposing",
+  "effect_unknown",
+  "awaiting_ci",
+  "awaiting_human",
+  "merged",
+  "post_merge_verified",
+  "closed",
+]);
+
+function validationPassedByEvidence(
+  evidence: z.infer<typeof validationEvidenceSchema>,
+): boolean {
+  const commandsPassed = evidence.commands
+    .filter((command) => command.required)
+    .every((command) => command.status === "passed");
+  const semanticPassed =
+    evidence.semantic === undefined ||
+    (evidence.semantic.passed &&
+      evidence.semantic.newBehaviorPassed &&
+      evidence.semantic.preservationPassed &&
+      evidence.semantic.items.every((item) => item.status !== "blocked"));
+  const adaptationPassed =
+    evidence.adaptation === undefined ||
+    evidence.adaptation.matrix.every(
+      (cell) => cell.status === "passed" || cell.status === "excluded",
+    );
+  return commandsPassed && semanticPassed && adaptationPassed;
 }
 
 function validationSummary(
@@ -123,9 +176,22 @@ export function projectRunOutcome(input: {
       ),
     );
     validation = { ...validation, status: "inconsistent" };
+  } else if (
+    validationStored.value === undefined &&
+    validationRequiredStatuses.has(run.status)
+  ) {
+    reasons.push(
+      reason(
+        "OUTCOME_VALIDATION_MISSING",
+        "The recorded lifecycle requires validation evidence, but none is stored.",
+      ),
+    );
+    validation = { ...validation, status: "inconsistent" };
   } else if (validationStored.value !== undefined) {
     const evidence = validationStored.value;
     const candidateMatches = sameCandidate(run, evidence.candidateCommit);
+    const passedByEvidence = validationPassedByEvidence(evidence);
+    const resultMatches = evidence.passed === passedByEvidence;
     if (!candidateMatches) {
       reasons.push(
         reason(
@@ -134,27 +200,56 @@ export function projectRunOutcome(input: {
         ),
       );
     }
-    const adaptation = compactAdaptation(evidence);
-    if (
-      adaptation !== null &&
-      Date.parse(adaptation.fixtures.expiresAt) <=
-        Date.parse(adaptation.observedAt)
-    ) {
+    if (!resultMatches) {
       reasons.push(
         reason(
-          "OUTCOME_ADAPTATION_FIXTURE_STALE",
-          "Adaptation fixture evidence expired before the recorded run state.",
+          "OUTCOME_VALIDATION_RESULT_MISMATCH",
+          "Stored validation pass state disagrees with its command or semantic evidence.",
         ),
       );
     }
+    if (validationRequiredStatuses.has(run.status) && !evidence.passed) {
+      reasons.push(
+        reason(
+          "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
+          "The recorded lifecycle requires successful validation evidence.",
+        ),
+      );
+    }
+    const adaptation = compactAdaptation(evidence);
+    let adaptationCurrent = true;
+    if (adaptation !== null) {
+      const capturedAt = Date.parse(adaptation.fixtures.capturedAt);
+      const observedAt = Date.parse(adaptation.observedAt);
+      const expiresAt = Date.parse(adaptation.fixtures.expiresAt);
+      if (capturedAt > observedAt) {
+        adaptationCurrent = false;
+        reasons.push(
+          reason(
+            "OUTCOME_ADAPTATION_FIXTURE_FUTURE",
+            "Adaptation fixture evidence was captured after the recorded verification.",
+          ),
+        );
+      }
+      if (expiresAt <= observedAt) {
+        adaptationCurrent = false;
+        reasons.push(
+          reason(
+            "OUTCOME_ADAPTATION_FIXTURE_STALE",
+            "Adaptation fixture evidence expired before the recorded run state.",
+          ),
+        );
+      }
+    }
     validation = {
-      status: !candidateMatches
-        ? "inconsistent"
-        : evidence.passed
-          ? "passed"
-          : evidence.commands.some((command) => command.status === "blocked")
-            ? "blocked"
-            : "failed",
+      status:
+        !candidateMatches || !resultMatches || !adaptationCurrent
+          ? "inconsistent"
+          : evidence.passed
+            ? "passed"
+            : evidence.commands.some((command) => command.status === "blocked")
+              ? "blocked"
+              : "failed",
       candidateCommit: evidence.candidateCommit,
       commands: validationSummary(evidence),
       adaptation,
@@ -175,14 +270,28 @@ export function projectRunOutcome(input: {
       ),
     );
     review = { ...review, status: "inconsistent" };
+  } else if (
+    reviewStored.value === undefined &&
+    reviewRequiredStatuses.has(run.status)
+  ) {
+    reasons.push(
+      reason(
+        "OUTCOME_REVIEW_MISSING",
+        "The recorded lifecycle requires review evidence, but none is stored.",
+      ),
+    );
+    review = { ...review, status: "inconsistent" };
   } else if (reviewStored.value !== undefined) {
     const evidence = reviewStored.value;
-    const candidateMatches = sameCandidate(
-      run,
-      evidence.candidateCommit,
-      evidence.scope?.candidateTree,
-    );
-    if (!candidateMatches) {
+    const candidateMatches = sameCandidate(run, evidence.candidateCommit);
+    const scopeMatches =
+      evidence.scope === undefined ||
+      (evidence.scope.baseCommit === run.baseCommit &&
+        evidence.scope.candidateCommit === evidence.candidateCommit &&
+        evidence.scope.candidateCommit === run.candidateCommit &&
+        evidence.scope.candidateTree === run.candidateTree);
+    const cleanReviewRequired = reviewRequiredStatuses.has(run.status);
+    if (!candidateMatches || !scopeMatches) {
       reasons.push(
         reason(
           "OUTCOME_REVIEW_CANDIDATE_MISMATCH",
@@ -190,14 +299,25 @@ export function projectRunOutcome(input: {
         ),
       );
     }
+    if (cleanReviewRequired && evidence.findings.length !== 0) {
+      reasons.push(
+        reason(
+          "OUTCOME_REVIEW_RESULT_MISMATCH",
+          "The recorded lifecycle requires a clean review, but findings remain.",
+        ),
+      );
+    }
     const findingCounts = { P0: 0, P1: 0, P2: 0, P3: 0 };
     for (const finding of evidence.findings) findingCounts[finding.severity]++;
     review = {
-      status: !candidateMatches
-        ? "inconsistent"
-        : evidence.findings.length === 0
-          ? "clean"
-          : "findings",
+      status:
+        !candidateMatches ||
+        !scopeMatches ||
+        (cleanReviewRequired && evidence.findings.length !== 0)
+          ? "inconsistent"
+          : evidence.findings.length === 0
+            ? "clean"
+            : "findings",
       candidateCommit: evidence.candidateCommit,
       findingCounts,
     };
@@ -216,6 +336,17 @@ export function projectRunOutcome(input: {
       reason(
         "OUTCOME_DELIVERY_INVALID",
         "Stored delivery evidence cannot be parsed against its contract.",
+      ),
+    );
+    delivery = { ...delivery, status: "inconsistent" };
+  } else if (
+    deliveryStored.value === undefined &&
+    deliveryRequiredStatuses.has(run.status)
+  ) {
+    reasons.push(
+      reason(
+        "OUTCOME_DELIVERY_MISSING",
+        "The recorded lifecycle requires delivery evidence, but none is stored.",
       ),
     );
     delivery = { ...delivery, status: "inconsistent" };

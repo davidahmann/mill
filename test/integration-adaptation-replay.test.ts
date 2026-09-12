@@ -64,6 +64,8 @@ async function secondReplayFixture() {
     "src/dispatch.js calls the retired route for outbound customer events.\n";
   const standard = '{"id":"standard","workspace":"sales"}\n';
   const restricted = '{"id":"restricted","workspace":"finance"}\n';
+  const capturedAt = new Date(Date.now() - 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const reference = (file: string, content: string) => ({
     path: file,
     digest: textDigest(content),
@@ -235,8 +237,8 @@ async function secondReplayFixture() {
     ],
     fixtures: {
       kind: "synthetic",
-      capturedAt: "2026-09-11T11:00:00.000Z",
-      expiresAt: "2026-09-12T11:00:00.000Z",
+      capturedAt,
+      expiresAt,
     },
     matrix: [
       {
@@ -374,8 +376,9 @@ if (args.includes("--output-schema")) {
   await writeFile(
     fixture.dockerPath,
     `#!${process.execPath}
-import { readFile } from "node:fs/promises";
+import assert from "node:assert/strict";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 const args = process.argv.slice(2);
 if (args[0] === "--version") { console.log("Docker version 29.7.2"); process.exit(0); }
 if (args[0] === "image" && args[1] === "inspect") { console.log("[]"); process.exit(0); }
@@ -384,10 +387,55 @@ const mount = args.find((value) => value.includes("target=/workspace/src,readonl
 const source = /source=([^,]+)/u.exec(mount)?.[1];
 const command = args.at(-1);
 if (!source) process.exit(2);
-const text = await readFile(path.join(source, "dispatch.js"), "utf8");
-const preserves = text.includes("idempotencyKey: event.id") && text.includes("response.status === 403");
-const migrated = text.includes("/v2/events/") && text.includes("encodeURIComponent(event.workspace)");
-process.exit(command === "preservation" ? (preserves ? 0 : 1) : (preserves && migrated ? 0 : 1));
+const { dispatch } = await import(pathToFileURL(path.join(source, "dispatch.js")).href);
+const event = { id: "event-1", workspace: "sales" };
+let writes = 0;
+const created = new Set();
+const provider = {
+  request: async (route) => ({ status: 200, route }),
+  create: async ({ idempotencyKey }) => {
+    if (!created.has(idempotencyKey)) writes += 1;
+    created.add(idempotencyKey);
+    return { idempotencyKey };
+  },
+};
+if (command === "preservation") {
+  await dispatch(provider, event);
+  await dispatch(provider, event);
+  assert.equal(writes, 1);
+  let forbiddenWrites = 0;
+  await assert.rejects(
+    dispatch(
+      { request: async () => ({ status: 403 }), create: async () => { forbiddenWrites += 1; } },
+      event,
+    ),
+    /permission denied/u,
+  );
+  assert.equal(forbiddenWrites, 0);
+} else if (command === "target") {
+  let route = "";
+  await dispatch(
+    { ...provider, request: async (value) => { route = value; return { status: 200 }; } },
+    event,
+  );
+  assert.equal(route, "/v2/events/sales");
+} else if (command === "restricted") {
+  let restrictedWrites = 0;
+  await assert.rejects(
+    dispatch(
+      {
+        request: async (_route, input) => {
+          assert.equal(input.workspace, "finance");
+          return { status: 403 };
+        },
+        create: async () => { restrictedWrites += 1; },
+      },
+      { id: "event-restricted", workspace: "finance" },
+    ),
+    /permission denied/u,
+  );
+  assert.equal(restrictedWrites, 0);
+} else process.exit(2);
 `,
   );
   await chmod(fixture.dockerPath, 0o755);

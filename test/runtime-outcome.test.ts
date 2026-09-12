@@ -96,17 +96,7 @@ function run(): RunRecord {
         digest,
       },
       summary: "private review prose",
-      findings: [
-        {
-          id: "P2-1",
-          severity: "P2",
-          class: "maintainability",
-          title: "private title",
-          body: "private body",
-          file: "private/path.ts",
-          line: 1,
-        },
-      ],
+      findings: [],
     }),
   };
 }
@@ -194,7 +184,7 @@ describe("run outcome projection", () => {
           configurations: [{ id: "custom", revision: "2" }],
         },
       },
-      review: { status: "findings", findingCounts: { P2: 1 } },
+      review: { status: "clean", findingCounts: { P2: 0 } },
       ownerAcceptance: "not_recorded",
       integrity: { status: "consistent", reasons: [] },
     });
@@ -230,6 +220,68 @@ describe("run outcome projection", () => {
       reasons: [{ code: "OUTCOME_REVIEW_CANDIDATE_MISMATCH" }],
     });
     expect(JSON.stringify(mismatchedOutcome)).not.toContain("private mismatch");
+
+    const missing = run();
+    delete missing.validationJson;
+    delete missing.reviewJson;
+    expect(outcome(missing).integrity).toMatchObject({
+      status: "inconsistent",
+      reasons: [
+        { code: "OUTCOME_VALIDATION_MISSING" },
+        { code: "OUTCOME_REVIEW_MISSING" },
+      ],
+    });
+  });
+
+  it("blocks contradictory validation and review records", () => {
+    const contradictoryValidation = run();
+    const validation = JSON.parse(
+      contradictoryValidation.validationJson ?? "null",
+    ) as {
+      commands: { status: string; exitCode: number | null }[];
+    };
+    const firstCommand = validation.commands[0];
+    if (firstCommand === undefined)
+      throw new Error("fixture lacks validation command evidence");
+    firstCommand.status = "failed";
+    firstCommand.exitCode = 1;
+    contradictoryValidation.validationJson = JSON.stringify(validation);
+    expect(outcome(contradictoryValidation).integrity).toMatchObject({
+      status: "inconsistent",
+      reasons: [{ code: "OUTCOME_VALIDATION_RESULT_MISMATCH" }],
+    });
+
+    const mismatchedScope = run();
+    const review = JSON.parse(mismatchedScope.reviewJson ?? "null") as {
+      scope: { candidateCommit: string };
+    };
+    review.scope.candidateCommit = "e".repeat(40);
+    mismatchedScope.reviewJson = JSON.stringify(review);
+    expect(outcome(mismatchedScope).integrity).toMatchObject({
+      status: "inconsistent",
+      reasons: [{ code: "OUTCOME_REVIEW_CANDIDATE_MISMATCH" }],
+    });
+
+    const reviewedWithFindings = run();
+    const reviewed = JSON.parse(reviewedWithFindings.reviewJson ?? "null") as {
+      findings: unknown[];
+    };
+    reviewed.findings = [
+      {
+        id: "P2-1",
+        severity: "P2",
+        class: "maintainability",
+        title: "private title",
+        body: "private body",
+        file: "private/path.ts",
+        line: 1,
+      },
+    ];
+    reviewedWithFindings.reviewJson = JSON.stringify(reviewed);
+    expect(outcome(reviewedWithFindings).integrity).toMatchObject({
+      status: "inconsistent",
+      reasons: [{ code: "OUTCOME_REVIEW_RESULT_MISMATCH" }],
+    });
   });
 
   it("blocks stale adaptation evidence without relabeling the run accepted", () => {
@@ -243,6 +295,17 @@ describe("run outcome projection", () => {
     expect(outcome(stale).integrity).toMatchObject({
       status: "inconsistent",
       reasons: [{ code: "OUTCOME_ADAPTATION_FIXTURE_STALE" }],
+    });
+
+    const future = run();
+    const futureParsed = JSON.parse(future.validationJson ?? "null") as {
+      adaptation: { fixtures: { capturedAt: string } };
+    };
+    futureParsed.adaptation.fixtures.capturedAt = "2026-09-12T00:00:00.000Z";
+    future.validationJson = JSON.stringify(futureParsed);
+    expect(outcome(future).integrity).toMatchObject({
+      status: "inconsistent",
+      reasons: [{ code: "OUTCOME_ADAPTATION_FIXTURE_FUTURE" }],
     });
   });
 });
