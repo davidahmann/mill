@@ -272,12 +272,15 @@ function awaitingHumanDelivery(): Record<string, unknown> {
   return delivery;
 }
 
-function outcome(record = run()) {
+function outcome(
+  record = run(),
+  recordedEvents: Record<string, unknown>[] = events(record.status),
+) {
   return projectRunOutcome({
     run: record,
     timeline: projectRunTimeline({
       run: record,
-      events: events(record.status),
+      events: recordedEvents,
     }),
     usage: {
       source: "unavailable",
@@ -666,6 +669,28 @@ describe("run outcome projection", () => {
     legacyStatus.deliveryJson = JSON.stringify(legacyDelivery);
     expect(outcome(legacyStatus).integrity.status).toBe("consistent");
 
+    const mismatchedStatus = run();
+    mismatchedStatus.status = "awaiting_human";
+    const mismatchedDelivery = awaitingHumanDelivery();
+    mismatchedDelivery.observation = {
+      headSha: candidateCommit,
+      branchSha: candidateCommit,
+      checks: [
+        {
+          name: "validate",
+          status: "completed",
+          conclusion: "success",
+          headSha: "e".repeat(40),
+        },
+      ],
+      reviews: [],
+      feedback: [],
+    };
+    mismatchedStatus.deliveryJson = JSON.stringify(mismatchedDelivery);
+    expect(outcome(mismatchedStatus).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
     const ready = run();
     ready.status = "awaiting_human";
     const delivery = awaitingHumanDelivery();
@@ -787,6 +812,114 @@ describe("run outcome projection", () => {
     );
     expect(cancelledOutcome.integrity.reasons).not.toContainEqual(
       expect.objectContaining({ code: "OUTCOME_DELIVERY_MISSING" }),
+    );
+  });
+
+  it("retains failed validation and review evidence", () => {
+    const validationFailed = run();
+    validationFailed.status = "blocked";
+    delete validationFailed.validationJson;
+    const validationFailureEvents = [
+      ...events("reviewed").slice(0, 4),
+      {
+        sequence: 5,
+        occurredAt: "2026-09-11T12:00:04.000Z",
+        type: "validation.failed",
+        data: { from: "committed", to: "blocked" },
+      },
+    ];
+    expect(
+      outcome(validationFailed, validationFailureEvents).integrity.reasons,
+    ).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_VALIDATION_MISSING" }),
+    );
+
+    const retainedValidationFailure = run();
+    retainedValidationFailure.status = "blocked";
+    const failedValidation = JSON.parse(
+      retainedValidationFailure.validationJson ?? "null",
+    ) as {
+      commands: { status: string; exitCode: number | null }[];
+      passed: boolean;
+    };
+    const failedCommand = failedValidation.commands[0];
+    if (failedCommand === undefined)
+      throw new Error("expected validation command");
+    failedCommand.status = "failed";
+    failedCommand.exitCode = 1;
+    failedValidation.passed = false;
+    retainedValidationFailure.validationJson = JSON.stringify(failedValidation);
+    const retainedValidationOutcome = outcome(
+      retainedValidationFailure,
+      validationFailureEvents,
+    );
+    expect(retainedValidationOutcome.validation.status).toBe("failed");
+    expect(retainedValidationOutcome.integrity.reasons).not.toContainEqual(
+      expect.objectContaining({
+        code: "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
+      }),
+    );
+
+    const reviewFailed = run();
+    reviewFailed.status = "blocked";
+    delete reviewFailed.reviewJson;
+    const reviewFailureEvents = [
+      ...events("reviewed").slice(0, 5),
+      {
+        sequence: 6,
+        occurredAt: "2026-09-11T12:00:05.000Z",
+        type: "review.blocked",
+        data: { from: "verified", to: "blocked" },
+      },
+    ];
+    expect(
+      outcome(reviewFailed, reviewFailureEvents).integrity.reasons,
+    ).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_REVIEW_MISSING" }),
+    );
+
+    const retainedReviewFailure = run();
+    retainedReviewFailure.status = "blocked";
+    const failedReview = JSON.parse(
+      retainedReviewFailure.reviewJson ?? "null",
+    ) as { findings: Record<string, unknown>[] };
+    failedReview.findings.push({
+      id: "review-finding",
+      severity: "P2",
+      class: "correctness",
+      title: "Recorded review finding",
+      body: "The independent review found a repairable defect.",
+      file: "src/example.ts",
+      line: 1,
+    });
+    retainedReviewFailure.reviewJson = JSON.stringify(failedReview);
+    const retainedReviewOutcome = outcome(
+      retainedReviewFailure,
+      reviewFailureEvents,
+    );
+    expect(retainedReviewOutcome.review.status).toBe("findings");
+    expect(retainedReviewOutcome.integrity.reasons).not.toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_REVIEW_RESULT_MISMATCH" }),
+    );
+  });
+
+  it("rejects an incompatible retained merge receipt", () => {
+    const blocked = run();
+    blocked.status = "blocked";
+    const delivery = deliveryRecord("blocked");
+    delivery.merge = {
+      commit: "e".repeat(40),
+      tree: "f".repeat(40),
+      method: "merge",
+      mergedByLogin: "operator",
+      mergedAt: "2026-09-11T12:00:10.000Z",
+      defaultBranchHead: "e".repeat(40),
+    };
+    blocked.deliveryJson = JSON.stringify(delivery);
+    const value = outcome(blocked);
+    expect(value.delivery.status).toBe("inconsistent");
+    expect(value.integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
     );
   });
 

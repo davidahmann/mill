@@ -71,6 +71,7 @@ function evidenceRequired(
   timeline: RunTimeline,
   statuses: ReadonlySet<RunStatus>,
   resetTypes: ReadonlySet<string>,
+  completionTypes: ReadonlySet<string>,
 ): boolean {
   if (statuses.has(run.status)) return true;
   let start = 0;
@@ -79,10 +80,10 @@ function evidenceRequired(
   }
   return timeline.events
     .slice(start)
-    .some((event) =>
-      event.transition === undefined
-        ? false
-        : statuses.has(event.transition.to),
+    .some(
+      (event) =>
+        completionTypes.has(event.type) ||
+        (event.transition !== undefined && statuses.has(event.transition.to)),
     );
 }
 
@@ -95,6 +96,20 @@ function validationEvidenceRequired(
     timeline,
     validationRequiredStatuses,
     new Set(["builder.started", "builder.resumed", "repair.started"]),
+    new Set(["validation.failed"]),
+  );
+}
+
+function validationSuccessRequired(
+  run: PublicRunRecord,
+  timeline: RunTimeline,
+): boolean {
+  return evidenceRequired(
+    run,
+    timeline,
+    validationRequiredStatuses,
+    new Set(["builder.started", "builder.resumed", "repair.started"]),
+    new Set(),
   );
 }
 
@@ -112,6 +127,25 @@ function reviewEvidenceRequired(
       "repair.started",
       "review.refresh_prepared",
     ]),
+    new Set(["review.blocked"]),
+  );
+}
+
+function cleanReviewRequired(
+  run: PublicRunRecord,
+  timeline: RunTimeline,
+): boolean {
+  return evidenceRequired(
+    run,
+    timeline,
+    reviewRequiredStatuses,
+    new Set([
+      "builder.started",
+      "builder.resumed",
+      "repair.started",
+      "review.refresh_prepared",
+    ]),
+    new Set(),
   );
 }
 
@@ -129,6 +163,7 @@ function deliveryEvidenceRequired(
       "repair.started",
       "review.refresh_prepared",
     ]),
+    new Set(),
   );
 }
 
@@ -397,6 +432,13 @@ function awaitingHumanEvidencePasses(
   const checks = recordedChecks(observation.checks);
   return (
     checks !== undefined &&
+    checks
+      .filter((check) => delivery.requiredChecks.includes(check.name))
+      .every(
+        (check) =>
+          check.headSha === undefined ||
+          check.headSha === delivery.candidateCommit,
+      ) &&
     checkDecision(
       delivery.requiredChecks,
       checks,
@@ -486,16 +528,13 @@ function deliveryReceiptsMatch(
     "post_merge_verified",
     "closed",
   ].includes(delivery.state);
-  const requiresMerge = ["merged", "post_merge_verified", "closed"].includes(
-    delivery.state,
-  );
   if (
     requiresPullRequest &&
     (delivery.pullRequest === null ||
       delivery.remoteHeadCommit !== delivery.candidateCommit)
   )
     return false;
-  if (requiresMerge && delivery.merge?.tree !== delivery.candidateTree)
+  if (delivery.merge !== null && delivery.merge.tree !== delivery.candidateTree)
     return false;
   if (delivery.state === "closed" && run.status !== "closed") return false;
   return (
@@ -672,7 +711,7 @@ export function projectRunOutcome(input: {
         ),
       );
     }
-    if (validationEvidenceRequired(run, input.timeline) && !evidence.passed) {
+    if (validationSuccessRequired(run, input.timeline) && !evidence.passed) {
       reasons.push(
         reason(
           "OUTCOME_VALIDATION_LIFECYCLE_MISMATCH",
@@ -758,7 +797,7 @@ export function projectRunOutcome(input: {
       (evidence.scope.candidateCommit === evidence.candidateCommit &&
         evidence.scope.candidateCommit === run.candidateCommit &&
         evidence.scope.candidateTree === run.candidateTree);
-    const cleanReviewRequired = reviewEvidenceRequired(run, input.timeline);
+    const reviewMustBeClean = cleanReviewRequired(run, input.timeline);
     if (!candidateMatches || !scopeMatches) {
       reasons.push(
         reason(
@@ -767,7 +806,7 @@ export function projectRunOutcome(input: {
         ),
       );
     }
-    if (cleanReviewRequired && evidence.findings.length !== 0) {
+    if (reviewMustBeClean && evidence.findings.length !== 0) {
       reasons.push(
         reason(
           "OUTCOME_REVIEW_RESULT_MISMATCH",
@@ -781,7 +820,7 @@ export function projectRunOutcome(input: {
       status:
         !candidateMatches ||
         !scopeMatches ||
-        (cleanReviewRequired && evidence.findings.length !== 0)
+        (reviewMustBeClean && evidence.findings.length !== 0)
           ? "inconsistent"
           : evidence.findings.length === 0
             ? "clean"
