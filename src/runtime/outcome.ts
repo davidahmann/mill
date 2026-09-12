@@ -192,9 +192,11 @@ function commandEvidenceConsistent(
 function adaptationEvidenceMatchesCommands(
   adaptation: z.infer<typeof validationEvidenceSchema>["adaptation"],
   commands: z.infer<typeof validationEvidenceSchema>["commands"],
+  semantic: z.infer<typeof validationEvidenceSchema>["semantic"],
 ): boolean {
   if (adaptation === undefined) return true;
-  if (adaptation.workflows === undefined) return false;
+  if (adaptation.workflows === undefined || semantic === undefined)
+    return false;
   const workflowIds = new Set(adaptation.workflows);
   const configurationIds = new Set(
     adaptation.configurations.map((configuration) => configuration.id),
@@ -224,6 +226,12 @@ function adaptationEvidenceMatchesCommands(
         cell.scenarioId.length === 0 ||
         cell.outputDigest === undefined
       )
+        return false;
+      const scenario = semantic.items.find(
+        (item) => item.kind === "scenario" && item.id === cell.scenarioId,
+      );
+      if (scenario?.status !== "passed") return false;
+      if (!scenario.evidenceRefs.includes(`command:${cell.commandId}`))
         return false;
       if (commandIds.has(cell.commandId)) return false;
       commandIds.add(cell.commandId);
@@ -357,6 +365,7 @@ function validationPassedByEvidence(
         adaptationEvidenceMatchesCommands(
           evidence.adaptation,
           evidence.commands,
+          evidence.semantic,
         );
   return (
     commandEvidenceConsistent(evidence.commands) &&
@@ -516,6 +525,12 @@ function postMergeDeliveryChecksPass(
   if (mergeCommit === undefined || !Array.isArray(checks)) return false;
   const requiredChecks =
     delivery.postMergeRequiredChecks ?? delivery.requiredChecks;
+  if (
+    delivery.postMergeRequiredChecks?.some(
+      (name) => !delivery.requiredChecks.includes(name),
+    ) === true
+  )
+    return false;
   return requiredChecks.every((name) => {
     const producer = delivery.checkProducers?.[name];
     const named = checks.filter((value) => record(value)?.name === name);
@@ -581,7 +596,12 @@ function deliveryReceiptsMatch(
     return false;
   if (delivery.merge !== null && delivery.merge.tree !== delivery.candidateTree)
     return false;
-  if (delivery.state === "closed" && run.status !== "closed") return false;
+  if (
+    delivery.merge !== null &&
+    (!delivery.allowedMergerLogins.includes(delivery.merge.mergedByLogin) ||
+      !delivery.allowedMergeMethods.includes(delivery.merge.method))
+  )
+    return false;
   const mergeReceiptRequired = [
     "merged",
     "post_merge_verified",
@@ -716,6 +736,7 @@ export function projectRunOutcome(input: {
     const adaptationCommandsMatch = adaptationEvidenceMatchesCommands(
       evidence.adaptation,
       evidence.commands,
+      evidence.semantic,
     );
     const semanticRecordsMatch =
       evidence.semantic === undefined ||

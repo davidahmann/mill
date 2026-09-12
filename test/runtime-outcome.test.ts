@@ -49,6 +49,35 @@ function run(): RunRecord {
           outputDigest: digest,
         },
       ],
+      semantic: {
+        impactManifestDigest: digest,
+        items: [
+          {
+            kind: "scenario",
+            id: "SCN-CUSTOM",
+            coverage: "new_behavior",
+            status: "passed",
+            evidenceRefs: ["command:custom-owner"],
+          },
+          {
+            kind: "scenario",
+            id: "SCN-RESTRICTED",
+            coverage: "preservation",
+            status: "passed",
+            evidenceRefs: ["command:preservation"],
+          },
+          {
+            kind: "invariant",
+            id: "INV-PRESERVATION",
+            coverage: "preservation",
+            status: "passed",
+            evidenceRefs: ["command:preservation"],
+          },
+        ],
+        newBehaviorPassed: true,
+        preservationPassed: true,
+        passed: true,
+      },
       adaptation: {
         manifestDigest: digest,
         observedAt: "2026-09-11T12:00:04.000Z",
@@ -550,6 +579,13 @@ describe("run outcome projection", () => {
           evidenceRefs: ["command:custom-owner"],
         },
         {
+          kind: "scenario",
+          id: "SCN-CUSTOM",
+          coverage: "new_behavior",
+          status: "passed",
+          evidenceRefs: ["command:custom-owner"],
+        },
+        {
           kind: "invariant",
           id: "INV-EXCEPTION",
           coverage: "preservation",
@@ -871,6 +907,19 @@ describe("run outcome projection", () => {
     failedCommand.status = "failed";
     failedCommand.exitCode = 1;
     failedValidation.passed = false;
+    const failedSemantic = failedValidation as typeof failedValidation & {
+      semantic: {
+        items: { id: string; status: string }[];
+        preservationPassed: boolean;
+        passed: boolean;
+      };
+    };
+    for (const item of failedSemantic.semantic.items) {
+      if (["SCN-RESTRICTED", "INV-PRESERVATION"].includes(item.id))
+        item.status = "blocked";
+    }
+    failedSemantic.semantic.preservationPassed = false;
+    failedSemantic.semantic.passed = false;
     retainedValidationFailure.validationJson = JSON.stringify(failedValidation);
     const retainedValidationOutcome = outcome(
       retainedValidationFailure,
@@ -1001,6 +1050,56 @@ describe("run outcome projection", () => {
     };
     unverified.deliveryJson = JSON.stringify(failedPostMerge);
     expect(outcome(unverified).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
+    const checkpoint = run();
+    checkpoint.status = "post_merge_verified";
+    const checkpointDelivery = awaitingHumanDelivery();
+    checkpointDelivery.state = "closed";
+    checkpointDelivery.merge = {
+      commit: "e".repeat(40),
+      tree: candidateTree,
+      method: "merge",
+      mergedByLogin: "operator",
+      mergedAt: "2026-09-11T12:00:10.000Z",
+      defaultBranchHead: "e".repeat(40),
+    };
+    checkpointDelivery.observation = {
+      mergeChecks: [
+        { name: "validate", status: "completed", conclusion: "success" },
+      ],
+    };
+    checkpoint.deliveryJson = JSON.stringify(checkpointDelivery);
+    expect(outcome(checkpoint).integrity.status).toBe("consistent");
+
+    const policyMismatch = run();
+    policyMismatch.status = "closed";
+    const policyDelivery = JSON.parse(
+      JSON.stringify(checkpointDelivery),
+    ) as Record<string, unknown>;
+    const policyMerge = policyDelivery.merge as { mergedByLogin: string };
+    policyMerge.mergedByLogin = "unapproved-operator";
+    policyMismatch.deliveryJson = JSON.stringify(policyDelivery);
+    expect(outcome(policyMismatch).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
+    const postMergePolicyMismatch = run();
+    postMergePolicyMismatch.status = "closed";
+    const postMergePolicyDelivery = JSON.parse(
+      JSON.stringify(checkpointDelivery),
+    ) as Record<string, unknown>;
+    postMergePolicyDelivery.postMergeRequiredChecks = ["unrelated"];
+    postMergePolicyDelivery.observation = {
+      mergeChecks: [
+        { name: "unrelated", status: "completed", conclusion: "success" },
+      ],
+    };
+    postMergePolicyMismatch.deliveryJson = JSON.stringify(
+      postMergePolicyDelivery,
+    );
+    expect(outcome(postMergePolicyMismatch).integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
     );
   });
@@ -1137,6 +1236,21 @@ describe("run outcome projection", () => {
     });
     expect(malformedScenarioOutcome.integrity.reasons).toContainEqual(
       expect.objectContaining({ code: "OUTCOME_ADAPTATION_MALFORMED" }),
+    );
+
+    const unknownScenario = run();
+    const unknownScenarioValidation = JSON.parse(
+      unknownScenario.validationJson ?? "null",
+    ) as {
+      adaptation: { matrix: Record<string, unknown>[] };
+    };
+    const unknownScenarioCell = unknownScenarioValidation.adaptation.matrix[0];
+    if (unknownScenarioCell === undefined)
+      throw new Error("expected adaptation cell");
+    unknownScenarioCell.scenarioId = "SCN-UNKNOWN";
+    unknownScenario.validationJson = JSON.stringify(unknownScenarioValidation);
+    expect(outcome(unknownScenario).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_ADAPTATION_COMMAND_MISMATCH" }),
     );
   });
 });
