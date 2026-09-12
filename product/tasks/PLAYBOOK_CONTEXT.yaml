@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-playbook-context
-status: approved
+status: closed
 owner: davidahmann
 base_commit: ce1ccdce47d34886f80a0588713386d85658c617
 execution_mode: approved_native_maintainer
@@ -37,3 +37,16 @@ stop_conditions:
   - ambiguous authority, stale selected context, secret disclosure or
     unavailable mandatory gate
   - recurring same-subsystem P0 or P1 finding
+closure:
+  status: completed
+  recorded_at: 2026-09-10
+  merge_commit: 774a5353a08c7411bcd75b5eb9d158949038f9ea
+  disposition: >-
+    Digest-pinned repository playbook discovery and the read-only run timeline
+    landed with independent review and required GitHub checks. They do not
+    authorize an MCP service, automatic playbook mutation, customer acceptance,
+    release or support expansion.
+  evidence:
+    - https://github.com/davidahmann/mill/pull/39
+    - https://github.com/davidahmann/mill/actions/runs/34419447561
+    - https://github.com/davidahmann/mill/actions/runs/34419447552

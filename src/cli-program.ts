@@ -48,6 +48,7 @@ import {
   qualifyBaseline,
   resumeRun,
   reviewRun,
+  runOutcome,
   runStatus,
   runTimeline,
   startLocalRun,
@@ -1384,6 +1385,52 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           data === undefined
             ? "No durable run exists for this timeline request."
             : "Durable run events do not form a consistent lifecycle timeline.",
+          ExitCode.data,
+          { resultAlreadyEmitted: true },
+        );
+      }
+    });
+
+  program
+    .command("outcome")
+    .description(
+      "project one run into a redacted integrity-checked outcome record",
+    )
+    .option("--run <id>", "run identifier")
+    .action(async (options: { run?: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      const data = await runOutcome({
+        root,
+        ...(options.run === undefined ? {} : { runId: options.run }),
+      });
+      const consistent = data?.integrity.status === "consistent";
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "outcome",
+          ok: consistent,
+          status: consistent ? "ok" : "blocked",
+          data: data ?? {},
+          reasons:
+            data === undefined
+              ? [
+                  {
+                    code: "RUN_NOT_FOUND",
+                    message: "No durable run exists for this outcome request.",
+                  },
+                ]
+              : data.integrity.reasons,
+        }),
+      );
+      if (data === undefined || !consistent) {
+        throw new MillError(
+          data === undefined ? "RUN_NOT_FOUND" : "OUTCOME_INTEGRITY_BLOCKED",
+          data === undefined
+            ? "No durable run exists for this outcome request."
+            : "Stored run evidence does not form a consistent outcome record.",
           ExitCode.data,
           { resultAlreadyEmitted: true },
         );

@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-integration-adaptation
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 799729fc993574fa928a84cf79ea9c21751998e8
 execution_mode: approved_native_maintainer
@@ -32,3 +32,16 @@ constraints:
 stop_conditions:
   - uncertain external effect, secret disclosure or unavailable mandatory gate
   - recurring same-subsystem P0 or P1 finding
+closure:
+  status: completed
+  recorded_at: 2026-09-09
+  merge_commit: 44022ffd0c017278e84085ff5e9d08c439eb6dd3
+  disposition: >-
+    The bounded offline integration-adaptation evidence, regression coverage,
+    documentation, exact-candidate review and required GitHub checks landed on
+    main. Customer acceptance, provider execution, release and support expansion
+    remain unclaimed.
+  evidence:
+    - https://github.com/davidahmann/mill/pull/36
+    - https://github.com/davidahmann/mill/actions/runs/34385312903
+    - https://github.com/davidahmann/mill/actions/runs/34385312890

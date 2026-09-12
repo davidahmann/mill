@@ -1,0 +1,35 @@
+schemaVersion: "2"
+task_id: mill-outcome-evidence-replay
+status: approved
+owner: davidahmann
+base_commit: 774a5353a08c7411bcd75b5eb9d158949038f9ea
+execution_mode: approved_native_maintainer
+authority: product/outcome-evidence-replay.md
+impact_manifest: product/impacts/OUTCOME_EVIDENCE_REPLAY.yaml
+objective: >-
+  Project durable adaptation-run evidence into a redacted, integrity-checked
+  outcome record and qualify a second independent synthetic adaptation fixture.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - docs/**
+  - product/**
+  - architecture/**
+  - README.md
+  - CHANGELOG.md
+acceptance_items: [OE-01, OE-02, OE-03, OE-04, OE-05, OE-06, OE-07]
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - independent read-only review of the complete exact candidate diff
+constraints:
+  - single native-maintainer writer in a disposable worktree
+  - preserve task, acceptance, verification, delivery and release authority
+  - no release, publication, provider/customer-system action, telemetry export,
+    MCP server, daemon, centralized service or automatic mutation
+stop_conditions:
+  - ambiguous authority, secret disclosure or unavailable mandatory gate
+  - recurring same-subsystem P0 or P1 finding

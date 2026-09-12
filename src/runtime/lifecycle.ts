@@ -66,6 +66,7 @@ import { MILL_VERSION } from "../version.js";
 import { validationRepairFindings } from "./repair.js";
 import { summarizeUsage } from "./usage.js";
 import { continuationPacket } from "./continuation.js";
+import { projectRunOutcome, type RunOutcome } from "./outcome.js";
 import { projectRunTimeline, type RunTimeline } from "./timeline.js";
 import {
   assertEffectAllowsNewWork,
@@ -1464,6 +1465,30 @@ export async function runTimeline(input: {
     return projectRunTimeline({
       run: publicRunRecord(snapshot.run),
       events: snapshot.events,
+    });
+  } finally {
+    store.close();
+  }
+}
+
+export async function runOutcome(input: {
+  root: string;
+  runId?: string;
+}): Promise<RunOutcome | undefined> {
+  const config = await loadMillConfig(input.root);
+  const commonDirectory = await commonGitDirectory(input.root);
+  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  try {
+    const snapshot = store.runEventSnapshot(input.runId);
+    if (snapshot.run === undefined) return undefined;
+    const timeline = projectRunTimeline({
+      run: publicRunRecord(snapshot.run),
+      events: snapshot.events,
+    });
+    return projectRunOutcome({
+      run: snapshot.run,
+      timeline,
+      usage: summarizeUsage(snapshot.events),
     });
   } finally {
     store.close();

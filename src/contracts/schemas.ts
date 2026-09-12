@@ -908,6 +908,140 @@ export const runTimelineSchema = z.strictObject({
   }),
 });
 
+const outcomeReasonSchema = z.strictObject({
+  code: z.string().min(1),
+  message: z.string().min(1),
+});
+
+const outcomeUsageSchema = z.strictObject({
+  source: z.enum(["measured", "partial", "unavailable"]),
+  admittedCalls: z.number().int().min(0),
+  completedCalls: z.number().int().min(0),
+  measuredCalls: z.number().int().min(0),
+  inputTokens: z.number().int().min(0).nullable(),
+  outputTokens: z.number().int().min(0).nullable(),
+  cacheInputTokens: z.number().int().min(0).nullable(),
+  cacheSource: z.enum(["measured", "partial", "unavailable"]),
+  cost: z.literal("unavailable"),
+  blockEvents: z.number().int().min(0),
+});
+
+export const runOutcomeSchema = z.strictObject({
+  schemaVersion: z.literal("1"),
+  run: z.strictObject({
+    id: z.uuid(),
+    taskId: z.string().min(1),
+    taskDigest: digestSchema,
+    configDigest: digestSchema,
+    status: runStatusSchema,
+    baseCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    candidateCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+    candidateTree: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+    repairCount: z.number().int().min(0),
+    attemptCount: z.number().int().min(0),
+  }),
+  lifecycle: z.strictObject({
+    timeline: z.enum(["consistent", "inconsistent"]),
+    eventCount: z.number().int().min(0),
+  }),
+  validation: z.strictObject({
+    status: z.enum([
+      "not_recorded",
+      "passed",
+      "failed",
+      "blocked",
+      "inconsistent",
+    ]),
+    candidateCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+    commands: z.strictObject({
+      passed: z.number().int().min(0),
+      failed: z.number().int().min(0),
+      blocked: z.number().int().min(0),
+    }),
+    adaptation: z
+      .strictObject({
+        manifestDigest: digestSchema,
+        observedAt: z.iso.datetime(),
+        assurance: z.literal("offline_fixture_execution"),
+        ownerAcceptance: z.literal("not_recorded"),
+        provider: z.strictObject({
+          id: z.string().min(1),
+          from: z.string().min(1),
+          to: z.string().min(1),
+        }),
+        configurations: z.array(
+          z.strictObject({
+            id: z.string().min(1),
+            revision: z.string().min(1),
+          }),
+        ),
+        fixtures: z.strictObject({
+          kind: z.enum(["synthetic", "provider_recording"]),
+          capturedAt: z.iso.datetime(),
+          expiresAt: z.iso.datetime(),
+        }),
+        matrix: z.array(
+          z.strictObject({
+            workflowId: z.string().min(1),
+            configurationId: z.string().min(1),
+            status: z.enum(["passed", "failed", "blocked", "excluded"]),
+            commandId: z.string().min(1).nullable(),
+            scenarioId: z.string().min(1).nullable(),
+          }),
+        ),
+      })
+      .nullable(),
+  }),
+  review: z.strictObject({
+    status: z.enum(["not_recorded", "clean", "findings", "inconsistent"]),
+    candidateCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+    findingCounts: z.strictObject({
+      P0: z.number().int().min(0),
+      P1: z.number().int().min(0),
+      P2: z.number().int().min(0),
+      P3: z.number().int().min(0),
+    }),
+  }),
+  delivery: z.strictObject({
+    status: z.enum([
+      "not_recorded",
+      "planned",
+      "proposing",
+      "effect_unknown",
+      "awaiting_ci",
+      "awaiting_human",
+      "merged",
+      "post_merge_verified",
+      "closed",
+      "cancelled",
+      "blocked",
+      "inconsistent",
+    ]),
+    candidateCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+  }),
+  ownerAcceptance: z.literal("not_recorded"),
+  usage: outcomeUsageSchema,
+  integrity: z.strictObject({
+    status: z.enum(["consistent", "inconsistent"]),
+    reasons: z.array(outcomeReasonSchema),
+  }),
+});
+
 export const contextManifestSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   playbooks: z
@@ -1515,6 +1649,7 @@ export const contractSchemas = {
   repositoryIntelligence: repositoryIntelligenceSchema,
   repositoryIntegrationPlan: repositoryIntegrationPlanSchema,
   reviewResult: reviewResultSchema,
+  runOutcome: runOutcomeSchema,
   runTimeline: runTimelineSchema,
   scenarioSet: scenarioSetSchema,
   sourceManifest: sourceManifestSchema,

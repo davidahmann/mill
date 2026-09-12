@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "run": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "taskId": { "type": "string", "minLength": 1 },
+        "taskDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "configDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "ready",
+            "running",
+            "committed",
+            "verified",
+            "reviewed",
+            "proposing",
+            "effect_unknown",
+            "awaiting_ci",
+            "awaiting_human",
+            "merged",
+            "post_merge_verified",
+            "closed",
+            "blocked",
+            "cancelled",
+            "failed",
+            "stale"
+          ]
+        },
+        "baseCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "candidateCommit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "candidateTree": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "repairCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "attemptCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "taskId",
+        "taskDigest",
+        "configDigest",
+        "status",
+        "baseCommit",
+        "candidateCommit",
+        "candidateTree",
+        "repairCount",
+        "attemptCount"
+      ],
+      "additionalProperties": false
+    },
+    "lifecycle": {
+      "type": "object",
+      "properties": {
+        "timeline": {
+          "type": "string",
+          "enum": ["consistent", "inconsistent"]
+        },
+        "eventCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["timeline", "eventCount"],
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_recorded",
+            "passed",
+            "failed",
+            "blocked",
+            "inconsistent"
+          ]
+        },
+        "candidateCommit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "commands": {
+          "type": "object",
+          "properties": {
+            "passed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "blocked": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["passed", "failed", "blocked"],
+          "additionalProperties": false
+        },
+        "adaptation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "manifestDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "assurance": {
+                  "type": "string",
+                  "const": "offline_fixture_execution"
+                },
+                "ownerAcceptance": {
+                  "type": "string",
+                  "const": "not_recorded"
+                },
+                "provider": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "from": { "type": "string", "minLength": 1 },
+                    "to": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["id", "from", "to"],
+                  "additionalProperties": false
+                },
+                "configurations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "revision": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["id", "revision"],
+                    "additionalProperties": false
+                  }
+                },
+                "fixtures": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["synthetic", "provider_recording"]
+                    },
+                    "capturedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": ["kind", "capturedAt", "expiresAt"],
+                  "additionalProperties": false
+                },
+                "matrix": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "workflowId": { "type": "string", "minLength": 1 },
+                      "configurationId": { "type": "string", "minLength": 1 },
+                      "status": {
+                        "type": "string",
+                        "enum": ["passed", "failed", "blocked", "excluded"]
+                      },
+                      "commandId": {
+                        "anyOf": [
+                          { "type": "string", "minLength": 1 },
+                          { "type": "null" }
+                        ]
+                      },
+                      "scenarioId": {
+                        "anyOf": [
+                          { "type": "string", "minLength": 1 },
+                          { "type": "null" }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "workflowId",
+                      "configurationId",
+                      "status",
+                      "commandId",
+                      "scenarioId"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "manifestDigest",
+                "observedAt",
+                "assurance",
+                "ownerAcceptance",
+                "provider",
+                "configurations",
+                "fixtures",
+                "matrix"
+              ],
+              "additionalProperties": false
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["status", "candidateCommit", "commands", "adaptation"],
+      "additionalProperties": false
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_recorded", "clean", "findings", "inconsistent"]
+        },
+        "candidateCommit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "findingCounts": {
+          "type": "object",
+          "properties": {
+            "P0": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "P1": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "P2": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "P3": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["P0", "P1", "P2", "P3"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["status", "candidateCommit", "findingCounts"],
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_recorded",
+            "planned",
+            "proposing",
+            "effect_unknown",
+            "awaiting_ci",
+            "awaiting_human",
+            "merged",
+            "post_merge_verified",
+            "closed",
+            "cancelled",
+            "blocked",
+            "inconsistent"
+          ]
+        },
+        "candidateCommit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["status", "candidateCommit"],
+      "additionalProperties": false
+    },
+    "ownerAcceptance": { "type": "string", "const": "not_recorded" },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["measured", "partial", "unavailable"]
+        },
+        "admittedCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "completedCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "measuredCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "inputTokens": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        },
+        "outputTokens": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        },
+        "cacheInputTokens": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        },
+        "cacheSource": {
+          "type": "string",
+          "enum": ["measured", "partial", "unavailable"]
+        },
+        "cost": { "type": "string", "const": "unavailable" },
+        "blockEvents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "source",
+        "admittedCalls",
+        "completedCalls",
+        "measuredCalls",
+        "inputTokens",
+        "outputTokens",
+        "cacheInputTokens",
+        "cacheSource",
+        "cost",
+        "blockEvents"
+      ],
+      "additionalProperties": false
+    },
+    "integrity": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["consistent", "inconsistent"] },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "minLength": 1 },
+              "message": { "type": "string", "minLength": 1 }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["status", "reasons"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "run",
+    "lifecycle",
+    "validation",
+    "review",
+    "delivery",
+    "ownerAcceptance",
+    "usage",
+    "integrity"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/davidahmann/mill/schemas/run-outcome.schema.json",
+  "title": "RunOutcome"
+}
