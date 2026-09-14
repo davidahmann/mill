@@ -209,6 +209,11 @@ export async function loadRuntimeInputs(
       (command) => command.controlPaths,
     ),
     ...(config.verifier?.dependencies?.lockPaths ?? []),
+    ...(config.verifier?.dependencies?.manager === "pnpm"
+      ? config.verifier.dependencies.workspacePaths.map((workspacePath) =>
+          workspacePath.replace(/\*$/u, "**"),
+        )
+      : []),
     ...(config.verifier?.dependencies === undefined
       ? []
       : [config.verifier.dependencies.targetPath]),
@@ -277,6 +282,12 @@ export async function loadRuntimeInputs(
     (commandId) => config.commands[commandId]?.controlPaths ?? [],
   );
   const dependencyLockPaths = config.verifier?.dependencies?.lockPaths ?? [];
+  const dependencyWorkspacePaths =
+    config.verifier?.dependencies?.manager === "pnpm"
+      ? config.verifier.dependencies.workspacePaths.map((workspacePath) =>
+          workspacePath.replace(/\*$/u, "**"),
+        )
+      : [];
   const protectedPaths = [
     "mill.yaml",
     taskPath,
@@ -289,6 +300,7 @@ export async function loadRuntimeInputs(
       : [playbooks.index.path, ...playbooks.selected.map((item) => item.path)]),
     ...selectedControlPaths,
     ...dependencyLockPaths,
+    ...dependencyWorkspacePaths,
     ".gitattributes",
     ".gitmodules",
   ].filter((candidate, index, values) => values.indexOf(candidate) === index);

@@ -4,7 +4,7 @@ Mill is a local-first software factory for new and existing codebases. It turns
 approved product intent into bounded, tested, reviewed pull requests with
 repository-native evidence and explicit human approval for delivery and merge.
 
-It is designed for a founder or small team that wants coding-agent leverage
+It is designed for a founder or small team that wants to use coding agents
 without handing one agent an open-ended ticket, production credentials, and the
 power to judge its own work. Product truth stays in the repository. Codex writes
 inside a disposable worktree. Native tests and scenarios verify the committed
@@ -47,9 +47,8 @@ Mill makes those boundaries explicit:
 - releases preserve and publish one independently reproduced tarball rather than
   rebuilding at publication time.
 
-This is the differentiator: Mill is not another chat UI or general coding
-harness. It is the small, inspectable delivery control plane around the coding
-agent you already use.
+Mill is a small delivery control plane around the coding agent you already use.
+It makes scope, evidence, and external actions inspectable.
 
 ## What it can do
 
@@ -109,6 +108,12 @@ These source capabilities are not part of the current public-alpha support claim
 or the published `0.3.2` package until they receive their own qualification and
 release.
 
+The source also contains a constrained pnpm workspace preparation path. It binds
+the pnpm version, lockfile, workspace declaration, and direct workspace package
+manifests before an offline verifier uses the prepared dependencies. It rejects
+install hooks and native-build allowlists. It is source-only and unqualified;
+the public alpha does not support pnpm workspaces.
+
 ## Supported shape
 
 The first recipe is intentionally exact:
@@ -126,7 +131,7 @@ Mill itself is developed with Node.js 24.20.0 and npm 11.19.0. Exact support is
 published in each release qualification record, not inferred from nearby
 versions. All other stacks, operating systems, architectures, forges, models,
 and worker harnesses are experimental or unsupported until independently
-qualified. Experimental native Node ESM/npm adoption is separate from this
+qualified. Experimental Node package-manager adoption is separate from this
 qualified web recipe.
 
 ## Install
@@ -158,6 +163,15 @@ their delivery machinery implicitly. Updating an existing Mill installation is
 deliberate: preserve state and repository snapshots, inspect the release notes,
 and requalify the changed toolchain. There is no automatic upgrade or proven
 general downgrade path for operational state.
+
+### Policy starters for downstream repositories
+
+The packed source includes reviewed starters for a Node/npm repository under
+`policy-starters/node-npm/`. They provide a documentation check, an agent-policy
+addendum, Dependabot grouping, and a DCO workflow that verifies an eligible
+Dependabot commit without running pull-request code under `pull_request_target`.
+Copy them only through a repository review. Add the `dco` check to the target
+branch-protection settings through that repository's own approved process.
 
 ## Quick start
 

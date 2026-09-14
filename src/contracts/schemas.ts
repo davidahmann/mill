@@ -446,6 +446,29 @@ export const checkProducerSchema = z.strictObject({
   postMergeEvent: z.literal("push"),
 });
 
+const shallowWorkspacePathSchema = z
+  .string()
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._-]*\/\*$/u,
+    "expected one shallow workspace path such as packages/*",
+  );
+
+const npmDependencySchema = z.strictObject({
+  manager: z.literal("npm"),
+  registry: z.literal("https://registry.npmjs.org"),
+  targetPath: z.literal("node_modules"),
+  lockPaths: z.array(repositoryPathPatternSchema).min(1),
+});
+
+const pnpmDependencySchema = z.strictObject({
+  manager: z.literal("pnpm"),
+  version: exactSemverSchema,
+  registry: z.literal("https://registry.npmjs.org"),
+  targetPath: z.literal("node_modules"),
+  lockPaths: z.array(repositoryPathPatternSchema).min(1),
+  workspacePaths: z.array(shallowWorkspacePathSchema).min(1),
+});
+
 export const millConfigSchema = z
   .strictObject({
     schemaVersion: z.literal("1"),
@@ -457,12 +480,10 @@ export const millConfigSchema = z
         image: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
         network: z.literal("none"),
         dependencies: z
-          .strictObject({
-            manager: z.literal("npm"),
-            registry: z.literal("https://registry.npmjs.org"),
-            targetPath: z.literal("node_modules"),
-            lockPaths: z.array(repositoryPathPatternSchema).min(1),
-          })
+          .discriminatedUnion("manager", [
+            npmDependencySchema,
+            pnpmDependencySchema,
+          ])
           .optional(),
       })
       .optional(),

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
@@ -31,11 +31,27 @@ const git = (root: string, args: string[]) =>
   );
 
 async function fixture(
-  overrides: { execution?: string; script?: string; type?: string } = {},
+  overrides: {
+    execution?: string;
+    script?: string;
+    type?: string;
+    manager?: "npm" | "pnpm";
+    workspacePackages?: readonly string[];
+  } = {},
 ) {
   const directory = await temporaryDirectory("mill-native-adoption-");
   const state = await temporaryDirectory("mill-native-state-");
   process.env.MILL_STATE_HOME = state.path;
+  const pnpm = overrides.manager === "pnpm";
+  const workspacePackages = overrides.workspacePackages ?? ["packages/*"];
+  const lockPaths = pnpm
+    ? ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+    : ["package.json", "package-lock.json"];
+  const workspaceControls = pnpm
+    ? workspacePackages.map((workspacePath) =>
+        workspacePath.replace(/\*$/u, "**"),
+      )
+    : [];
   const config = {
     schemaVersion: "1",
     repositoryId: randomUUID(),
@@ -45,17 +61,24 @@ async function fixture(
       image: `node@sha256:${"a".repeat(64)}`,
       network: "none",
       dependencies: {
-        manager: "npm",
+        manager: pnpm ? "pnpm" : "npm",
+        ...(pnpm
+          ? { version: "10.0.0", workspacePaths: workspacePackages }
+          : {}),
         registry: "https://registry.npmjs.org",
         targetPath: "node_modules",
-        lockPaths: ["package.json", "package-lock.json"],
+        lockPaths,
       },
     },
     commands: {
       test: {
-        argv: ["/usr/local/bin/npm", "run", overrides.script ?? "test"],
+        argv: [
+          pnpm ? "/usr/local/bin/pnpm" : "/usr/local/bin/npm",
+          "run",
+          overrides.script ?? "test",
+        ],
         cwd: ".",
-        controlPaths: ["package.json", "package-lock.json", "test/**"],
+        controlPaths: [...lockPaths, ...workspaceControls, "test/**"],
         capability: "test",
         execution: overrides.execution ?? "oci",
         required: true,
@@ -70,17 +93,42 @@ async function fixture(
       version: "1.0.0",
       type: overrides.type ?? "module",
       scripts: { test: "node --test" },
+      ...(pnpm ? { packageManager: "pnpm@10.0.0" } : {}),
     }),
   );
-  await writeFile(
-    path.join(directory.path, "package-lock.json"),
-    JSON.stringify({
-      name: "native-example",
-      version: "1.0.0",
-      lockfileVersion: 3,
-      packages: {},
-    }),
-  );
+  if (pnpm) {
+    await mkdir(path.join(directory.path, "packages", "example"), {
+      recursive: true,
+    });
+    await Promise.all([
+      writeFile(
+        path.join(directory.path, "pnpm-lock.yaml"),
+        "lockfileVersion: '9.0'\nimporters:\n  .: {}\n  packages/example: {}\n",
+      ),
+      writeFile(
+        path.join(directory.path, "pnpm-workspace.yaml"),
+        `${yaml({ packages: workspacePackages })}\n`,
+      ),
+      writeFile(
+        path.join(directory.path, "packages", "example", "package.json"),
+        JSON.stringify({
+          name: "@example/package",
+          version: "1.0.0",
+          type: "module",
+        }),
+      ),
+    ]);
+  } else {
+    await writeFile(
+      path.join(directory.path, "package-lock.json"),
+      JSON.stringify({
+        name: "native-example",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        packages: {},
+      }),
+    );
+  }
   await writeFile(path.join(directory.path, "adoption.yaml"), yaml(config));
   await git(directory.path, ["init", "-b", "main"]);
   await git(directory.path, ["config", "user.name", "Native Test"]);
@@ -159,4 +207,49 @@ describe("experimental native adoption", () => {
       }
     },
   );
+
+  it("plans one declared shallow pnpm workspace shape", async () => {
+    const value = await fixture({ manager: "pnpm" });
+    try {
+      const planned = await planNativeAdoption(value.input);
+      expect(planned.status).toBe("experimental");
+      expect(planned.nativeWorkspaceDigest).toMatch(/^sha256:/u);
+    } finally {
+      await value.cleanup();
+    }
+  });
+
+  it("rejects pnpm workspace declarations that do not match the configuration", async () => {
+    const value = await fixture({ manager: "pnpm" });
+    try {
+      await writeFile(
+        path.join(value.input.root, "pnpm-workspace.yaml"),
+        `${yaml({ packages: ["apps/*"] })}\n`,
+      );
+      await git(value.input.root, ["add", "pnpm-workspace.yaml"]);
+      await git(value.input.root, ["commit", "-m", "test: change workspace"]);
+      await expect(planNativeAdoption(value.input)).rejects.toMatchObject({
+        code: "NATIVE_ADOPTION_WORKSPACE_UNSUPPORTED",
+      });
+    } finally {
+      await value.cleanup();
+    }
+  });
+
+  it("rejects a pnpm lockfile outside the declared generic shape", async () => {
+    const value = await fixture({ manager: "pnpm" });
+    try {
+      await writeFile(
+        path.join(value.input.root, "pnpm-lock.yaml"),
+        "lockfileVersion: '8.0'\nimporters: {}\npackages: {}\n",
+      );
+      await git(value.input.root, ["add", "pnpm-lock.yaml"]);
+      await git(value.input.root, ["commit", "-m", "test: change lock"]);
+      await expect(planNativeAdoption(value.input)).rejects.toMatchObject({
+        code: "NATIVE_ADOPTION_STACK_UNSUPPORTED",
+      });
+    } finally {
+      await value.cleanup();
+    }
+  });
 });

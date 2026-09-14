@@ -29,25 +29,69 @@
         },
         "network": { "type": "string", "const": "none" },
         "dependencies": {
-          "type": "object",
-          "properties": {
-            "manager": { "type": "string", "const": "npm" },
-            "registry": {
-              "type": "string",
-              "const": "https://registry.npmjs.org"
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "manager": { "type": "string", "const": "npm" },
+                "registry": {
+                  "type": "string",
+                  "const": "https://registry.npmjs.org"
+                },
+                "targetPath": { "type": "string", "const": "node_modules" },
+                "lockPaths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+                  }
+                }
+              },
+              "required": ["manager", "registry", "targetPath", "lockPaths"],
+              "additionalProperties": false
             },
-            "targetPath": { "type": "string", "const": "node_modules" },
-            "lockPaths": {
-              "minItems": 1,
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
-              }
+            {
+              "type": "object",
+              "properties": {
+                "manager": { "type": "string", "const": "pnpm" },
+                "version": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+                },
+                "registry": {
+                  "type": "string",
+                  "const": "https://registry.npmjs.org"
+                },
+                "targetPath": { "type": "string", "const": "node_modules" },
+                "lockPaths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+                  }
+                },
+                "workspacePaths": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\/\\*$"
+                  }
+                }
+              },
+              "required": [
+                "manager",
+                "version",
+                "registry",
+                "targetPath",
+                "lockPaths",
+                "workspacePaths"
+              ],
+              "additionalProperties": false
             }
-          },
-          "required": ["manager", "registry", "targetPath", "lockPaths"],
-          "additionalProperties": false
+          ]
         }
       },
       "required": ["image", "network"],

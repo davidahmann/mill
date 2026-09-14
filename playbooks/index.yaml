@@ -1,5 +1,12 @@
 schemaVersion: "1"
 playbooks:
+  - id: writing-quality
+    title: Write and review repository documentation
+    summary: A bounded procedure for clear, source-backed repository prose.
+    kind: repository_procedure
+    tags: [documentation, review, writing]
+    path: playbooks/writing-quality.yaml
+    digest: sha256:8186902718bf09e8fac55c70ca138216595d6075d0042fbd4e12e5b346af13c9
   - id: provider-api-adaptation
     title: Adapt a bounded provider API change
     summary: Reusable steps and stopping rules for one provider contract change.

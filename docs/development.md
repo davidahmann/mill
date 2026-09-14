@@ -15,6 +15,7 @@ The repository enforces these native gates:
 - `npm run format:check`
 - `npm run lint`
 - `npm run typecheck`
+- `npm run docs:check`
 - `npm test`
 - `npm run test:coverage`
 - `npm run test:package`
@@ -23,12 +24,24 @@ The repository enforces these native gates:
 Do not replace native commands with a Mill- or Factory-only runner. CI invokes
 the same definitions.
 
+`npm run docs:check` inspects changed Markdown for broken local links and a
+small set of empty stock phrases. It cannot establish accuracy, voice, or
+approval. Use [the writing guide](writing.md) for the human review that those
+checks cannot perform.
+
 The maintainer-only `mill.yaml` delegates to those same scripts in the exact
 offline OCI image. Read `docs/canaries/maintainer-verifier.md` for its bootstrap
 status, separate dependency preparation, source/dependency immutability and
 scratch limits. It is not a new supported downstream stack. Cleanup retains
 generated output roots so they can be mounted scratch directories; Vitest's
 native config loader and cache/report locations avoid writing into dependencies.
+
+The source-only generic pnpm workspace path is more restrictive. It requires a
+root version pin, lockfile version 9, declared shallow workspace directories,
+and direct workspace manifests. It rejects `.npmrc`, pnpm hook files, lifecycle
+scripts, and `onlyBuiltDependencies`. It has deterministic fake-OCI tests. This
+host had no Docker daemon during the implementation, so an actual OCI run still
+needs qualification before any support claim.
 
 The optional command field `executableFixtureScratch: true` is permitted only
 for OCI `test` and `package` commands. It provides fixed `/mill-fixtures`

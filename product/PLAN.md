@@ -1,6 +1,7 @@
 # Mill delivery plan
 
-Status: public-alpha scope complete; outcome-evidence replay next
+Status: public-alpha scope complete; generic development-readiness increment
+active
 
 Owner: David Ahmann
 
@@ -21,12 +22,19 @@ adds a compact, digest-pinned index and explicit task selection for reusable
 operational knowledge without adding a centralized service, MCP interface,
 automatic updates, customer acceptance or public-alpha support claim.
 
-The current source-only increment is
-[outcome evidence and replay qualification](outcome-evidence-replay.md). It adds
-a redacted, read-only projection of what a bounded adaptation run actually
-recorded and qualifies a second synthetic provider-change fixture. It does not
-turn local evidence into customer acceptance, introduce provider monitoring or
-customer systems, or expand public-alpha support.
+The outcome-evidence replay landed in PR #40 on 2026-09-12. It adds a redacted,
+read-only projection of what a bounded adaptation run recorded and a second
+synthetic provider-change fixture. It does not turn local evidence into customer
+acceptance, introduce provider monitoring or customer systems, or expand
+public-alpha support.
+
+The active source-only increment is
+[generic development readiness](development-readiness.md). It adds a narrow DCO
+exception for verified Dependabot commits, repository-owned documentation
+guidance, packaged downstream policy starters, and one constrained pnpm
+workspace preparation shape. It does not change branch protection, add a
+product-specific integration, claim Docker qualification, or expand the
+published support matrix.
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.

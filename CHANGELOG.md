@@ -6,6 +6,18 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ### Added
 
+- Add source-only documentation guidance, a digest-pinned writing procedure, a
+  changed-Markdown checker, and packaged Node/npm policy starters.
+- Add a constrained, source-only pnpm workspace preparation path that binds the
+  manager version, lockfile, workspace file, and direct package manifests.
+
+### Fixed
+
+- Let a base-owned DCO workflow admit only a verified, single-commit Dependabot
+  exception while retaining author-matching sign-offs for human commits.
+
+### Changed
+
 - Add repository-owned playbook contracts, read-only metadata discovery and
   explicit task selection that freezes an index and selected playbook bytes in
   the context manifest.
@@ -16,8 +28,6 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   exposing raw state or inferring owner acceptance.
 - Add a second deterministic synthetic webhook adaptation replay with separate
   provider authority, configurations and frozen failure behavior.
-
-### Changed
 
 - Keep reusable migration knowledge separate from repository-owned acceptance
   and verification. Playbook corrections require a separate reviewed change and

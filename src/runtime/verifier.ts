@@ -29,6 +29,7 @@ import {
   type ContinuityScenarioSet,
   type ImpactManifest,
 } from "../planning/impact.js";
+import { dependencyLockPaths } from "./dependencies.js";
 import type { MillConfig, TaskPacket } from "./inputs.js";
 import {
   runProcess,
@@ -501,11 +502,26 @@ export async function verifyDeclaredCommands(input: {
       );
     }
     const canonicalDependencyRoot = await realpath(input.dependencyRoot);
-    for (const lockPath of input.config.verifier.dependencies.lockPaths) {
-      const [candidateLock, dependencyLock] = await Promise.all([
-        realpath(path.resolve(canonicalRoot, lockPath)),
-        realpath(path.resolve(canonicalDependencyRoot, lockPath)),
-      ]);
+    const lockPaths = await dependencyLockPaths({
+      root: canonicalRoot,
+      config: input.config,
+    });
+    for (const lockPath of lockPaths) {
+      let candidateLock: string;
+      let dependencyLock: string;
+      try {
+        [candidateLock, dependencyLock] = await Promise.all([
+          realpath(path.resolve(canonicalRoot, lockPath)),
+          realpath(path.resolve(canonicalDependencyRoot, lockPath)),
+        ]);
+      } catch {
+        throw new MillError(
+          "VERIFIER_DEPENDENCY_LOCK_DRIFT",
+          "The dependency installation is missing a bound package-manager input.",
+          ExitCode.configuration,
+          { lockPath },
+        );
+      }
       if (
         !isWithin(canonicalRoot, candidateLock) ||
         !isWithin(canonicalDependencyRoot, dependencyLock) ||
