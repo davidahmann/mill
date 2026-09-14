@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const bot = "dependabot[bot]";
 const alias = "support@github.com";
+const githubRebaseService = "web-flow";
 const trailers = (message) =>
   [...message.matchAll(/^Signed-off-by:\s+.+\s+<([^>]+)>\s*$/gimu)].map(
     (match) => (match[1] ?? "").toLowerCase(),
@@ -17,6 +18,12 @@ const account = (value) =>
   value !== null &&
   typeof value.login === "string" &&
   typeof value.type === "string";
+const trustedBotCommitter = (value) =>
+  botAccount(value) ||
+  (typeof value === "object" &&
+    value !== null &&
+    value.login === githubRebaseService &&
+    value.type === "User");
 
 function local(base, head) {
   const result = spawnSync(
@@ -105,7 +112,7 @@ async function github(eventPath) {
     if (!(
       commit?.sha === pull.head.sha &&
       botAccount(commit.author) &&
-      botAccount(commit.committer) &&
+      trustedBotCommitter(commit.committer) &&
       trailers(commit?.commit?.message ?? "").includes(alias) &&
       commit?.commit?.verification?.verified === true &&
       commit?.commit?.verification?.reason === "valid"

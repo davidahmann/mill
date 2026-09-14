@@ -174,6 +174,42 @@ describe("repository policy scripts", () => {
         JSON.stringify([
           {
             ...commit,
+            committer: { login: "web-flow", type: "User" },
+          },
+        ]),
+      );
+      const rebased = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(rebased.status, rebased.stderr).toBe(0);
+      expect(rebased.stdout).toContain("Dependabot DCO check passed");
+
+      await writeFile(
+        commits,
+        JSON.stringify([
+          {
+            ...commit,
+            committer: { login: "mallory", type: "User" },
+          },
+        ]),
+      );
+      const unexpectedCommitter = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(unexpectedCommitter.status).toBe(1);
+      expect(unexpectedCommitter.stderr).toContain(
+        "Dependabot provenance rejected",
+      );
+
+      await writeFile(
+        commits,
+        JSON.stringify([
+          {
+            ...commit,
             commit: {
               ...commit.commit,
               verification: { verified: false, reason: "unsigned" },
