@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const dependabotLogin = "dependabot[bot]";
 const dependabotSignoff = "support@github.com";
+const githubRebaseService = "web-flow";
 
 function signoffs(message) {
   return [...message.matchAll(/^Signed-off-by:\s+.+\s+<([^>]+)>\s*$/gimu)].map(
@@ -78,6 +79,16 @@ function isGitHubAccount(value) {
   );
 }
 
+function isTrustedDependabotCommitter(value) {
+  return (
+    isBotAccount(value) ||
+    (typeof value === "object" &&
+      value !== null &&
+      value.login === githubRebaseService &&
+      value.type === "User")
+  );
+}
+
 function verifiedDependabotCommit(value, head) {
   if (typeof value !== "object" || value === null) return false;
   const commit = value;
@@ -86,7 +97,7 @@ function verifiedDependabotCommit(value, head) {
     typeof commit.sha === "string" &&
     commit.sha === head &&
     isBotAccount(commit.author) &&
-    isBotAccount(commit.committer) &&
+    isTrustedDependabotCommitter(commit.committer) &&
     typeof metadata === "object" &&
     metadata !== null &&
     typeof metadata.message === "string" &&
