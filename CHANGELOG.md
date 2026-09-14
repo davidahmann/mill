@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-14
+
 ### Added
 
 - Add source-only documentation guidance, a digest-pinned writing procedure, a
@@ -32,6 +34,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Keep reusable migration knowledge separate from repository-owned acceptance
   and verification. Playbook corrections require a separate reviewed change and
   cannot recertify the run that discovered them.
+- Refresh the exact zod, Node type, and TypeScript ESLint dependency pins, with
+  regenerated schema snapshots where zod's JSON Schema output changed.
 
 ## [0.3.2] - 2026-09-09
 

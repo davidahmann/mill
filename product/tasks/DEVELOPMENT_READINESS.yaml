@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-development-readiness
-status: approved
+status: closed
 owner: davidahmann
 base_commit: b41dea8d41753fdc0c5f10c3032344aef8273417
 execution_mode: approved_native_maintainer
@@ -42,3 +42,18 @@ constraints:
 stop_conditions:
   - ambiguous authority, secret disclosure or unavailable mandatory gate
   - recurring same-subsystem P0 or P1 finding
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-14
+  implementation_merges: [13a9178, 7face17, 3311f30]
+  disposition: >-
+    The generic controls, regression coverage, documentation and packed policy
+    starters merged through reviewed pull requests. The source-only pnpm path
+    remains unqualified, and no downstream setting, customer system or release
+    was changed by this implementation increment.
+  evidence:
+    - product/development-readiness.md
+    - https://github.com/davidahmann/mill/pull/43
+    - https://github.com/davidahmann/mill/pull/44
+    - https://github.com/davidahmann/mill/pull/45

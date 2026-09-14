@@ -12,15 +12,15 @@ candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity. Draft-only is the default;
 repositories may explicitly enable a separately approved, exact-plan merge.
 
-Mill `0.3.2` is the current qualified public alpha and latest release on
-[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.3.2) and npm. It
-adds bounded integration-adaptation evidence while retaining the preserved
-artifact, provenance, SBOM, independent qualification, and registry/GitHub
-readback required by the release path. GitHub's Latest label does not expand the
-public-alpha support limits. See the [release record](docs/releases/v0.3.2.md)
-for exact evidence and recovery history. The `v0.1.5` genesis release remains
-the historical trust root; the `v0.2.0` tag remains preserved prepublication
-evidence.
+Mill `0.4.0` is the current qualified public alpha and latest release on
+[GitHub](https://github.com/davidahmann/mill/releases/tag/v0.4.0) and npm. It
+adds repository-owned playbooks, read-only run timelines and outcomes, and
+generic development-readiness controls. The preserved artifact, provenance,
+SBOM, independent qualification, and registry/GitHub readback remain required by
+the release path. GitHub's Latest label does not expand the public-alpha support
+limits. See the [release record](docs/releases/v0.4.0.md) for exact evidence and
+recovery history. The `v0.1.5` genesis release remains the historical trust
+root; the `v0.2.0` tag remains preserved prepublication evidence.
 
 ## Why Mill
 
@@ -82,7 +82,7 @@ For its one qualified shape, Mill can:
     specification in this alpha. The operator supplies the structured proposal
     that Mill assesses and freezes.
 
-## Repository playbooks, run timelines and outcomes (unreleased source)
+## Repository playbooks, run timelines and outcomes
 
 The source branch can index small repository-owned playbooks, search compact
 metadata, and bind a selected set into a task's frozen context. A playbook can
@@ -104,9 +104,9 @@ when present. It reports owner acceptance as `not_recorded`; checks, review and
 delivery cannot certify that decision. Invalid, stale or cross-candidate records
 block the projection. See [run outcomes](docs/run-outcome.md).
 
-These source capabilities are not part of the current public-alpha support claim
-or the published `0.3.2` package until they receive their own qualification and
-release.
+These capabilities are included in `0.4.0`, but they are outside the qualified
+public-alpha support claim until separately qualified. They do not grant a
+builder authority to change acceptance criteria, deliver, merge, or release.
 
 The source also contains a constrained pnpm workspace preparation path. It binds
 the pnpm version, lockfile, workspace declaration, and direct workspace package
@@ -140,7 +140,7 @@ Install the qualified public alpha at its exact version with lifecycle scripts
 disabled:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.3.2
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.4.0
 npx --no-install millctl --version
 ```
 
@@ -157,7 +157,7 @@ PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
 node dist/cli.js --version
 ```
 
-The `alpha` and `latest` npm tags both resolve to `0.3.2`. Downstream
+The `alpha` and `latest` npm tags both resolve to `0.4.0`. Downstream
 repositories should still pin the exact version so a later release cannot alter
 their delivery machinery implicitly. Updating an existing Mill installation is
 deliberate: preserve state and repository snapshots, inspect the release notes,

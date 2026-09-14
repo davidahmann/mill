@@ -1,7 +1,6 @@
 # Mill delivery plan
 
-Status: public-alpha scope complete; generic development-readiness increment
-active
+Status: public-alpha scope complete; generic development-readiness landed
 
 Owner: David Ahmann
 
@@ -28,13 +27,12 @@ synthetic provider-change fixture. It does not turn local evidence into customer
 acceptance, introduce provider monitoring or customer systems, or expand
 public-alpha support.
 
-The active source-only increment is
-[generic development readiness](development-readiness.md). It adds a narrow DCO
-exception for verified Dependabot commits, repository-owned documentation
-guidance, packaged downstream policy starters, and one constrained pnpm
-workspace preparation shape. It does not change branch protection, add a
-product-specific integration, claim Docker qualification, or expand the
-published support matrix.
+The [generic development-readiness](development-readiness.md) increment is
+landed. It adds a narrow DCO exception for verified Dependabot commits,
+repository-owned documentation guidance, packaged downstream policy starters,
+and one constrained pnpm workspace preparation shape. It does not change branch
+protection, add a product-specific integration, claim Docker qualification, or
+expand the published support matrix.
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
