@@ -52,7 +52,7 @@
     "commander": "15.0.0",
     "typescript": "6.0.3",
     "yaml": "2.9.0",
-    "zod": "4.5.4"
+    "zod": "4.6.2"
   },
   "bundleDependencies": [
     "typescript"
