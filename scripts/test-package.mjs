@@ -71,6 +71,12 @@ try {
   for (const required of [
     "dist/cli.js",
     "dist/index.js",
+    "policy-starters/README.md",
+    "policy-starters/node-npm/AGENTS.addendum.md",
+    "policy-starters/node-npm/.github/dependabot.yml",
+    "policy-starters/node-npm/.github/workflows/dco.yml",
+    "policy-starters/node-npm/scripts/check-dco.mjs",
+    "policy-starters/node-npm/scripts/check-docs.mjs",
     "README.md",
     "LICENSE",
     "schemas/audit-report.schema.json",

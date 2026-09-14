@@ -27,10 +27,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ["eslint.config.js", "scripts/**/*.mjs"],
+    files: ["eslint.config.js", "scripts/**/*.mjs", "policy-starters/**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       globals: {
+        fetch: "readonly",
         process: "readonly",
         URL: "readonly",
       },

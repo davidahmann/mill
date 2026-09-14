@@ -20,7 +20,7 @@ import { safeReadText } from "../security/safe-path.js";
 import { MILL_PACKAGE, MILL_VERSION } from "../version.js";
 import { scanRepository } from "./scan.js";
 
-/** Experimental Node/npm adoption preserves all native source and acceptance oracles. */
+/** Experimental Node package-manager adoption preserves native source and acceptance oracles. */
 export async function planNativeAdoption(input: {
   root: string;
   configPath: string;
@@ -30,16 +30,20 @@ export async function planNativeAdoption(input: {
   const config = millConfigSchema.parse(
     parseYaml(await safeReadText(input.root, input.configPath)),
   );
+  const dependencies = config.verifier?.dependencies;
+  const requiredLocks =
+    dependencies?.manager === "pnpm"
+      ? ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+      : ["package.json", "package-lock.json"];
   if (
     config.trustCeiling !== "build" ||
     config.propose !== undefined ||
-    config.verifier?.dependencies?.manager !== "npm" ||
-    !config.verifier.dependencies.lockPaths.includes("package-lock.json") ||
-    !config.verifier.dependencies.lockPaths.includes("package.json")
+    dependencies === undefined ||
+    requiredLocks.some((lockPath) => !dependencies.lockPaths.includes(lockPath))
   )
     throw new MillError(
       "NATIVE_ADOPTION_POLICY_INVALID",
-      "Native adoption requires a build-only, OCI, npm-lock-bound configuration. Forge authority is a separate change.",
+      "Native adoption requires a build-only, OCI, package-manager-lock-bound configuration. Forge authority is a separate change.",
       ExitCode.configuration,
     );
   const scan = await scanRepository(input.root);
@@ -55,22 +59,57 @@ export async function planNativeAdoption(input: {
       ExitCode.configuration,
     );
   const packageText = await safeReadText(input.root, "package.json");
-  const lockText = await safeReadText(
-    input.root,
-    "package-lock.json",
-    8 * 1024 * 1024,
-  );
+  const lockPath =
+    dependencies.manager === "pnpm" ? "pnpm-lock.yaml" : "package-lock.json";
+  const lockText = await safeReadText(input.root, lockPath, 8 * 1024 * 1024);
   const pkg = JSON.parse(packageText) as {
     scripts?: Record<string, unknown>;
     type?: unknown;
+    packageManager?: unknown;
   };
-  const lock = JSON.parse(lockText) as { lockfileVersion?: unknown };
-  if (pkg.type !== "module" || lock.lockfileVersion !== 3)
+  const npmLock =
+    dependencies.manager === "npm"
+      ? (JSON.parse(lockText) as { lockfileVersion?: unknown })
+      : undefined;
+  const pnpmLock =
+    dependencies.manager === "pnpm"
+      ? (parseYaml(lockText) as { lockfileVersion?: unknown })
+      : undefined;
+  if (
+    pkg.type !== "module" ||
+    (dependencies.manager === "npm" && npmLock?.lockfileVersion !== 3) ||
+    (dependencies.manager === "pnpm" &&
+      (pkg.packageManager !== `pnpm@${dependencies.version}` ||
+        pnpmLock?.lockfileVersion !== "9.0"))
+  )
     throw new MillError(
       "NATIVE_ADOPTION_STACK_UNSUPPORTED",
-      "This experimental adapter requires Node ESM and npm lockfile version 3.",
+      "This experimental adapter requires Node ESM plus its exact package-manager and lockfile contract.",
       ExitCode.configuration,
     );
+  let workspaceText: string | undefined;
+  if (dependencies.manager === "pnpm") {
+    workspaceText = await safeReadText(
+      input.root,
+      "pnpm-workspace.yaml",
+      1024 * 1024,
+    );
+    const workspace = parseYaml(workspaceText) as { packages?: unknown };
+    if (
+      !Array.isArray(workspace.packages) ||
+      workspace.packages.length !== dependencies.workspacePaths.length ||
+      workspace.packages.some(
+        (entry) =>
+          typeof entry !== "string" ||
+          !dependencies.workspacePaths.includes(entry),
+      )
+    )
+      throw new MillError(
+        "NATIVE_ADOPTION_WORKSPACE_UNSUPPORTED",
+        "pnpm native adoption requires pnpm-workspace.yaml to match the declared shallow workspace paths exactly.",
+        ExitCode.configuration,
+      );
+  }
   const commands = Object.entries(config.commands);
   if (
     !commands.some(
@@ -84,21 +123,34 @@ export async function planNativeAdoption(input: {
     );
   for (const [id, command] of commands) {
     const script = command.argv[2];
+    const executable =
+      dependencies.manager === "pnpm"
+        ? "/usr/local/bin/pnpm"
+        : "/usr/local/bin/npm";
+    const requiredControls = [
+      ...requiredLocks,
+      ...(dependencies.manager === "pnpm"
+        ? dependencies.workspacePaths.map((workspacePath) =>
+            workspacePath.replace(/\*$/u, "**"),
+          )
+        : []),
+    ];
     if (
       command.execution !== "oci" ||
       command.cwd !== "." ||
       command.argv.length !== 3 ||
-      command.argv[0] !== "/usr/local/bin/npm" ||
+      command.argv[0] !== executable ||
       command.argv[1] !== "run" ||
       script === undefined ||
       typeof pkg.scripts?.[script] !== "string" ||
       command.capability === "read" ||
-      !command.controlPaths.includes("package.json") ||
-      !command.controlPaths.includes("package-lock.json")
+      requiredControls.some(
+        (controlPath) => !command.controlPaths.includes(controlPath),
+      )
     )
       throw new MillError(
         "NATIVE_ADOPTION_COMMAND_UNSUPPORTED",
-        "Commands must explicitly run existing root npm scripts in OCI and freeze their package and lock controls.",
+        "Commands must explicitly run existing root package-manager scripts in OCI and freeze their package, lock, and workspace controls.",
         ExitCode.configuration,
         { commandId: id },
       );
@@ -138,6 +190,9 @@ export async function planNativeAdoption(input: {
     configDigest: canonicalDigest(config as unknown as JsonValue),
     nativePackageDigest: textDigest(packageText),
     nativeLockDigest: textDigest(lockText),
+    ...(workspaceText === undefined
+      ? {}
+      : { nativeWorkspaceDigest: textDigest(workspaceText) }),
     scanDigest: scan.digest,
     files,
     qualification: "not_executed",
@@ -229,6 +284,9 @@ export async function applyNativeAdoption(input: {
       worktree: destination,
       preservedNativePackageDigest: plan.nativePackageDigest,
       preservedNativeLockDigest: plan.nativeLockDigest,
+      ...(plan.nativeWorkspaceDigest === undefined
+        ? {}
+        : { preservedNativeWorkspaceDigest: plan.nativeWorkspaceDigest }),
       nextAction:
         "Review and commit the new controls, explicitly prepare dependencies, then supply approved product/scenario/impact/task authority and run native baseline qualification. This is not a public-alpha support claim.",
     };

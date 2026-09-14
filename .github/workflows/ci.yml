@@ -30,11 +30,6 @@ jobs:
           cache: npm
       - name: Install without lifecycle scripts
         run: npm ci --ignore-scripts
-      - name: DCO
-        if: github.event_name == 'pull_request'
-        run:
-          node scripts/check-dco.mjs "${{ github.event.pull_request.base.sha }}"
-          "${{ github.event.pull_request.head.sha }}"
       - name: Full native gate
         run: npm run check
       - name: Production dependency audit

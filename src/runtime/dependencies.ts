@@ -19,6 +19,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 
 import { findTrustedExecutable } from "../doctor.js";
 import { ExitCode, MillError } from "../errors.js";
@@ -34,9 +35,11 @@ import { acquireExclusiveLease } from "./lease.js";
 interface DependencyIdentity {
   schemaVersion: "1";
   image: string;
-  manager: "npm";
+  manager: "npm" | "pnpm";
+  version?: string;
   registry: "https://registry.npmjs.org";
   targetPath: string;
+  workspacePaths?: string[];
   locks: { path: string; digest: string }[];
 }
 
@@ -67,6 +70,320 @@ function validSha512Integrity(value: unknown): boolean {
   );
 }
 
+type DependencyConfig = NonNullable<
+  NonNullable<MillConfig["verifier"]>["dependencies"]
+>;
+
+function requiredDependencyLocks(dependencies: DependencyConfig): string[] {
+  return dependencies.manager === "pnpm"
+    ? ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+    : ["package.json", "package-lock.json"];
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function lifecycleScriptsAllowed(manifest: unknown, file: string): void {
+  const scripts = record(record(manifest)?.scripts);
+  const lifecycle = [
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepare",
+    "prepublishOnly",
+  ];
+  const configured = lifecycle.filter((name) => scripts?.[name] !== undefined);
+  if (configured.length > 0) {
+    throw new MillError(
+      "PNPM_LIFECYCLE_SCRIPT_UNSUPPORTED",
+      "The generic pnpm path rejects lifecycle scripts; provide a separately qualified preparation path for native builds.",
+      ExitCode.configuration,
+      { file, scripts: configured },
+    );
+  }
+}
+
+async function parseJsonManifest(
+  root: string,
+  relative: string,
+): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(path.join(root, relative), "utf8"));
+  } catch (error) {
+    throw new MillError(
+      "PNPM_MANIFEST_INVALID",
+      "A pnpm workspace manifest is missing or not valid JSON.",
+      ExitCode.configuration,
+      { path: relative, cause: String(error) },
+    );
+  }
+}
+
+async function pnpmWorkspaceManifestPaths(
+  root: string,
+  dependencies: Extract<DependencyConfig, { manager: "pnpm" }>,
+): Promise<string[]> {
+  let workspace: unknown;
+  try {
+    workspace = parseYaml(
+      await readFile(path.join(root, "pnpm-workspace.yaml"), "utf8"),
+    );
+  } catch (error) {
+    throw new MillError(
+      "PNPM_WORKSPACE_INVALID",
+      "pnpm-workspace.yaml is missing or not valid YAML.",
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
+  }
+  const paths = record(workspace)?.packages;
+  if (
+    !Array.isArray(paths) ||
+    paths.length !== dependencies.workspacePaths.length ||
+    paths.some(
+      (workspacePath) =>
+        typeof workspacePath !== "string" ||
+        !dependencies.workspacePaths.includes(workspacePath),
+    )
+  ) {
+    throw new MillError(
+      "PNPM_WORKSPACE_INVALID",
+      "pnpm-workspace.yaml must contain exactly the declared shallow workspace paths.",
+      ExitCode.configuration,
+    );
+  }
+  const onlyBuiltDependencies = record(workspace)?.onlyBuiltDependencies;
+  if (
+    onlyBuiltDependencies !== undefined &&
+    (!Array.isArray(onlyBuiltDependencies) || onlyBuiltDependencies.length > 0)
+  ) {
+    throw new MillError(
+      "PNPM_LIFECYCLE_SCRIPT_UNSUPPORTED",
+      "The generic pnpm path does not allow pnpm onlyBuiltDependencies entries.",
+      ExitCode.configuration,
+    );
+  }
+  const result: string[] = [];
+  for (const workspacePath of dependencies.workspacePaths) {
+    const directory = workspacePath.slice(0, -2);
+    let directoryInfo;
+    try {
+      directoryInfo = await lstat(path.join(root, directory));
+    } catch (error) {
+      throw new MillError(
+        "PNPM_WORKSPACE_INVALID",
+        "A declared pnpm workspace directory is missing or inaccessible.",
+        ExitCode.configuration,
+        { path: directory, cause: String(error) },
+      );
+    }
+    if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) {
+      throw new MillError(
+        "PNPM_WORKSPACE_INVALID",
+        "A declared pnpm workspace directory must be a regular in-repository directory.",
+        ExitCode.configuration,
+        { path: directory },
+      );
+    }
+    let handle;
+    try {
+      handle = await opendir(path.join(root, directory));
+    } catch (error) {
+      throw new MillError(
+        "PNPM_WORKSPACE_INVALID",
+        "A declared pnpm workspace directory is missing or inaccessible.",
+        ExitCode.configuration,
+        { path: directory, cause: String(error) },
+      );
+    }
+    const entries = [];
+    for await (const entry of handle) entries.push(entry);
+    entries.sort((left, right) =>
+      Buffer.compare(Buffer.from(left.name), Buffer.from(right.name)),
+    );
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) {
+        throw new MillError(
+          "PNPM_WORKSPACE_INVALID",
+          "A generic pnpm workspace may contain only direct, regular package directories.",
+          ExitCode.configuration,
+          { path: path.join(directory, entry.name) },
+        );
+      }
+      result.push(path.join(directory, entry.name, "package.json"));
+    }
+  }
+  for (const relative of ["package.json", ...result]) {
+    const manifest = await parseJsonManifest(root, relative);
+    if (
+      relative === "package.json" &&
+      record(manifest)?.packageManager !== `pnpm@${dependencies.version}`
+    ) {
+      throw new MillError(
+        "PNPM_VERSION_UNSUPPORTED",
+        "The root package.json must pin the declared pnpm version exactly.",
+        ExitCode.configuration,
+      );
+    }
+    lifecycleScriptsAllowed(manifest, relative);
+  }
+  return result;
+}
+
+function validRegistrySource(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  try {
+    const source = new URL(value);
+    return (
+      source.protocol === "https:" &&
+      source.origin === "https://registry.npmjs.org" &&
+      source.username === "" &&
+      source.password === "" &&
+      source.search === "" &&
+      source.hash === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function validatePnpmLock(
+  root: string,
+  dependencies: Extract<DependencyConfig, { manager: "pnpm" }>,
+  workspaceManifests: readonly string[],
+): Promise<boolean> {
+  for (const file of [".npmrc", ".pnpmfile.cjs", "pnpmfile.cjs"]) {
+    if (
+      await lstat(path.join(root, file)).then(
+        () => true,
+        (error: unknown) => {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          )
+            return false;
+          throw error;
+        },
+      )
+    ) {
+      throw new MillError(
+        "PNPM_CONFIGURATION_UNSUPPORTED",
+        "The generic pnpm path rejects registry and install-hook configuration files.",
+        ExitCode.configuration,
+        { path: file },
+      );
+    }
+  }
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(
+      await readFile(path.join(root, "pnpm-lock.yaml"), "utf8"),
+    );
+  } catch (error) {
+    throw new MillError(
+      "PNPM_LOCK_INVALID",
+      "The bound pnpm-lock.yaml is not valid YAML.",
+      ExitCode.configuration,
+      { cause: String(error) },
+    );
+  }
+  const lock = record(parsed);
+  const importers = record(lock?.importers);
+  const packages = record(lock?.packages);
+  if (
+    lock?.lockfileVersion !== "9.0" ||
+    importers === undefined ||
+    packages === undefined
+  ) {
+    throw new MillError(
+      "PNPM_LOCK_INVALID",
+      "The generic pnpm path requires a lockfile-version 9 importer and packages map.",
+      ExitCode.configuration,
+    );
+  }
+  const expectedImporters = [
+    ".",
+    ...workspaceManifests.map((relative) => path.dirname(relative)),
+  ].sort();
+  const actualImporters = Object.keys(importers).sort();
+  if (
+    actualImporters.length !== expectedImporters.length ||
+    actualImporters.some((entry, index) => entry !== expectedImporters[index])
+  ) {
+    throw new MillError(
+      "PNPM_LOCK_INVALID",
+      "pnpm-lock.yaml importers must match the root and declared direct workspace packages.",
+      ExitCode.configuration,
+    );
+  }
+  for (const [packagePath, packageValue] of Object.entries(packages)) {
+    const resolution = record(record(packageValue)?.resolution);
+    if (
+      resolution === undefined ||
+      !validSha512Integrity(resolution.integrity)
+    ) {
+      throw new MillError(
+        "PNPM_LOCK_SOURCE_UNTRUSTED",
+        "Every generic pnpm package must have a SHA-512 integrity value.",
+        ExitCode.configuration,
+        { packagePath },
+      );
+    }
+    if (
+      resolution.tarball !== undefined &&
+      !validRegistrySource(resolution.tarball)
+    ) {
+      throw new MillError(
+        "PNPM_LOCK_SOURCE_UNTRUSTED",
+        "Generic pnpm package tarballs must use the credential-free npm registry URL.",
+        ExitCode.configuration,
+        { packagePath },
+      );
+    }
+  }
+  return Object.keys(packages).length === 0;
+}
+
+async function dependencyInputPaths(
+  root: string,
+  config: MillConfig,
+): Promise<string[]> {
+  const dependencies = config.verifier?.dependencies;
+  if (dependencies === undefined) {
+    throw new MillError(
+      "VERIFIER_DEPENDENCIES_NOT_CONFIGURED",
+      "This repository does not declare a verifier dependency snapshot.",
+      ExitCode.configuration,
+    );
+  }
+  const missing = requiredDependencyLocks(dependencies).filter(
+    (lockPath) => !dependencies.lockPaths.includes(lockPath),
+  );
+  if (missing.length > 0) {
+    throw new MillError(
+      dependencies.manager === "pnpm"
+        ? "PNPM_LOCK_REQUIRED"
+        : "NPM_LOCK_REQUIRED",
+      "The package manager's root manifest and lock inputs must be bound before dependency preparation.",
+      ExitCode.configuration,
+      { missing },
+    );
+  }
+  if (dependencies.manager === "npm") return dependencies.lockPaths;
+  const workspaceManifests = await pnpmWorkspaceManifestPaths(
+    root,
+    dependencies,
+  );
+  await validatePnpmLock(root, dependencies, workspaceManifests);
+  return [
+    ...new Set([...dependencies.lockPaths, ...workspaceManifests]),
+  ].sort();
+}
+
 async function dependencyIdentity(
   root: string,
   config: MillConfig,
@@ -83,8 +400,9 @@ async function dependencyIdentity(
     );
   }
   const canonicalRoot = await realpath(root);
+  const inputPaths = await dependencyInputPaths(canonicalRoot, config);
   const locks = await Promise.all(
-    dependencies.lockPaths.map(async (relative) => {
+    inputPaths.map(async (relative) => {
       let absolute: string;
       try {
         absolute = await realpath(path.resolve(canonicalRoot, relative));
@@ -114,8 +432,14 @@ async function dependencyIdentity(
     schemaVersion: "1",
     image: config.verifier.image,
     manager: dependencies.manager,
+    ...(dependencies.manager === "pnpm"
+      ? { version: dependencies.version }
+      : {}),
     registry: dependencies.registry,
     targetPath: dependencies.targetPath,
+    ...(dependencies.manager === "pnpm"
+      ? { workspacePaths: [...dependencies.workspacePaths].sort() }
+      : {}),
     locks,
   };
   const key = createHash("sha256")
@@ -292,7 +616,7 @@ async function markerMatches(
     if (
       parsed.schemaVersion !== "1" ||
       typeof parsed.image !== "string" ||
-      parsed.manager !== "npm" ||
+      (parsed.manager !== "npm" && parsed.manager !== "pnpm") ||
       parsed.registry !== "https://registry.npmjs.org" ||
       typeof parsed.targetPath !== "string" ||
       !Array.isArray(parsed.locks) ||
@@ -300,14 +624,31 @@ async function markerMatches(
     ) {
       return false;
     }
-    const claimedIdentity: DependencyIdentity = {
-      schemaVersion: parsed.schemaVersion,
-      image: parsed.image,
-      manager: parsed.manager,
-      registry: parsed.registry,
-      targetPath: parsed.targetPath,
-      locks: parsed.locks,
-    };
+    const claimedIdentity: DependencyIdentity =
+      parsed.manager === "pnpm"
+        ? typeof parsed.version === "string" &&
+          Array.isArray(parsed.workspacePaths)
+          ? {
+              schemaVersion: parsed.schemaVersion,
+              image: parsed.image,
+              manager: parsed.manager,
+              version: parsed.version,
+              registry: parsed.registry,
+              targetPath: parsed.targetPath,
+              workspacePaths: parsed.workspacePaths,
+              locks: parsed.locks,
+            }
+          : (() => {
+              throw new Error("invalid pnpm dependency marker");
+            })()
+        : {
+            schemaVersion: parsed.schemaVersion,
+            image: parsed.image,
+            manager: parsed.manager,
+            registry: parsed.registry,
+            targetPath: parsed.targetPath,
+            locks: parsed.locks,
+          };
     return (
       JSON.stringify(claimedIdentity) === JSON.stringify(expected) &&
       parsed.treeDigest ===
@@ -483,6 +824,15 @@ export async function dependencySnapshotDirectory(input: {
   return directory;
 }
 
+export async function dependencyLockPaths(input: {
+  root: string;
+  config: MillConfig;
+}): Promise<string[]> {
+  return (await dependencyIdentity(input.root, input.config)).marker.locks.map(
+    (lock) => lock.path,
+  );
+}
+
 async function mountSource(root: string): Promise<{
   source: string;
   dispose(): Promise<void>;
@@ -582,7 +932,8 @@ async function prepareDependencySnapshotWithSignal(input: {
     Awaited<ReturnType<typeof acquireExclusiveLease>> | undefined;
   try {
     const canonicalRoot = await realpath(input.root);
-    for (const relative of dependencies.lockPaths) {
+    const inputPaths = await dependencyInputPaths(canonicalRoot, input.config);
+    for (const relative of inputPaths) {
       const sourceFile = await realpath(path.resolve(canonicalRoot, relative));
       if (
         !isWithin(canonicalRoot, sourceFile) ||
@@ -603,10 +954,14 @@ async function prepareDependencySnapshotWithSignal(input: {
       await copyFile(sourceFile, destinationFile);
     }
     const identity = await dependencyIdentity(temporary, input.config);
-    const emptyDependencyGraph = await validateNpmLock(
-      temporary,
-      dependencies.lockPaths,
-    );
+    const emptyDependencyGraph =
+      dependencies.manager === "npm"
+        ? await validateNpmLock(temporary, inputPaths)
+        : await validatePnpmLock(
+            temporary,
+            dependencies,
+            await pnpmWorkspaceManifestPaths(temporary, dependencies),
+          );
     const destination = path.join(parent, identity.key);
     preparationLease = await acquireExclusiveLease({
       path: `${destination}.lease.sqlite3`,
@@ -712,13 +1067,25 @@ async function prepareDependencySnapshotWithSignal(input: {
           "npm_config_audit=false",
           "--env",
           "npm_config_fund=false",
-          "--entrypoint",
-          "npm",
-          image,
-          "ci",
-          "--ignore-scripts",
-          "--audit=false",
-          "--fund=false",
+          ...(dependencies.manager === "pnpm"
+            ? [
+                "--env",
+                `MILL_PNPM_VERSION=${dependencies.version}`,
+                "--entrypoint",
+                "/bin/sh",
+                image,
+                "-ec",
+                'test "$(/usr/local/bin/pnpm --version)" = "$MILL_PNPM_VERSION"; exec /usr/local/bin/pnpm install --frozen-lockfile --ignore-scripts --store-dir /tmp/pnpm-store',
+              ]
+            : [
+                "--entrypoint",
+                "npm",
+                image,
+                "ci",
+                "--ignore-scripts",
+                "--audit=false",
+                "--fund=false",
+              ]),
         ],
         cwd: input.root,
         env: { HOME: process.env.HOME, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
@@ -795,8 +1162,7 @@ async function prepareDependencySnapshotWithSignal(input: {
     return {
       directory: destination,
       reused: false,
-      network:
-        "HTTPS to https://registry.npmjs.org through the exact verifier image; lifecycle scripts disabled",
+      network: `HTTPS to https://registry.npmjs.org through the exact verifier image; ${dependencies.manager} lifecycle scripts disabled`,
     };
   } finally {
     try {

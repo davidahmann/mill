@@ -1,0 +1,32 @@
+schemaVersion: "2"
+id: mill-development-readiness
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended conversation on 2026-09-14 authorizing generic development-readiness
+  implementation, testing, validation and green CI without a release.
+source_base: b41dea8d41753fdc0c5f10c3032344aef8273417
+authority: product/development-readiness.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Base-owned DCO policy verifies a narrow, cryptographically verified
+    Dependabot exception while retaining human author sign-offs.
+  - Repository-owned writing guidance, a selected procedure, a local checker,
+    and packaged downstream starters make policy reviewable without changing
+    downstream authority.
+  - A source-only generic pnpm path binds manager, lock, workspace and manifest
+    inputs while rejecting install hooks and native build exceptions.
+verification:
+  - positive and negative DCO provenance and documentation-check tests
+  - native-adoption and dependency-snapshot tests for the generic pnpm shape
+  - native check, packed package, generated schemas and clean-candidate audit
+  - independent complete-diff review and green pull-request checks
+exceptions:
+  - Native maintainer may update contracts, documentation, policy starters and
+    regression tests in the approved paths.
+  - No live OCI qualification, branch-protection mutation, external release, or
+    product-specific provider/customer implementation occurs in this increment.

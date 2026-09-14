@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-outcome-evidence-replay
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 774a5353a08c7411bcd75b5eb9d158949038f9ea
 execution_mode: approved_native_maintainer
@@ -33,3 +33,13 @@ constraints:
 stop_conditions:
   - ambiguous authority, secret disclosure or unavailable mandatory gate
   - recurring same-subsystem P0 or P1 finding
+closure:
+  status: completed
+  recorded_at: 2026-09-12
+  merge_commit: b41dea8d41753fdc0c5f10c3032344aef8273417
+  disposition: >-
+    The read-only outcome projection and second synthetic adaptation replay
+    landed with required GitHub checks. They do not authorize a release,
+    customer acceptance, provider monitoring, or a shared service.
+  evidence:
+    - https://github.com/davidahmann/mill/pull/40

@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.2
+Version: 2.3
 
 Status: normative
 
@@ -52,9 +52,10 @@ Read these files before changing or operating this repository:
 3. `product/PRD.md`
 4. `architecture/ARCHITECTURE.md`
 5. `docs/development.md`
-6. `WORKFLOW.md`
-7. the active file in `product/tasks/`, when one exists;
-8. that task's `impact_manifest` and referenced scenarios.
+6. `docs/writing.md` when changed prose is in scope
+7. `WORKFLOW.md`
+8. the active file in `product/tasks/`, when one exists;
+9. that task's `impact_manifest` and referenced scenarios.
 
 Stop if more than one task is active. If none is active, do not reinterpret a
 closed task as authority for new implementation; an approved new task must be
@@ -129,9 +130,15 @@ two-step plan/apply wrapper, never as implicit push authority.
   that are frozen and recorded for a run. A playbook cannot define acceptance,
   alter command controls, grant tools, credentials, delivery, merge or release
   authority, or update itself through the run it informed.
-- `adopt-native` is experimental Node ESM/npm adoption preserving existing
-  source and native commands. It is not the qualified web-recipe adoption path
-  and does not establish arbitrary-stack or pnpm support.
+- `adopt-native` is experimental Node package-manager adoption preserving
+  existing source and native commands. The source-only pnpm path accepts one
+  declared shallow workspace shape, exact manager/lock inputs, and no lifecycle
+  build exceptions. It is not the qualified web-recipe adoption path and does
+  not establish arbitrary-stack or published pnpm support.
+- Documentation work uses `docs/writing.md` and, when selected, the
+  digest-pinned `writing-quality` playbook. The guide can improve prose and
+  review; it cannot change acceptance, command controls, delivery, merge, or
+  release authority.
 - Report measured, partial and unavailable usage truthfully. Routine output must
   not expose private emails, commit trailers, raw worker context or logs.
 - `continuation` is a read-only, versioned state projection. It may name one

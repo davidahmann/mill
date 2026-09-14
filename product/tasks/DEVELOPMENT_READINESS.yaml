@@ -1,0 +1,44 @@
+schemaVersion: "2"
+task_id: mill-development-readiness
+status: approved
+owner: davidahmann
+base_commit: b41dea8d41753fdc0c5f10c3032344aef8273417
+execution_mode: approved_native_maintainer
+authority: product/development-readiness.md
+impact_manifest: product/impacts/DEVELOPMENT_READINESS.yaml
+objective: >-
+  Add generic development-readiness controls for documentation, trusted routine
+  dependency maintenance, downstream policy starters, and a constrained pnpm
+  workspace preparation path without a release or stack-support claim.
+allowed_paths:
+  - .github/**
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - policy-starters/**
+  - playbooks/**
+  - docs/**
+  - product/**
+  - architecture/**
+  - README.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - eslint.config.js
+acceptance_items: [DR-01, DR-02, DR-03, DR-04, DR-05, DR-06]
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - independent read-only review of the complete exact candidate diff
+constraints:
+  - one native-maintainer writer in a disposable worktree
+  - preserve task, acceptance, verification, delivery and release authority
+  - no release, publication, provider/customer-system action, telemetry export,
+    MCP server, daemon, centralized service, automatic mutation or
+    branch-protection change
+stop_conditions:
+  - ambiguous authority, secret disclosure or unavailable mandatory gate
+  - recurring same-subsystem P0 or P1 finding

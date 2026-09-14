@@ -57,6 +57,10 @@ Keep customer configurations, private data and acceptance criteria in the
 customer repository. Reusable knowledge should state what needs investigation;
 each application still supplies its own approved workflow and verification.
 
+The `writing-quality` repository procedure applies the same rule to changed
+documentation. It points to the repository writing guide and local check, but it
+cannot approve a product claim or rewrite a task's acceptance evidence.
+
 ## Improving a playbook
 
 After a run, an operator may propose a correction when the run exposes stale,

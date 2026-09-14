@@ -9,6 +9,7 @@ import { z } from "zod";
 import { temporaryDirectory } from "./helpers.js";
 
 const dcoScript = path.resolve("scripts/check-dco.mjs");
+const docsScript = path.resolve("scripts/check-docs.mjs");
 const workflowScript = path.resolve("scripts/check-workflows.mjs");
 const compareArtifactsScript = path.resolve(
   "scripts/compare-release-artifacts.mjs",
@@ -126,6 +127,178 @@ describe("repository policy scripts", () => {
       );
       expect(foreign.status).toBe(1);
       expect(foreign.stderr).toContain("DCO sign-off missing");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("accepts GitHub-verified Dependabot commits only when every binding matches", async () => {
+    const temporary = await temporaryDirectory("mill-dco-dependabot-");
+    try {
+      const head = "a".repeat(40);
+      const event = path.join(temporary.path, "event.json");
+      const commits = path.join(temporary.path, "commits.json");
+      await writeFile(
+        event,
+        JSON.stringify({
+          number: 41,
+          repository: { full_name: "davidahmann/mill" },
+          pull_request: {
+            number: 41,
+            user: { login: "dependabot[bot]", type: "Bot" },
+            head: { sha: head },
+          },
+        }),
+      );
+      const commit = {
+        sha: head,
+        author: { login: "dependabot[bot]", type: "Bot" },
+        committer: { login: "dependabot[bot]", type: "Bot" },
+        commit: {
+          message:
+            "chore(deps): bump example\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+          verification: { verified: true, reason: "valid" },
+        },
+      };
+      await writeFile(commits, JSON.stringify([commit]));
+      const accepted = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(accepted.status, accepted.stderr).toBe(0);
+      expect(accepted.stdout).toContain("Dependabot DCO check passed");
+
+      await writeFile(
+        commits,
+        JSON.stringify([
+          {
+            ...commit,
+            commit: {
+              ...commit.commit,
+              verification: { verified: false, reason: "unsigned" },
+            },
+          },
+        ]),
+      );
+      const rejected = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("Dependabot provenance rejected");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("evaluates every human pull-request commit against its recorded author email", async () => {
+    const temporary = await temporaryDirectory("mill-dco-github-human-");
+    try {
+      const head = "b".repeat(40);
+      const event = path.join(temporary.path, "event.json");
+      const commits = path.join(temporary.path, "commits.json");
+      await writeFile(
+        event,
+        JSON.stringify({
+          number: 42,
+          repository: { full_name: "davidahmann/mill" },
+          pull_request: {
+            user: { login: "alice", type: "User" },
+            head: { sha: head },
+          },
+        }),
+      );
+      const commit = {
+        sha: head,
+        commit: {
+          author: { email: "alice@example.com" },
+          message:
+            "docs: explain policy\n\nSigned-off-by: Alice <alice@example.com>",
+        },
+      };
+      await writeFile(commits, JSON.stringify([commit]));
+      const accepted = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(accepted.status, accepted.stderr).toBe(0);
+      expect(accepted.stdout).toContain("DCO check passed for 1 commit(s)");
+
+      await writeFile(
+        commits,
+        JSON.stringify([{ ...commit, sha: "c".repeat(40) }]),
+      );
+      const staleHead = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(staleHead.status).toBe(1);
+      expect(staleHead.stderr).toContain("do not match the event head");
+
+      await writeFile(
+        commits,
+        JSON.stringify([
+          {
+            ...commit,
+            commit: {
+              ...commit.commit,
+              message:
+                "docs: explain policy\n\nSigned-off-by: Mallory <mallory@example.com>",
+            },
+          },
+        ]),
+      );
+      const rejected = run(
+        process.execPath,
+        [dcoScript, "--github-event", event, "--commits-file", commits],
+        temporary.path,
+      );
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("DCO sign-off missing");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("checks changed Markdown for broken local links and named writing patterns", async () => {
+    const temporary = await temporaryDirectory("mill-docs-policy-");
+    try {
+      git(["init", "--quiet", "--initial-branch=main"], temporary.path);
+      git(["config", "user.name", "Docs Test"], temporary.path);
+      git(["config", "user.email", "docs@example.invalid"], temporary.path);
+      await writeFile(path.join(temporary.path, "README.md"), "# Example\n");
+      git(["add", "README.md"], temporary.path);
+      git(["commit", "--quiet", "-m", "docs: base"], temporary.path);
+      const base = git(["rev-parse", "HEAD"], temporary.path);
+
+      await writeFile(
+        path.join(temporary.path, "README.md"),
+        "# Example\n\nThe key point is, this is unclear. [Broken](missing.md)\n",
+      );
+      const rejected = run(
+        process.execPath,
+        [docsScript, "--base", base],
+        temporary.path,
+      );
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("writing pattern");
+      expect(rejected.stderr).toContain("broken local link");
+
+      await writeFile(
+        path.join(temporary.path, "README.md"),
+        "# Example\n\nThis document names its limitation.\n",
+      );
+      const accepted = run(
+        process.execPath,
+        [docsScript, "--base", base],
+        temporary.path,
+      );
+      expect(accepted.status, accepted.stderr).toBe(0);
+      expect(accepted.stdout).toContain("docs check passed");
     } finally {
       await temporary.cleanup();
     }

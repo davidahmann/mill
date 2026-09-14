@@ -1,0 +1,31 @@
+schemaVersion: "1"
+id: writing-quality
+title: Write and review repository documentation
+kind: repository_procedure
+applicability:
+  - A task changes repository documentation, public CLI guidance, or operator
+    instructions.
+requiredInputs:
+  - The audience, current product status, and owning technical sources.
+  - The repository writing guide and task authority.
+procedure:
+  - State current behavior before describing a proposed or experimental change.
+  - Keep factual claims tied to source code, test evidence, or a dated record.
+  - Preserve code, quotations, licenses, and evidence without editorial
+    rewriting.
+  - Run the local documentation check and review the changed prose in context.
+verification:
+  - Run the repository-owned documentation and native checks selected by the
+    task.
+  - Review factual support, clarity, scope labels, and links separately from
+    lexical checks.
+stopConditions:
+  - The task lacks frozen writing guidance or the source of a material claim is
+    unclear.
+  - A proposed document would expand support, delivery, merge, or release
+    authority.
+boundaries:
+  - This playbook cannot define acceptance criteria, approve a claim, or change
+    command controls.
+  - It grants no network, credential, delivery, merge, deployment, or release
+    authority.
