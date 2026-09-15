@@ -1,0 +1,47 @@
+schemaVersion: "2"
+task_id: mill-release-channel-latest
+status: closed
+owner: davidahmann
+base_commit: 22e4524638ccb6bc6479d2c37f2002c7d813c691
+execution_mode: approved_native_maintainer
+authority: product/release-channel-latest.md
+impact_manifest: product/impacts/RELEASE_CHANNEL_LATEST.yaml
+objective: >-
+  Make future fresh releases publish the qualified artifact directly to npm
+  latest through the protected OIDC workflow, without a bypass token.
+allowed_paths:
+  - .github/workflows/release.yml
+  - scripts/release-workflow-policy.mjs
+  - test/release-workflow.test.ts
+  - README.md
+  - AGENTS.md
+  - docs/release.md
+  - docs/repository-settings.md
+  - product/PLAN.md
+  - product/release-v0.6.0.md
+  - product/release-channel-latest.md
+  - product/impacts/RELEASE_CHANNEL_LATEST.yaml
+  - product/tasks/RELEASE_V0_6_0.yaml
+  - product/tasks/RELEASE_CHANNEL_LATEST.yaml
+acceptance_items:
+  - RCL-01 protected publication explicitly names npm latest and reads it back
+  - RCL-02 workflow policy rejects an alpha publication and missing latest proof
+  - RCL-03 documentation records the v0.6.0 provider state and token boundary
+  - RCL-04 native check and exact-candidate audit pass
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+constraints:
+  - no npm bypass token, republish, channel mutation or environment-policy
+    change
+  - no new support claim until a fresh release exercises the workflow
+closure:
+  status: source_validated
+  recorded_at: "2026-09-15"
+  evidence:
+    - npm run check passed with MILL_GIT_PATH=/opt/homebrew/bin/git
+    - exact-candidate audit is required before delivery
+  limitations:
+    - >-
+      The changed workflow has no live release evidence until the next fresh
+      package version is qualified and published.

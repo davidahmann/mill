@@ -1,0 +1,28 @@
+schemaVersion: "2"
+id: mill-release-channel-latest
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-15 authorizing the v0.6.0 npm latest
+  promotion and directing that npm's bypass-2FA restriction be retained in the
+  release design.
+source_base: 22e4524638ccb6bc6479d2c37f2002c7d813c691
+authority: product/release-channel-latest.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+material_changes:
+  - Future fresh releases publish the preserved qualified artifact directly to
+    npm latest with the protected OIDC identity.
+  - Documentation records the current v0.6.0 channel state without creating a
+    bypass token or changing an existing npm pointer.
+affected_surfaces:
+  - release workflow and static workflow policy
+  - release runbook, repository settings, agent contract and public README
+verification:
+  - workflow policy tests reject an alpha publication and missing latest
+    readback
+  - native check and exact-candidate audit pass
+exceptions:
+  - No live npm change is part of this source increment. A later fresh release
+    provides the first runtime evidence for direct OIDC publication to latest.

@@ -86,8 +86,8 @@ The publication boundary is configured as follows:
 
 The release workflow's candidate phase has read-only repository permission. The
 publish phase alone receives `id-token: write` and `contents: write`, inside the
-protected environment. Fork jobs never supply artifacts or credentials to that
-phase.
+protected environment. It publishes a fresh qualified artifact directly to npm
+`latest`. Fork jobs never supply artifacts or credentials to that phase.
 
 Each exact-tag rule is separately owner-approved. The prior protected-branches-
 only policy did not match the routine runbook's tag-ref dispatch. Every release
@@ -99,9 +99,10 @@ tag rules with a wildcard or an unrestricted environment.
 
 ## Current distribution channels
 
-The current release record captures GitHub Latest, npm `alpha`/`latest`, and the
-named public release identity from provider readback. A channel promotion uses
-the account's hardware-2FA assertion and does not republish the artifact. A
-draft and public release can share a tag, so recovery must use the public
-release identity rather than a tag-only lookup. Channel labels do not expand
-Mill's qualified public-alpha support tuple or authorize republishing.
+The current release record captures GitHub Latest, npm channel values, and the
+named public release identity from provider readback. A later correction to an
+existing channel uses the provider's supported maintainer authentication. Do not
+create a bypass-2FA token for that purpose. A draft and public release can share
+a tag, so recovery must use the public release identity rather than a tag-only
+lookup. Channel labels do not expand Mill's qualified public-alpha support tuple
+or authorize republishing.

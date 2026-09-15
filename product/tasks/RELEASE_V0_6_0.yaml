@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-release-v0.6.0
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 52bb0a4196196207a37392e4c11f1406c518338f
 execution_mode: approved_native_maintainer
@@ -45,3 +45,14 @@ constraints:
 stop_conditions:
   - ambiguous tag, tree, artifact, candidate-run, provenance or provider effect
   - unavailable independent verification or recurring P0/P1 release finding
+closure:
+  status: published_with_channel_promotion_unavailable
+  recorded_at: "2026-09-15"
+  candidate_run_id: "35025015199"
+  publish_run_id: "35025845121"
+  npm:
+    alpha: "0.6.0"
+    latest: "0.4.0"
+    channel_promotion: >-
+      npm rejected the existing latest-tag change with EOTP after web login. No
+      bypass-2FA token was created and no artifact was republished.

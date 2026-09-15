@@ -295,13 +295,15 @@ provider readback. They are distribution facts, not authority to broaden
 supported stacks or autonomy. The v0.1.5 verifier remains the workflow's
 independently pinned policy; do not silently replace it with the newest version.
 
-Publication and channel promotion are distinct effects. Never rerun a publish
-job to recover an already-published npm version. Inventory GitHub releases by
-numeric ID when a tag has both a draft and a public release; do not trust a tag
-lookup to choose the intended record. Reconcile exact assets and obtain owner
-disposition before changing an existing release. Preserve failed runs, tags and
-artifact bytes. Changing npm dist-tags or GitHub Latest requires separate owner
-approval and authoritative readback, not a rebuild.
+Routine publication advances npm `latest` directly through the protected OIDC
+workflow. A later correction to an already-published npm dist-tag remains a
+separate owner-approved effect. Never create or store a bypass-2FA token to make
+that correction, and never rerun a publish job to recover an existing npm
+version. Inventory GitHub releases by numeric ID when a tag has both a draft and
+a public release; do not trust a tag lookup to choose the intended record.
+Reconcile exact assets and obtain owner disposition before changing an existing
+release. Preserve failed runs, tags and artifact bytes. A later npm dist-tag or
+GitHub Latest change needs authoritative readback, not a rebuild.
 
 ## Engineering rules
 
