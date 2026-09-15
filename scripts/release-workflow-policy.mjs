@@ -93,6 +93,13 @@ export function releaseQualificationInputFailures(jobs) {
 export function releasePublicationFailures(jobs) {
   const job = jobs.publish;
   const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const publish = steps.find(
+    (step) =>
+      step?.name === "Publish the exact preserved artifact with provenance",
+  );
+  const registryReadback = steps.find(
+    (step) => step?.name === "Read back npm and verify signatures",
+  );
   const create = steps.find(
     (step) => step?.name === "Create draft GitHub Release with exact artifacts",
   );
@@ -100,6 +107,26 @@ export function releasePublicationFailures(jobs) {
     (step) => step?.name === "Read back GitHub Release and finalize evidence",
   );
   const failures = [];
+  if (
+    typeof publish?.run !== "string" ||
+    !publish.run.includes(
+      'npm publish "$artifact" --provenance --access public --tag latest',
+    ) ||
+    publish.run.includes("--tag alpha")
+  ) {
+    failures.push(
+      "publish: trusted publication must advance latest directly with the preserved artifact",
+    );
+  }
+  if (
+    typeof registryReadback?.run !== "string" ||
+    !registryReadback.run.includes("tags.latest!==version") ||
+    registryReadback.run.includes("tags.alpha!==version")
+  ) {
+    failures.push(
+      "publish: registry readback must bind latest to the published version",
+    );
+  }
   if (
     typeof create?.run !== "string" ||
     !create.run.includes(

@@ -99,6 +99,32 @@ describe("release verifier preparation policy", () => {
       );
     },
   );
+  it.each(["alpha", "missing-readback"])(
+    "rejects a %s npm latest publication contract",
+    async (mutation) => {
+      const workflow = await fixture();
+      const job = workflow.jobs.publish;
+      const publish = job?.steps.find(
+        (entry) =>
+          entry.name === "Publish the exact preserved artifact with provenance",
+      );
+      const readback = job?.steps.find(
+        (entry) => entry.name === "Read back npm and verify signatures",
+      );
+      if (!publish?.run || !readback?.run)
+        throw new Error("missing npm publication fixture");
+      if (mutation === "alpha") {
+        publish.run = publish.run.replace("--tag latest", "--tag alpha");
+      } else {
+        readback.run = readback.run.replace("tags.latest!==version", "false");
+      }
+      await expect(check(workflow)).rejects.toThrow(
+        mutation === "alpha"
+          ? "trusted publication must advance latest"
+          : "registry readback must bind latest",
+      );
+    },
+  );
   it.each(["qualify", "independent-policy", "publish"])(
     "rejects %s without explicit verifier preparation",
     async (jobId) => {

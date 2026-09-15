@@ -12,12 +12,12 @@ candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity. Draft-only is the default;
 repositories may explicitly enable a separately approved, exact-plan merge.
 
-Mill `0.4.0` is the published npm and GitHub Latest release. The tagged `0.5.0`
-candidate failed before publication because its workflow received malformed
-qualification input; its tag and failed run remain preserved evidence, not a
-release. `0.6.0` is the next candidate. See the
-[v0.5.0 release record](docs/releases/v0.5.0.md). The `v0.1.5` genesis release
-remains the historical trust root; the `v0.2.0` tag remains preserved
+Mill `0.6.0` is the published public alpha and GitHub Latest release. npm's
+`alpha` tag resolves to `0.6.0`; its `latest` tag still resolves to `0.4.0`. The
+tagged `0.5.0` candidate failed before publication because its workflow received
+malformed qualification input; its tag and failed run remain preserved evidence.
+See the [v0.5.0 release record](docs/releases/v0.5.0.md). The `v0.1.5` genesis
+release remains the historical trust root; the `v0.2.0` tag remains preserved
 prepublication evidence.
 
 ## Why Mill
@@ -144,7 +144,7 @@ Install the current public alpha at its exact version with lifecycle scripts
 disabled:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.4.0
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.6.0
 npx --no-install millctl --version
 ```
 
@@ -161,12 +161,12 @@ PATH="$node_bin_dir:$PATH" "$node_bin_dir/npm" run build
 node dist/cli.js --version
 ```
 
-Until the release candidate completes, the `alpha` and `latest` npm tags both
-resolve to `0.4.0`. Downstream repositories should still pin the exact version
-so a later release cannot alter their delivery machinery implicitly. Updating an
-existing Mill installation is deliberate: preserve state and repository
-snapshots, inspect the release notes, and requalify the changed toolchain. There
-is no automatic upgrade or proven general downgrade path for operational state.
+The `alpha` tag resolves to `0.6.0`; `latest` still resolves to `0.4.0`.
+Downstream repositories should pin the exact version so a later release cannot
+alter their delivery machinery implicitly. Updating an existing Mill
+installation is deliberate: preserve state and repository snapshots, inspect the
+release notes, and requalify the changed toolchain. There is no automatic
+upgrade or proven general downgrade path for operational state.
 
 ### Policy starters for downstream repositories
 

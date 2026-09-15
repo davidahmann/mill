@@ -187,10 +187,10 @@ The publish job downloads the prior run's exact candidate artifact, validates
 its preserved qualification, and assembles prepublication evidence. It runs:
 
 ```sh
-npm publish "$artifact" --provenance --access public --tag alpha
+npm publish "$artifact" --provenance --access public --tag latest
 ```
 
-It does not run `npm pack` again. It verifies that npm's `alpha` dist-tag names
+It does not run `npm pack` again. It verifies that npm's `latest` dist-tag names
 the exact version, reads the package back, verifies registry signatures with a
 bounded propagation retry, downloads and requalifies the registry artifact,
 creates a plainly labelled draft public-alpha release with the same
@@ -298,20 +298,18 @@ has proven state and schema compatibility.
 
 ### Channel promotion
 
-GitHub Latest and npm dist-tags are separate owner-approved effects after exact
-release qualification and readback. They do not require rebuilding or
-republishing. The workflow creates a normal GitHub Release whose title retains
-the `Public alpha` label, so GitHub can set Latest without extending the
-qualified support limits. npm `alpha` and `latest` remain separate distribution
-pointers. Record their exact values and GitHub release identity in the current
-release record after authoritative readback.
+Each fresh routine release publishes the preserved artifact directly to npm
+`latest` through the protected OIDC workflow. `Public alpha` remains a maturity
+label in the GitHub Release title and does not require a separate npm `alpha`
+tag. Record the resulting `latest` value and GitHub release identity after
+provider readback.
 
-For an approved npm channel change, use the operator's own npm login and 2FA,
-change only the named dist-tag, and read back the resulting version and
-unchanged integrity. Do not collect credentials in chat, store tokens in the
-repository, weaken trusted publishing, or replay publication after an
-authentication error. Keep exact install pins in user docs; never replace
-historical trust-root pins.
+A later correction to an existing npm dist-tag is a separate owner-approved
+effect. npm documents that operation as an authenticated CLI command. Do not
+create or store a bypass-2FA token to perform it. If the account cannot make the
+change through a supported authentication method, record the unchanged provider
+state and publish the next qualified version through the OIDC path. Keep exact
+install pins in user docs; never replace historical trust-root pins.
 
 ### Publication protection
 

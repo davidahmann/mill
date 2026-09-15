@@ -366,13 +366,13 @@ jobs:
         run: |
           artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
           test -n "$artifact"
-          npm publish "$artifact" --provenance --access public --tag alpha
+          npm publish "$artifact" --provenance --access public --tag latest
       - name: Read back npm and verify signatures
         run: |
           version=$(node -p 'require("./package.json").version')
           npm view "@davidahmann/mill@$version" dist --json > "$RUNNER_TEMP/registry-dist.json"
           npm view "@davidahmann/mill@$version" dist-tags --json > "$RUNNER_TEMP/registry-tags.json"
-          node -e 'const tags=require(process.argv[1]);const version=require("./package.json").version;if(tags.alpha!==version)process.exit(1)' "$RUNNER_TEMP/registry-tags.json"
+          node -e 'const tags=require(process.argv[1]);const version=require("./package.json").version;if(tags.latest!==version)process.exit(1)' "$RUNNER_TEMP/registry-tags.json"
           mkdir -p "$RUNNER_TEMP/registry-install"
           cd "$RUNNER_TEMP/registry-install"
           npm init --yes >/dev/null
