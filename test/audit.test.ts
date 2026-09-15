@@ -142,7 +142,7 @@ sources: [https://example.com]
     write(
       temporary.path,
       "README.md",
-      "# Mill\n\n## Why Mill\n\nValue.\n\n## Quick start\n\nRun `millctl start`.\n",
+      "# Mill\n\n## Why Mill\n\nValue.\n\n## One successful path\n\nRun `millctl start`.\n",
     ),
     write(
       temporary.path,

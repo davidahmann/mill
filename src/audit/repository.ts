@@ -67,6 +67,12 @@ function requireText(source: string, values: readonly string[]): void {
   }
 }
 
+function requireOneOf(source: string, values: readonly string[]): void {
+  if (!values.some((value) => source.includes(value))) {
+    throw new Error(`missing one of ${values.join(", ")}`);
+  }
+}
+
 export async function auditRepository(input: {
   root: string;
   now?: Date;
@@ -149,7 +155,8 @@ export async function auditRepository(input: {
         "The operator path is discoverable from the primary documentation",
       evidence: ["README.md", "AGENTS.md"],
       evaluate: () => {
-        requireText(readme, ["## Why Mill", "## Quick start", "millctl start"]);
+        requireText(readme, ["## Why Mill", "millctl start"]);
+        requireOneOf(readme, ["## One successful path", "## Quick start"]);
         requireText(agents, ["## Operating Mill", "## Authority hierarchy"]);
       },
     }),
