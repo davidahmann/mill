@@ -12,6 +12,7 @@ import {
 } from "../src/planning/adaptation.js";
 
 const hash = `sha256:${"a".repeat(64)}`;
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 const ref = { path: "quality/fixture.json", digest: hash };
 function manifest() {
   return adaptationManifestSchema.parse({
@@ -237,7 +238,7 @@ async function prepared() {
     ),
   );
   await execute(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
@@ -249,7 +250,7 @@ async function prepared() {
     { cwd: fixture.root },
   );
   await execute(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
@@ -300,7 +301,7 @@ describe("adaptation lifecycle admission", () => {
       delete fixture.task.baselineCommandIds;
       await writeFile(fixture.taskFile, stringify(fixture.task));
       await execute(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -379,7 +380,7 @@ describe("adaptation lifecycle admission", () => {
         writeFile(fixture.taskFile, stringify(fixture.task)),
       ]);
       await execute(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -391,7 +392,7 @@ describe("adaptation lifecycle admission", () => {
         { cwd: fixture.root },
       );
       await execute(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -416,7 +417,7 @@ describe("adaptation lifecycle admission", () => {
       fixture.task.baselineCommandIds = ["test", "invariant"];
       await writeFile(fixture.taskFile, stringify(fixture.task));
       await execute(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",

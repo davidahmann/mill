@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const dependabotLogin = "dependabot[bot]";
 const dependabotSignoff = "support@github.com";
 const githubRebaseService = "web-flow";
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 function signoffs(message) {
   return [...message.matchAll(/^Signed-off-by:\s+.+\s+<([^>]+)>\s*$/gimu)].map(
@@ -29,7 +30,7 @@ function failUnsigned(commits) {
 
 function localCommits(base, head) {
   const result = spawnSync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "core.hooksPath=/dev/null",

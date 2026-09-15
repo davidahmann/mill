@@ -2,6 +2,7 @@ import { appendFile, readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 
 const reference = process.env.MILL_RELEASE_TAG ?? process.env.GITHUB_REF_NAME;
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 if (
   reference === undefined ||
   !/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(reference)
@@ -11,7 +12,7 @@ if (
 
 function git(args) {
   const result = spawnSync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "core.hooksPath=/dev/null",

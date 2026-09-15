@@ -33,6 +33,10 @@ The command reports each file and line. It uses an explicit base when CI
 supplies one; local work compares the working tree with `origin/main` when
 available.
 
+The checker resolves `git` from `MILL_GIT_PATH` when set, then from `PATH`. That
+keeps the local documentation gate usable on hosts where the system Git is not
+the active Git installation.
+
 Do not change this guide, the selected writing playbook, the documentation
 checker, or a task's acceptance inputs within an ordinary documentation task and
 then use the change as its own proof. Prepare policy changes separately and run

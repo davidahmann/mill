@@ -8,4 +8,4 @@ coverage/
 *.log
 .mill/
 .mill-scratch/
-TEMP_MILL_GREENFIELD_WORK_PLAN_*.md
+/TEMP_MILL_GREENFIELD_WORK_PLAN_*.md

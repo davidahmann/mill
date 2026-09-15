@@ -9,7 +9,7 @@ import {
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { verifyAuthorityPlanPurge } from "./authority-plans.js";
 import {
-  codexWorkerAdapter,
+  codexWorkerAdapters,
   codexAuthStatus,
   type ProviderUsage,
 } from "./codex.js";
@@ -51,6 +51,7 @@ import {
   publicRunRecord,
   restoreStateBackup,
   StateStore,
+  type StateStats,
   type PublicRunRecord,
   type RunRecord,
 } from "./state.js";
@@ -78,6 +79,8 @@ interface RunContext {
   store: StateStore;
   commonDirectory: string;
 }
+
+const workerAdapter = codexWorkerAdapters.require("codex-cli");
 
 function operationDeadline(seconds: number): number {
   return Date.now() + seconds * 1000;
@@ -407,7 +410,7 @@ async function admitWorker(input: {
   invocationId: string;
   hooks: ReturnType<typeof lifecycleHooks>;
 }> {
-  const profile = await codexWorkerAdapter.profile(input.root, input.role);
+  const profile = await workerAdapter.profile(input.root, input.role);
   const admitted = createWorkerInvocation({
     runId: input.run.id,
     phase: input.phase,
@@ -673,10 +676,10 @@ export async function startLocalRun(input: {
       role: "builder",
       attempt: run.attemptCount,
     });
-    let invocation: Awaited<ReturnType<typeof codexWorkerAdapter.runBuilder>>;
+    let invocation: Awaited<ReturnType<typeof workerAdapter.runBuilder>>;
     let candidate: Awaited<ReturnType<typeof commitCandidate>>;
     try {
-      invocation = await codexWorkerAdapter.runBuilder({
+      invocation = await workerAdapter.runBuilder({
         root: worktree,
         task: inputs.task,
         manifest: frozen.manifest,
@@ -1068,9 +1071,9 @@ export async function reviewRun(input: {
       attempt: reviewAttempt,
       candidateCommit: candidate.commit,
     });
-    let result: Awaited<ReturnType<typeof codexWorkerAdapter.runReviewer>>;
+    let result: Awaited<ReturnType<typeof workerAdapter.runReviewer>>;
     try {
-      result = await codexWorkerAdapter.runReviewer({
+      result = await workerAdapter.runReviewer({
         root: candidate.worktree,
         task: inputs.task,
         manifest: candidate.manifest,
@@ -1198,10 +1201,10 @@ export async function resumeRun(input: {
         attempt: run.repairCount,
         candidateCommit: base,
       });
-      let invocation: Awaited<ReturnType<typeof codexWorkerAdapter.runBuilder>>;
+      let invocation: Awaited<ReturnType<typeof workerAdapter.runBuilder>>;
       let candidate: Awaited<ReturnType<typeof commitCandidate>>;
       try {
-        invocation = await codexWorkerAdapter.runBuilder({
+        invocation = await workerAdapter.runBuilder({
           root: worktreePath,
           task: inputs.task,
           manifest,
@@ -1258,10 +1261,10 @@ export async function resumeRun(input: {
       role: "builder",
       attempt: run.attemptCount,
     });
-    let invocation: Awaited<ReturnType<typeof codexWorkerAdapter.runBuilder>>;
+    let invocation: Awaited<ReturnType<typeof workerAdapter.runBuilder>>;
     let candidate: Awaited<ReturnType<typeof commitCandidate>>;
     try {
-      invocation = await codexWorkerAdapter.runBuilder({
+      invocation = await workerAdapter.runBuilder({
         root: worktreePath,
         task: inputs.task,
         manifest,
@@ -1504,6 +1507,17 @@ export async function runInventory(input: {
   const store = await StateStore.open(config.repositoryId, commonDirectory);
   try {
     return store.runs().map(publicRunRecord);
+  } finally {
+    store.close();
+  }
+}
+
+export async function runStats(input: { root: string }): Promise<StateStats> {
+  const config = await loadMillConfig(input.root);
+  const commonDirectory = await commonGitDirectory(input.root);
+  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  try {
+    return store.stats();
   } finally {
     store.close();
   }

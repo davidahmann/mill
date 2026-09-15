@@ -18,6 +18,7 @@ import { MILL_VERSION } from "../dist/version.js";
 const root = path.resolve(import.meta.dirname, "..");
 const temporary = await mkdtemp(path.join(tmpdir(), "mill-package-"));
 const npmCli = process.env.npm_execpath;
+const gitExecutable = process.env.MILL_GIT_PATH ?? "git";
 
 if (npmCli === undefined) {
   throw new Error("npm_execpath is required for package validation");
@@ -479,15 +480,15 @@ commands:
 `,
     ),
   ]);
-  command("/usr/bin/git", ["init", "--initial-branch=main"], consumer);
+  command(gitExecutable, ["init", "--initial-branch=main"], consumer);
   command(
-    "/usr/bin/git",
+    gitExecutable,
     ["remote", "add", "origin", "https://github.com/example/app.git"],
     consumer,
   );
-  command("/usr/bin/git", ["add", "."], consumer);
+  command(gitExecutable, ["add", "."], consumer);
   command(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Package Test",
@@ -555,7 +556,7 @@ const expectedSandbox=args.includes("--output-schema")?"read-only":"workspace-wr
 if(sandboxIndex<0||args[sandboxIndex+1]!==expectedSandbox){process.exit(2)}
 const index=args.indexOf("--cd");const cwd=index>=0?args[index+1]:process.cwd();
 if(args.includes("--output-schema")){
-  const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
+  const candidate=execFileSync(${JSON.stringify(gitExecutable)},["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   const prompt=readFileSync(0,"utf8");
   const scope=JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0]??"null");
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:"clean",findings:[]});
@@ -603,7 +604,7 @@ if(args.includes("push")){
   writeFileSync(new URL("./remote-head",import.meta.url),candidate+"\\n",{mode:0o600});
   console.log("done");process.exit(0);
 }
-const result=spawnSync("/usr/bin/git",args,{cwd:process.cwd(),env:process.env,encoding:"utf8"});
+const result=spawnSync(${JSON.stringify(gitExecutable)},args,{cwd:process.cwd(),env:process.env,encoding:"utf8"});
 process.stdout.write(result.stdout??"");process.stderr.write(result.stderr??"");process.exit(result.status??1);
 `,
     { mode: 0o700 },
@@ -625,7 +626,7 @@ else if(args.includes("--method")&&endpoint==="repos/example/app/pulls"){
   const value={number:41,node_id:"PR_package_canary",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:field("body")??"",head:{ref:field("head")??"",sha:remoteHead()},base:{ref:field("base")??"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
   writeFileSync(pullPath,JSON.stringify(value),{mode:0o600});console.log(JSON.stringify(value));
 }
-else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:execFileSync("/usr/bin/git",["rev-parse","main"],{encoding:"utf8"}).trim()}}));
+else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:execFileSync(${JSON.stringify(gitExecutable)},["rev-parse","main"],{encoding:"utf8"}).trim()}}));
 else if(endpoint.includes("/git/ref/heads/")){const head=remoteHead();if(head===null){console.error("HTTP 404");process.exit(1)}console.log(JSON.stringify({object:{sha:head}}))}
 else if(endpoint.includes("/pulls?")){const value=pull();console.log(JSON.stringify(value===null?[[]]:[[value]]))}
 else if(endpoint.endsWith("/pulls/41")){const value=pull();if(value===null)process.exit(2);console.log(JSON.stringify(value))}
@@ -673,7 +674,7 @@ else process.exit(2);
       );
     const task = `product/tasks/canary-${step}.yaml`;
     const baseCommit = command(
-      "/usr/bin/git",
+      gitExecutable,
       ["rev-parse", "HEAD"],
       consumer,
     ).trim();
@@ -719,16 +720,12 @@ else process.exit(2);
       },
     });
     if (step < 5) {
-      command(
-        "/usr/bin/git",
-        ["merge", "--ff-only", candidateCommit],
-        consumer,
-      );
+      command(gitExecutable, ["merge", "--ff-only", candidateCommit], consumer);
     }
 
     if (step === 2) {
       command(
-        "/usr/bin/git",
+        gitExecutable,
         ["switch", "--create", "mill-seeded-fault"],
         consumer,
       );
@@ -736,9 +733,9 @@ else process.exit(2);
         path.join(consumer, "src", "value.js"),
         "export const value = 0;\n",
       );
-      command("/usr/bin/git", ["add", "src/value.js"], consumer);
+      command(gitExecutable, ["add", "src/value.js"], consumer);
       command(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Package Test",
@@ -752,7 +749,7 @@ else process.exit(2);
         consumer,
       );
       const faultCommit = command(
-        "/usr/bin/git",
+        gitExecutable,
         ["rev-parse", "HEAD"],
         consumer,
       ).trim();
@@ -764,9 +761,9 @@ else process.exit(2);
       if (faultTest.status === 0) {
         throw new Error("seeded continuity fault unexpectedly passed");
       }
-      command("/usr/bin/git", ["switch", "main"], consumer);
+      command(gitExecutable, ["switch", "main"], consumer);
       const recovered = command(
-        "/usr/bin/git",
+        gitExecutable,
         ["rev-parse", "HEAD"],
         consumer,
       ).trim();
@@ -796,7 +793,7 @@ else process.exit(2);
     throw new Error("longitudinal package qualification has no final commit");
   }
   const finalTree = command(
-    "/usr/bin/git",
+    gitExecutable,
     ["rev-parse", `${finalCommit}^{tree}`],
     consumer,
   ).trim();

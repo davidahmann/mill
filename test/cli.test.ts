@@ -12,6 +12,7 @@ import { MILL_VERSION } from "../src/version.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 function capture(): {
   io: {
@@ -722,7 +723,7 @@ playbooks:
   it("emits human output and blocks hazardous adoption", async () => {
     const temporary = await temporaryDirectory("mill-cli-adopt-");
     try {
-      await execFileAsync("/usr/bin/git", ["init", "--initial-branch=main"], {
+      await execFileAsync(gitExecutable, ["init", "--initial-branch=main"], {
         cwd: temporary.path,
       });
       await writeFile(
@@ -739,7 +740,7 @@ playbooks:
       expect(output.stdout.join("")).toContain("BLOCKED: adopt.scan");
       expect(output.stdout.join("")).toContain("UNSAFE_GIT_CONFIGURATION");
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         ["config", "--unset", "core.hooksPath"],
         { cwd: temporary.path },
       );

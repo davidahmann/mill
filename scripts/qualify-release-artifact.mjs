@@ -49,6 +49,7 @@ for (let index = 0; index < flags.length; index += 1) {
 }
 const artifact = path.resolve(artifactArgument);
 const npmCli = process.env.npm_execpath;
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 function run(executable, args, cwd, options = {}) {
   const result = spawnSync(executable, args, {
@@ -89,7 +90,7 @@ async function write(root, relative, content) {
 
 function git(root, args) {
   return run(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Release Canary",

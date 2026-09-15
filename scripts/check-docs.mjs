@@ -24,16 +24,20 @@ const patterns = [
 ];
 
 function git(argumentsForGit) {
-  const result = spawnSync("/usr/bin/git", argumentsForGit, {
-    cwd: root,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_OPTIONAL_LOCKS: "0",
+  const result = spawnSync(
+    process.env.MILL_GIT_PATH ?? "git",
+    argumentsForGit,
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_OPTIONAL_LOCKS: "0",
+      },
     },
-  });
+  );
   if (result.status !== 0) return undefined;
   return result.stdout.trim();
 }

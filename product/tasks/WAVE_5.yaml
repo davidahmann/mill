@@ -41,7 +41,7 @@ allowed_paths:
   - package-lock.json
   - package.json
 forbidden_paths:
-  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - docs/history/TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
   - .env*
 acceptance_items:
   - W5-A1 audit emits a schema-valid read-only report bound to a clean exact

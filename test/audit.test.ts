@@ -9,9 +9,11 @@ import { auditRepository } from "../src/audit/repository.js";
 import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { temporaryDirectory } from "./helpers.js";
 
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
+
 function git(root: string, arguments_: readonly string[]): void {
   execFileSync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Audit Test",

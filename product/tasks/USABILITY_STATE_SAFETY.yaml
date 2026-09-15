@@ -1,0 +1,56 @@
+schemaVersion: "2"
+task_id: mill-usability-state-safety
+status: approved
+owner: davidahmann
+base_commit: 20623a29fc9b317fa17a9e82237d7ac5a681ff79
+execution_mode: approved_native_maintainer
+authority: product/usability-state-safety.md
+impact_manifest: product/impacts/USABILITY_STATE_SAFETY.yaml
+objective: >-
+  Improve Mill's readable delivery path, durable local state migrations,
+  redacted operating evidence, worker-boundary clarity and focused regression
+  coverage without broadening authority or qualified support.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - docs/**
+  - product/**
+  - architecture/**
+  - README.md
+  - AGENTS.md
+  - .gitignore
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - eslint.config.js
+authority_preparation_paths:
+  - product/**
+  - docs/**
+acceptance_items:
+  - US-01 README and glossary present the existing approved-outcome path and
+    public API accurately
+  - US-02 numbered migrations preserve supported historical state and reject
+    unsupported state
+  - US-03 stats output is aggregate and redacted; a supported schema migration
+    may run without changing run evidence
+  - US-04 worker and GitHub credential guidance preserve current authority
+    limits
+  - US-05 native checks, audit, package inspection and independent review pass
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - independent read-only review of the complete exact candidate diff
+constraints:
+  - one native-maintainer writer in a disposable worktree
+  - preserve task, acceptance, verification, delivery and release authority
+  - no GitHub App, credential, setting, release, publication,
+    provider/customer-system action, telemetry export, MCP server, daemon,
+    centralized service, automatic mutation, branch-protection change or
+    support-matrix expansion
+stop_conditions:
+  - ambiguous authority, state-loss risk, secret disclosure or unavailable
+    mandatory gate
+  - recurring same-subsystem P0 or P1 finding

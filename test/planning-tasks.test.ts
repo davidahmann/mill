@@ -28,6 +28,7 @@ import {
 } from "../src/runtime/state.js";
 
 const exec = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 const original = {
   state: process.env.MILL_STATE_HOME,
   codex: process.env.MILL_CODEX_PATH,
@@ -43,7 +44,7 @@ afterEach(() => {
 });
 const git = (root: string, args: string[]) =>
   exec(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",

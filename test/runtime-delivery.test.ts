@@ -66,9 +66,10 @@ const original = {
   docker: process.env.MILL_DOCKER_PATH,
 };
 const execFileAsync = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 const git = (root: string, args: string[]) =>
   execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
@@ -370,7 +371,7 @@ async function configureProposeCheckPolicy(
   }
   await writeFile(configPath, source, "utf8");
   await execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
@@ -382,7 +383,7 @@ async function configureProposeCheckPolicy(
     { cwd: fixture.root },
   );
   await execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
