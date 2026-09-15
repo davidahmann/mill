@@ -37,12 +37,14 @@ acceptance_items:
     may run without changing run evidence
   - US-04 worker and GitHub credential guidance preserve current authority
     limits
-  - US-05 native checks, audit, package inspection and independent review pass
+  - US-05 native checks, audit, package inspection, required PR checks and
+    GitHub review feedback pass or are resolved
 validation_commands:
   - npm run check
   - node dist/cli.js --json --cwd . audit
 required_reviews:
-  - independent read-only review of the complete exact candidate diff
+  - required PR checks and GitHub review feedback on the complete exact
+    candidate diff
 constraints:
   - one native-maintainer writer in a disposable worktree
   - preserve task, acceptance, verification, delivery and release authority
@@ -54,3 +56,19 @@ stop_conditions:
   - ambiguous authority, state-loss risk, secret disclosure or unavailable
     mandatory gate
   - recurring same-subsystem P0 or P1 finding
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-15
+  merged_pull_request: https://github.com/davidahmann/mill/pull/48
+  merge_commit: 99c987040f3d81e07b01b96e459d8103ab340147
+  validation:
+    - >-
+      PR #48 validate, dependency-review, DCO, and CodeQL checks passed on the
+      exact head.
+    - >-
+      Local format, lint, typecheck, documentation, workflow, schema, 356-test
+      coverage, package-canary, and exact-candidate audit checks passed.
+  disposition: >-
+    The source increment is complete. Release identity and external publication
+    remain under the separate v0.5.0 authority.
