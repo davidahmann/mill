@@ -1,0 +1,34 @@
+schemaVersion: "2"
+id: mill-release-v0.6.0
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-15 authorizing a temporary plan,
+  implementation, validation, cross-check, green delivery, new GitHub Release,
+  npm publication and documentation update.
+source_base: 52bb0a4196196207a37392e4c11f1406c518338f
+authority: product/release-v0.6.0.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Distributes the reviewed v0.6.0 guided-operations source increment.
+  - Publishes one preserved artifact without changing the qualified support
+    matrix.
+  - Updates public installation and release documentation from provider
+    readback.
+affected_surfaces:
+  - package and CLI version identity
+  - public README, changelog, release record, product plan and task closure
+  - exact release record, npm environment admission and public distribution
+verification:
+  - native check, exact-candidate audit and green source PR and main checks
+  - annotated-tag identity and two independent candidate builds
+  - independent policy, registry package, npm provenance and GitHub asset
+    readback
+exceptions:
+  - This attended maintainer release may merge, create and push the annotated
+    v0.6.0 tag, add its exact npm-environment rule, publish one preserved
+    artifact, create the normal GitHub Release, and promote only its alpha and
+    latest npm dist-tags as specified in its authority record.
