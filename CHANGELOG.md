@@ -4,6 +4,31 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-15
+
+### Added
+
+- Add `millctl --json init propose`, a read-only summary that joins an inspected
+  PRD with existing planning drafts and compiled task output.
+- Add `millctl --json report`, a redacted local view of lifecycle, validation,
+  elapsed time, recorded usage, and opt-in self-hosting progress.
+- Add a fixed-name `MILL_GITHUB_TOKEN` option for an attended shipper's reviewed
+  fine-grained token. Token bytes remain outside Mill configuration, state,
+  prompts, and support output.
+- Add one fixture-only two-repair experiment that repeats validation and review
+  after each repaired candidate.
+
+### Changed
+
+- Limit the packed public interface to `millctl` and JSON schemas. Direct
+  package-root JavaScript imports now fail.
+- Add a numbered local-state migration from v3 to v4 for fixture-only second
+  repair capacity. Supported prior state preserves durable records.
+- Parse and re-encode release qualification inputs before dispatch so malformed
+  JSON blocks before qualification assembly.
+- Rewrite the README, operator guidance, planning guide, and release record in
+  direct language. Preserve material limits beside the features they constrain.
+
 ## [0.5.0] - 2026-09-15
 
 ### Added

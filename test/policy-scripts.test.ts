@@ -15,6 +15,9 @@ const compareArtifactsScript = path.resolve(
   "scripts/compare-release-artifacts.mjs",
 );
 const releaseTagScript = path.resolve("scripts/verify-release-tag.mjs");
+const releaseQualificationInputScript = path.resolve(
+  "scripts/encode-release-qualification-inputs.mjs",
+);
 const releaseReadbackScript = path.resolve(
   "scripts/capture-release-readback.mjs",
 );
@@ -395,6 +398,53 @@ describe("repository policy scripts", () => {
     );
     expect(unsupported.status).toBe(1);
     expect(unsupported.stderr).toContain("unsupported argument: --publish");
+  });
+
+  it("encodes only valid qualification JSON for workflow dispatch", async () => {
+    const temporary = await temporaryDirectory("mill-release-inputs-");
+    try {
+      const support = path.join(temporary.path, "support.json");
+      const sequence = path.join(temporary.path, "sequence.json");
+      await writeFile(support, `${JSON.stringify({ id: "support" })}\n`);
+      await writeFile(sequence, `${JSON.stringify({ steps: [] })}\n`);
+
+      const encoded = run(
+        process.execPath,
+        [
+          releaseQualificationInputScript,
+          "--field",
+          "support_tuple_base64",
+          support,
+          sequence,
+        ],
+        temporary.path,
+      );
+      expect(encoded.status, encoded.stderr).toBe(0);
+      expect(
+        JSON.parse(Buffer.from(encoded.stdout.trim(), "base64").toString()),
+      ).toEqual({
+        id: "support",
+      });
+
+      await writeFile(sequence, `${JSON.stringify({ steps: [] })}\\n`);
+      const malformed = run(
+        process.execPath,
+        [
+          releaseQualificationInputScript,
+          "--field",
+          "sequence_base64",
+          support,
+          sequence,
+        ],
+        temporary.path,
+      );
+      expect(malformed.status).toBe(1);
+      expect(malformed.stderr).toContain(
+        "longitudinal sequence must contain valid JSON",
+      );
+    } finally {
+      await temporary.cleanup();
+    }
   });
 
   it("compares canonical package contents and preserves one exact artifact", async () => {

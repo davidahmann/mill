@@ -99,6 +99,13 @@ function persistedRunDeadline(run: RunRecord): number {
   return deadline;
 }
 
+function maximumRepairGenerations(task: RuntimeInputs["task"]): 1 | 2 {
+  return task.schemaVersion === "2" &&
+    task.repairExperiment?.scope === "fixture_only"
+    ? task.repairExperiment.maximumRepairGenerations
+    : 1;
+}
+
 function baselineEvidenceDigest(evidence: ValidationEvidence): string {
   return canonicalDigest({
     schemaVersion: evidence.schemaVersion,
@@ -1090,7 +1097,7 @@ export async function reviewRun(input: {
         run.id,
         JSON.stringify(result.review),
         result.review.findings.length,
-        run.repairCount >= 1,
+        run.repairCount >= maximumRepairGenerations(inputs.task),
         admission.invocationId,
         {
           usageSource: result.usage.source,
@@ -1176,10 +1183,11 @@ export async function resumeRun(input: {
     await assertGitControlState(worktreePath, gitControl);
     const findings = storedReviewFindings(run) ?? validationRepairFindings(run);
     if (findings !== undefined) {
-      if (run.repairCount >= 1) {
+      const repairLimit = maximumRepairGenerations(inputs.task);
+      if (run.repairCount >= repairLimit) {
         throw new MillError(
           "REVIEW_NON_CONVERGENCE",
-          "A second review repair is not permitted.",
+          "The approved repair budget is exhausted.",
           ExitCode.configuration,
         );
       }
@@ -1189,7 +1197,7 @@ export async function resumeRun(input: {
         inputs,
       );
       const base = reviewedCandidate.commit;
-      run = store.beginRepair(run.id);
+      run = store.beginRepair(run.id, repairLimit);
       const admission = await admitWorker({
         store,
         run,
@@ -1518,6 +1526,89 @@ export async function runStats(input: { root: string }): Promise<StateStats> {
   const store = await StateStore.open(config.repositoryId, commonDirectory);
   try {
     return store.stats();
+  } finally {
+    store.close();
+  }
+}
+
+export interface RunReport {
+  schemaVersion: "1";
+  redacted: true;
+  runs: {
+    total: number;
+    byStatus: StateStats["runs"]["byStatus"];
+    verification: { passed: number; failed: number; notRecorded: number };
+    repairs: number;
+    builderAttempts: number;
+  };
+  elapsed: { totalMilliseconds: number; averageMilliseconds: number | null };
+  usage: ReturnType<typeof summarizeUsage>;
+  selfHosting: {
+    declared: boolean;
+    eligibleRuns: number;
+    completedRuns: number;
+    completionRate: number | null;
+  };
+}
+
+function hasSuccessfulValidation(run: RunRecord): boolean | undefined {
+  if (run.validationJson === undefined) return undefined;
+  try {
+    return validationEvidenceSchema.parse(JSON.parse(run.validationJson))
+      .passed;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function runReport(input: { root: string }): Promise<RunReport> {
+  const config = await loadMillConfig(input.root);
+  const commonDirectory = await commonGitDirectory(input.root);
+  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  try {
+    const stats = store.stats();
+    const runs = store.runs();
+    const validations = runs.map(hasSuccessfulValidation);
+    const elapsed = runs.reduce((total, run) => {
+      const duration = Date.parse(run.updatedAt) - Date.parse(run.createdAt);
+      return (
+        total + (Number.isSafeInteger(duration) && duration >= 0 ? duration : 0)
+      );
+    }, 0);
+    const declared = config.reporting?.selfHosted === true;
+    const eligibleRuns = declared ? runs.length : 0;
+    const completedRuns = declared
+      ? runs.filter((run) => run.status === "closed").length
+      : 0;
+    return {
+      schemaVersion: "1",
+      redacted: true,
+      runs: {
+        total: stats.runs.total,
+        byStatus: stats.runs.byStatus,
+        verification: {
+          passed: validations.filter((value) => value === true).length,
+          failed: validations.filter((value) => value === false).length,
+          notRecorded: validations.filter((value) => value === undefined)
+            .length,
+        },
+        repairs: stats.runs.repairs,
+        builderAttempts: stats.runs.builderAttempts,
+      },
+      elapsed: {
+        totalMilliseconds: elapsed,
+        averageMilliseconds:
+          runs.length === 0 ? null : Math.round(elapsed / runs.length),
+      },
+      usage: summarizeUsage(runs.flatMap((run) => store.events(run.id))),
+      selfHosting: {
+        declared,
+        eligibleRuns,
+        completedRuns,
+        completionRate:
+          eligibleRuns === 0 ? null : completedRuns / eligibleRuns,
+      },
+    };
   } finally {
     store.close();
   }

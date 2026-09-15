@@ -1,6 +1,7 @@
 # Usability and state-safety increment
 
-Status: completed in PR #48 on 2026-09-15; v0.5.0 release qualification pending
+Status: completed in PR #48 on 2026-09-15; v0.5.0 candidate failed before
+publication and remains preserved evidence
 
 Mill's approval boundaries and release evidence are useful only when a
 maintainer can understand and operate them without recreating the internal
@@ -52,3 +53,8 @@ The exact source change merged as `99c987040f3d81e07b01b96e459d8103ab340147`
 after green validate, dependency review, DCO, and CodeQL checks. The local
 exact-candidate audit, package canary, and 356-test coverage run also passed.
 GitHub reported no review feedback on the exact head.
+
+The v0.5.0 candidate's independent builds and packed canaries passed, but its
+qualification input contained a literal `\n` after JSON and was rejected before
+publication. No npm or GitHub Release effect occurred. A fresh v0.6.0 release
+task owns the corrected release path.

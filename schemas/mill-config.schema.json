@@ -20,6 +20,11 @@
         "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
       }
     },
+    "reporting": {
+      "type": "object",
+      "properties": { "selfHosted": { "default": false, "type": "boolean" } },
+      "additionalProperties": false
+    },
     "verifier": {
       "type": "object",
       "properties": {
@@ -151,6 +156,30 @@
             ],
             "additionalProperties": false
           }
+        },
+        "deliveryCredential": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "mode": { "type": "string", "const": "operator_session" }
+              },
+              "required": ["mode"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "mode": { "type": "string", "const": "fine_grained_token" },
+                "environment": {
+                  "type": "string",
+                  "const": "MILL_GITHUB_TOKEN"
+                }
+              },
+              "required": ["mode", "environment"],
+              "additionalProperties": false
+            }
+          ]
         },
         "attendedMerge": { "type": "boolean", "const": true },
         "postMergeRequiredChecks": {

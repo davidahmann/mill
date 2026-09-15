@@ -255,6 +255,16 @@
           "required": ["deadlineSeconds", "maxOutputBytes", "retryCount"],
           "additionalProperties": false
         },
+        "repairExperiment": {
+          "type": "object",
+          "properties": {
+            "scope": { "type": "string", "const": "fixture_only" },
+            "maximumRepairGenerations": { "type": "number", "const": 2 },
+            "evidenceLabel": { "type": "string", "minLength": 1 }
+          },
+          "required": ["scope", "maximumRepairGenerations", "evidenceLabel"],
+          "additionalProperties": false
+        },
         "baselineCommandIds": {
           "minItems": 1,
           "type": "array",

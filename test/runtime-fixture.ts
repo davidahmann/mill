@@ -29,6 +29,7 @@ async function git(root: string, args: readonly string[]): Promise<string> {
 export async function runtimeFixture(
   options: {
     reviewRepair?: boolean;
+    twoReviewRepairs?: boolean;
     retryCount?: number;
     repositoryPrefix?: string;
     propose?: boolean;
@@ -284,6 +285,15 @@ budget:
   deadlineSeconds: 60
   maxOutputBytes: 1048576
   retryCount: ${options.retryCount ?? 1}
+${
+  options.twoReviewRepairs === true
+    ? `repairExperiment:
+  scope: fixture_only
+  maximumRepairGenerations: 2
+  evidenceLabel: two-review-repair-fixture
+`
+    : ""
+}
 `,
   );
   await git(root, ["init", "--initial-branch=main"]);
@@ -305,7 +315,7 @@ budget:
   const reviewer =
     options.reviewRepair === true
       ? `const source=await readFile(path.join(cwd,"src/value.js"),"utf8");
-const findings=source.includes("value = 2")?[{id:"R1",severity:"P1",class:"correctness",title:"Use the repaired value",body:"Set the value to three.",file:"src/value.js",line:1}]:[];`
+const findings=${options.twoReviewRepairs === true ? 'source.includes("value = 2")||source.includes("value = 3")' : 'source.includes("value = 2")'}?[{id:"R1",severity:"P1",class:"correctness",title:"Use the repaired value",body:"Set the value to the next approved value.",file:"src/value.js",line:1}]:[];`
       : "const findings=[];";
   const reviewerUsage =
     options.reviewerCacheInputTokens === undefined
@@ -342,7 +352,9 @@ if(args.includes("--output-schema")){
   console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text}}));
   console.log(JSON.stringify({type:"turn.completed",usage:{${reviewerUsage}}}));
 }else{
-  const value=prompt.includes("Repair this complete")?3:2;
+  const source=await readFile(path.join(cwd,"src/value.js"),"utf8");
+  const current=Number(/value = (\\d+)/.exec(source)?.[1]??"1");
+  const value=prompt.includes("Repair this complete")?current+1:2;
   await writeFile(path.join(cwd,"src/value.js"),\`export const value = \${value};\\n\`);
   console.log(JSON.stringify({type:"thread.started",thread_id:"fake-build"}));
   console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:10,output_tokens:5}}));

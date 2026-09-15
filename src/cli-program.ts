@@ -49,6 +49,7 @@ import {
   resumeRun,
   reviewRun,
   runOutcome,
+  runReport,
   runStats,
   runStatus,
   runTimeline,
@@ -248,6 +249,98 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         commandResult({ command: "inspect", ok: true, data: inspection }),
       );
     });
+
+  const init = program
+    .command("init")
+    .description("prepare reviewable authority proposals without writing them");
+  init
+    .command("propose")
+    .description(
+      "combine existing inspection and planning assessments into one propose-only summary",
+    )
+    .requiredOption("--prd <path>", "PRD path inside the selected root")
+    .requiredOption("--sources <path>", "source manifest path")
+    .requiredOption("--proposal <path>", "specification proposal path")
+    .requiredOption("--product <path>", "draft product contract path")
+    .requiredOption("--scenarios <path>", "draft scenario set path")
+    .requiredOption("--impact <path>", "draft impact manifest path")
+    .requiredOption("--request <path>", "draft change-request path")
+    .action(
+      async (options: {
+        prd: string;
+        sources: string;
+        proposal: string;
+        product: string;
+        scenarios: string;
+        impact: string;
+        request: string;
+      }) => {
+        const global = globals(program);
+        const root = await findRepositoryRoot(global.cwd);
+        await enforceExactVersion(root);
+        const [inspection, planning, proposal, impactInputs, tasks] =
+          await Promise.all([
+            inspectPrd(root, options.prd),
+            loadPlanningSources({
+              root,
+              prdPath: options.prd,
+              sourceManifestPath: options.sources,
+            }),
+            loadSpecificationProposal(root, options.proposal),
+            loadImpactPlanningInputs({
+              root,
+              productPath: options.product,
+              scenarioPath: options.scenarios,
+              impactPath: options.impact,
+            }),
+            compileChangeTasks({ root, requestPath: options.request }),
+          ]);
+        const specification = assessSpecificationProposal({
+          proposal,
+          prdPath: planning.prdPath,
+          prdDigest: planning.prdDigest,
+          sourceManifest: planning.sourceManifest,
+          sourceManifestDigest: planning.sourceManifestDigest,
+        });
+        const impact = assessImpactManifest({
+          manifest: impactInputs.manifest,
+          product: impactInputs.product,
+          scenarios: impactInputs.scenarios,
+        });
+        const blockers = [...specification.blockers, ...impact.blockers];
+        emit(
+          io,
+          global.json === true,
+          commandResult({
+            command: "init.propose",
+            ok: true,
+            status: blockers.length === 0 ? "ok" : "blocked",
+            data: {
+              mode: "propose_only",
+              requiresApproval: true,
+              inspection,
+              summary: {
+                productOutcomes: proposal.productContract.outcomes.length,
+                acceptanceItems: proposal.productContract.acceptance.length,
+                scenarios: proposal.scenarioSet.scenarios.length,
+                compiledTasks: tasks.files.filter((file) =>
+                  file.path.startsWith("product/tasks/"),
+                ).length,
+                specificationPromotable: specification.promotable,
+                impactApproved: impact.approved,
+              },
+              specification,
+              impact,
+              tasks,
+            },
+            reasons: blockers.map((message) => ({
+              code: "PROPOSAL_REVIEW_REQUIRED",
+              message,
+            })),
+          }),
+        );
+      },
+    );
 
   program
     .command("discover <repository>")
@@ -1320,6 +1413,26 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           command: "stats",
           ok: true,
           data: await runStats({ root }),
+        }),
+      );
+    });
+
+  program
+    .command("report")
+    .description(
+      "report redacted lifecycle outcomes, measured usage and declared self-hosting progress",
+    )
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "report",
+          ok: true,
+          data: await runReport({ root }),
         }),
       );
     });

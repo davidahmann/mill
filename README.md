@@ -12,15 +12,13 @@ candidate. A separate read-only pass reviews that exact commit. Only the
 attended shipper can use your GitHub identity. Draft-only is the default;
 repositories may explicitly enable a separately approved, exact-plan merge.
 
-Mill `0.5.0` is the current public-alpha release candidate. It adds explicit
-local-state migrations, redacted aggregate delivery statistics, and clearer
-operator guidance without widening delivery authority or the qualified support
-matrix. `0.4.0` remains the published npm and GitHub Latest release until the
-`0.5.0` candidate completes its preserved-artifact, provenance, independent
-qualification, and registry/GitHub readback. See the
-[v0.5.0 release record](docs/releases/v0.5.0.md) for its prepublication state.
-The `v0.1.5` genesis release remains the historical trust root; the `v0.2.0` tag
-remains preserved prepublication evidence.
+Mill `0.4.0` is the published npm and GitHub Latest release. The tagged `0.5.0`
+candidate failed before publication because its workflow received malformed
+qualification input; its tag and failed run remain preserved evidence, not a
+release. `0.6.0` is the next candidate. See the
+[v0.5.0 release record](docs/releases/v0.5.0.md). The `v0.1.5` genesis release
+remains the historical trust root; the `v0.2.0` tag remains preserved
+prepublication evidence.
 
 ## Why Mill
 
@@ -42,8 +40,8 @@ Mill makes those boundaries explicit:
 - GitHub mutations are separately planned, approved, journaled, and reconciled;
 - one complete review is repaired systemically instead of creating micro-PR
   churn;
-- longitudinal qualification proves that accepted behavior survives a sequence
-  of dependent changes, not just one isolated demo;
+- longitudinal qualification checks whether accepted behavior survives a
+  sequence of dependent changes;
 - releases preserve and publish one independently reproduced tarball rather than
   rebuilding at publication time.
 
@@ -72,18 +70,20 @@ For its one qualified shape, Mill can:
    qualification record;
 10. derive bounded, source-revision-bound TypeScript repository evidence from a
     clean Git root without executing its code;
-11. compile an operator-supplied follow-up change request and approved impacts
-    into dependency-checked task packets and an outcome plan.
+11. combine inspected planning drafts into a read-only proposal summary, then
+    compile an operator-supplied follow-up change request and approved impacts
+    into dependency-checked task packets and an outcome plan;
 12. project a durable run into a versioned, read-only continuation packet that
     names the next attended safe action without taking it;
 13. report the built-in builder's trusted-host boundary and reject an
     unqualified request for isolated execution rather than silently claiming
     containment; and
-14. report redacted aggregate lifecycle, attempt and repair counts for the
-    current repository with `millctl stats`.
+14. report redacted aggregate lifecycle counts with `millctl stats`, plus
+    verification, measured usage, elapsed time, and an optional repository-local
+    self-hosting measure with `millctl report`.
 
-Mill does not autonomously research the web or invent a product specification in
-this alpha. The operator supplies the structured proposal that Mill assesses and
+Mill does not autonomously research the web or turn prose into approved product
+intent. The operator supplies the structured drafts that Mill assesses and
 freezes.
 
 ## Repository playbooks, run timelines and outcomes
@@ -140,11 +140,11 @@ qualified web recipe.
 
 ## Install
 
-Install the qualified public alpha at its exact version with lifecycle scripts
+Install the current public alpha at its exact version with lifecycle scripts
 disabled:
 
 ```sh
-npm install --save-dev --ignore-scripts @davidahmann/mill@0.5.0
+npm install --save-dev --ignore-scripts @davidahmann/mill@0.4.0
 npx --no-install millctl --version
 ```
 
@@ -177,9 +177,16 @@ Dependabot commit without running pull-request code under `pull_request_target`.
 Copy them only through a repository review. Add the `dco` check to the target
 branch-protection settings through that repository's own approved process.
 
-## Quick start
+## One successful path
 
-Start with read-only readiness. These commands do not execute repository code:
+The first useful outcome is a reviewed draft PR. Follow this route: inspect the
+repository, approve the proposal and task materials, then run one attended
+delivery through review and draft delivery. The detailed commands below expose
+the same boundaries when you need to inspect them separately.
+
+### 1. Inspect the repository
+
+These commands are read-only and do not execute repository code:
 
 ```sh
 npx --no-install millctl doctor --mode inspect
@@ -187,21 +194,56 @@ npx --no-install millctl inspect --prd product/PRD.md
 npx --no-install millctl adopt --scan-only
 ```
 
-If the repository already has one approved ready outcome, use the shortest
-attended delivery route:
+### 2. Approve the proposal
+
+Use `init propose` to read the PRD and planning drafts together. It returns a
+reviewable summary and compiled task drafts without writing authority files.
+Review its contradictions, assumptions, questions, and digests. Commit and
+approve the product contract, scenarios, impact, and task packet through the
+repository's normal review process. Mill does not turn prose into approval or
+acceptance criteria on its own.
+
+```sh
+millctl --json init propose \
+  --prd product/PRD.md \
+  --sources product/sources.yaml \
+  --proposal product/proposal.yaml \
+  --product product/contract.yaml \
+  --scenarios quality/scenarios.yaml \
+  --impact product/impact.yaml \
+  --request product/change-request.yaml
+```
+
+### 3. Get a reviewed draft PR
+
+Once one outcome is approved and ready, start its attended lifecycle. It selects
+that outcome or resumes its existing run, verifies the committed candidate, and
+keeps all delivery effects separate:
 
 ```sh
 millctl --json start --prd product/PRD.md --attended
 millctl --json status
 millctl --json stats
+millctl --json report
 ```
 
-`start` selects that one outcome or resumes its existing lifecycle. It checks
-authority before dependency or model spend. `status` explains the selected run;
-`stats` gives a redacted aggregate for the repository. None of these commands
-approve a push, pull request, merge or release. Use the expert sequence below
-when you need to inspect each boundary. See the [glossary](docs/glossary.md)
-before creating or reviewing authority files.
+`start` checks authority before dependency or model spend. `status` explains the
+selected run; `stats` gives lifecycle counters; `report` adds redacted outcome
+and measured-usage aggregates. Then review the candidate and make the separately
+proposed draft delivery effect:
+
+```sh
+millctl --json review --task product/tasks/TASK.yaml --run <run-id>
+millctl --json pr plan --task product/tasks/TASK.yaml --run <run-id>
+millctl --json pr open --task product/tasks/TASK.yaml --run <run-id> \
+  --approve sha256:<delivery-plan> --attended
+```
+
+Mill never treats these commands as approval to mark ready, merge, deploy, or
+release. See the [glossary](docs/glossary.md) before creating or reviewing
+authority files.
+
+## Expert reference
 
 ### Discover a TypeScript repository
 
@@ -394,10 +436,8 @@ result envelope, and the published JSON schemas. Shell automation should invoke
 the CLI with `--json` and check `ok`, `status`, and `reasons`; it should not
 parse the human-readable formatter.
 
-The package also exports TypeScript modules for repository development and
-experimentation. Those direct JavaScript imports are prerelease APIs and can
-change in a minor Mill release. Build integrations on the CLI and schemas until
-Mill publishes a separately supported library contract.
+Mill does not expose a direct JavaScript library API. Build integrations on the
+CLI and schemas until Mill publishes a separately supported library contract.
 
 ## Trust model
 
@@ -411,9 +451,11 @@ Mill separates four principals:
 | Attended shipper | Push/open a draft; separately approved opt-in readiness/merge | Change the candidate, self-approve, bypass protection, or deploy |
 
 Codex uses your existing Codex CLI session and therefore your own provider
-billing. GitHub operations use your existing `gh` session. Another maintainer
-can clone Mill and use their own Codex and GitHub accounts after the downstream
-repo explicitly allows their identity. Mill stores neither credential.
+billing. GitHub operations use your existing `gh` session by default. A
+repository can instead declare the fixed `MILL_GITHUB_TOKEN` environment name
+for a reviewed fine-grained token. Another maintainer can clone Mill and use
+their own Codex and GitHub accounts after the downstream repo explicitly allows
+their identity. Mill stores neither credential.
 
 Use a separate, repository-scoped GitHub identity where the risk warrants it.
 The [delivery credential guide](docs/delivery-access.md) describes the required
@@ -443,6 +485,7 @@ millctl --json status --run <run-id>
 millctl --json continuation --run <run-id>
 millctl --json timeline --run <run-id>
 millctl --json stats
+millctl --json report
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>

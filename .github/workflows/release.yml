@@ -119,12 +119,14 @@ jobs:
           notes_file="${notes_dir}/${RELEASE_TAG}.md"
           test -d docs && test ! -L docs && test -d "$notes_dir" && test ! -L "$notes_dir" && test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"
       - name: Validate qualification inputs
+        id: validate-qualification-inputs
         env:
           SUPPORT_TUPLE_BASE64: ${{ inputs.support_tuple_base64 }}
           SEQUENCE_BASE64: ${{ inputs.sequence_base64 }}
         run: |
           test -n "$SUPPORT_TUPLE_BASE64"
           test -n "$SEQUENCE_BASE64"
+          node -e 'for(const name of ["SUPPORT_TUPLE_BASE64","SEQUENCE_BASE64"]){const decoded=Buffer.from(process.env[name],"base64").toString("utf8");const value=JSON.parse(decoded);if(typeof value!=="object"||value===null||Array.isArray(value))throw new Error(`${name} must decode to one JSON object`)}'
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

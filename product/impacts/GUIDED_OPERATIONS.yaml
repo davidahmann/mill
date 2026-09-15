@@ -1,0 +1,30 @@
+schemaVersion: "2"
+id: mill-guided-operations
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-15 authorizing the remaining Mill
+  recommendations, documentation rewrite, validation, GitHub/npm release and
+  follow-through to green.
+source_base: 307a4fed29a515de22713354368b590c2d9ed02c
+authority: product/guided-operations.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Adds a read-only guided proposal summary and a redacted operating report.
+  - Adds an optional fixed-name scoped shipper-token reference.
+  - Proves a fixture-only second repair without changing the default limit.
+  - Restricts the package root to documented CLI and schema interfaces.
+  - Corrects release input encoding and preserves the v0.5.0 failed candidate.
+verification:
+  - focused regression tests and full native/package/audit validation
+  - generated schema and workflow-policy checks
+  - full pull-request checks and review feedback
+  - separately authorized v0.6.0 release qualification and provider readback
+exceptions:
+  - No customer/provider-system action, GitHub setting change, token creation,
+    GitHub App, release, publication, or support-matrix expansion occurs under
+    source implementation authority.

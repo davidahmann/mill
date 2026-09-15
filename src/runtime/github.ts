@@ -149,12 +149,13 @@ export interface GitHubAdapter {
 
 interface ProcessLifecycle {
   deadlineMs: number;
+  config?: ProposeConfig;
   signal?: AbortSignal;
   cancellationRequested?: () => boolean;
 }
 
-function commandEnvironment(): NodeJS.ProcessEnv {
-  return {
+function commandEnvironment(config?: ProposeConfig): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {
     HOME: process.env.HOME,
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
     GH_CONFIG_DIR: process.env.GH_CONFIG_DIR,
@@ -171,6 +172,18 @@ function commandEnvironment(): NodeJS.ProcessEnv {
     GIT_PAGER: "cat",
     PAGER: "cat",
   };
+  if (config?.deliveryCredential?.mode === "fine_grained_token") {
+    const token = process.env.MILL_GITHUB_TOKEN;
+    if (token === undefined || token.length === 0) {
+      throw new MillError(
+        "GITHUB_TOKEN_UNAVAILABLE",
+        "The configured GitHub token environment variable is unavailable.",
+        ExitCode.unavailable,
+      );
+    }
+    environment.GH_TOKEN = token;
+  }
+  return environment;
 }
 
 function assertSha(value: unknown, label: string): string {
@@ -402,7 +415,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       executable: gh,
       args,
       cwd: this.#root,
-      env: commandEnvironment(),
+      env: commandEnvironment(lifecycle.config),
       deadlineMs: lifecycle.deadlineMs,
       maxOutputBytes: 4 * 1024 * 1024,
       ...(lifecycle.signal === undefined ? {} : { signal: lifecycle.signal }),
@@ -455,6 +468,7 @@ class GhGitHubAdapter implements GitHubAdapter {
   }): Promise<GitHubBinding> {
     const lifecycle = {
       deadlineMs: input.deadlineMs,
+      config: input.config,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     };
     const [actorValue, repositoryValue] = await Promise.all([
@@ -497,6 +511,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       ],
       {
         deadlineMs: input.deadlineMs,
+        config: input.config,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
       true,
@@ -574,7 +589,7 @@ class GhGitHubAdapter implements GitHubAdapter {
         `${input.candidateCommit}:refs/heads/${input.branch}`,
       ],
       cwd: input.root,
-      env: commandEnvironment(),
+      env: commandEnvironment(input.config),
       deadlineMs: input.deadlineMs,
       maxOutputBytes: 1024 * 1024,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
@@ -620,6 +635,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       ],
       {
         deadlineMs: input.deadlineMs,
+        config: input.config,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
     );
@@ -658,6 +674,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       ],
       {
         deadlineMs: input.deadlineMs,
+        config: input.config,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
         ...(input.cancellationRequested === undefined
           ? {}
@@ -675,6 +692,7 @@ class GhGitHubAdapter implements GitHubAdapter {
   }): Promise<GitHubObservation> {
     const lifecycle = {
       deadlineMs: input.deadlineMs,
+      config: input.config,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     };
     const prefix = `repos/${input.config.owner}/${input.config.repository}`;

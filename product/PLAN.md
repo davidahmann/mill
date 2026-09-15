@@ -41,6 +41,15 @@ migrations, and clarifies worker and delivery-access boundaries. It does not add
 a second worker, expand the repair budget, introduce a daemon or MCP service, or
 change delivery authority or the qualified support matrix.
 
+The [guided operations](guided-operations.md) increment is approved for the
+fresh v0.6.0 candidate. It assembles existing planning drafts without writing
+authority, adds a redacted local outcome report, supports a fixed-name scoped
+shipper token reference, confines a second repair to one fixture, limits the
+packed public API to CLI and schemas, and validates release input encoding. It
+preserves the v0.5.0 failed candidate as evidence and does not add a GitHub App,
+second worker, general retry increase, daemon, MCP service, or public support
+claim.
+
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
 2. **Local delivery:** durable state, disposable worktree, bounded Codex build,

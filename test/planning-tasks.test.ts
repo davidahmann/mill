@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stringify as yaml, parse as parseYaml } from "yaml";
+import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
 import { outcomePlanSchema } from "../src/contracts/schemas.js";
 import { runCli } from "../src/cli-program.js";
 import { compileChangeTasks, applyChangeTasks } from "../src/planning/tasks.js";
@@ -104,6 +105,110 @@ async function requestFixture(kind = "prd", allowedPaths = ["src/value.js"]) {
 }
 
 describe("change-plan task compilation", () => {
+  it("combines reviewed planning drafts without creating authority files", async () => {
+    const { fixture, input } = await requestFixture();
+    try {
+      const product = parseYaml(
+        await readFile(
+          path.join(fixture.root, "product", "contract.yaml"),
+          "utf8",
+        ),
+      ) as Record<string, unknown>;
+      const scenarios = parseYaml(
+        await readFile(
+          path.join(fixture.root, "quality", "scenarios.yaml"),
+          "utf8",
+        ),
+      ) as Record<string, unknown>;
+      const sources = parseYaml(
+        await readFile(
+          path.join(fixture.root, "product", "sources.yaml"),
+          "utf8",
+        ),
+      ) as Record<string, unknown>;
+      const prd = await readFile(
+        path.join(fixture.root, "product", "PRD.md"),
+        "utf8",
+      );
+      const proposal = {
+        schemaVersion: "1",
+        prd: { path: "product/PRD.md", digest: textDigest(prd) },
+        sourceManifestDigest: canonicalDigest(sources as JsonValue),
+        productContract: product,
+        blueprints: [
+          {
+            schemaVersion: "1",
+            id: "fixture-node",
+            productContractDigest: canonicalDigest(product as JsonValue),
+            recipe: "fixture",
+            recipeVersion: "1.0.0",
+            runtime: "node-24",
+            architecture: ["fixture"],
+            risks: [],
+          },
+        ],
+        scenarioSet: scenarios,
+        assumptions: [],
+        contradictions: [],
+        questions: [],
+        status: "proposed",
+      };
+      await writeFile(path.join(fixture.root, "proposal.yaml"), yaml(proposal));
+      await git(fixture.root, ["add", "proposal.yaml"]);
+      await git(fixture.root, ["commit", "-m", "test: add proposal draft"]);
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+      expect(
+        await runCli(
+          [
+            "--json",
+            "--cwd",
+            fixture.root,
+            "init",
+            "propose",
+            "--prd",
+            "product/PRD.md",
+            "--sources",
+            "product/sources.yaml",
+            "--proposal",
+            "proposal.yaml",
+            "--product",
+            "product/contract.yaml",
+            "--scenarios",
+            "quality/scenarios.yaml",
+            "--impact",
+            "product/impact.yaml",
+            "--request",
+            input.requestPath,
+          ],
+          {
+            stdout: { write: (value) => void stdout.push(value) },
+            stderr: { write: (value) => void stderr.push(value) },
+          },
+        ),
+      ).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(JSON.parse(stdout.join(""))).toMatchObject({
+        command: "init.propose",
+        ok: true,
+        status: "ok",
+        data: {
+          mode: "propose_only",
+          requiresApproval: true,
+          summary: { compiledTasks: 1, specificationPromotable: true },
+        },
+      });
+      await expect(
+        readFile(
+          path.join(fixture.root, "product", "tasks", "compiled-value.yaml"),
+          "utf8",
+        ),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it.each(["intent", "applied"])(
     "abandons %s only after preserving partial output on its exact clean branch",
     async (state) => {

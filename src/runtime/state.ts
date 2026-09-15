@@ -991,9 +991,19 @@ export class StateStore {
     return this.getRun(id);
   }
 
-  beginRepair(id: string): RunRecord {
+  beginRepair(id: string, maximumRepairGenerations = 1): RunRecord {
     this.#transaction(() => {
       const current = this.getRun(id);
+      if (
+        !Number.isInteger(maximumRepairGenerations) ||
+        ![1, 2].includes(maximumRepairGenerations)
+      ) {
+        throw new MillError(
+          "INVALID_REPAIR_BUDGET",
+          "Repair generations must use the standard limit or the fixture-only experiment limit.",
+          ExitCode.configuration,
+        );
+      }
       assertEffectAllowsNewWork(current);
       if (current.cancelRequested) {
         throw new MillError(
@@ -1002,10 +1012,13 @@ export class StateStore {
           ExitCode.temporary,
         );
       }
-      if (current.status !== "blocked" || current.repairCount >= 1) {
+      if (
+        current.status !== "blocked" ||
+        current.repairCount >= maximumRepairGenerations
+      ) {
         throw new MillError(
           "REPAIR_BUDGET_EXHAUSTED",
-          "The single systemic repair budget is exhausted or the run is not blocked.",
+          "The approved repair budget is exhausted or the run is not blocked.",
           ExitCode.configuration,
         );
       }
@@ -1018,6 +1031,7 @@ export class StateStore {
         from: current.status,
         to: "running",
         repairCount: current.repairCount + 1,
+        maximumRepairGenerations,
         candidateCommit: current.candidateCommit ?? null,
         failureCode: current.blockCode ?? null,
         validationJson: current.validationJson ?? null,
@@ -2002,6 +2016,7 @@ export async function restoreStateBackup(
         integrity?.integrity_check !== "ok" ||
         (version?.value !== "1" &&
           version?.value !== "2" &&
+          version?.value !== "3" &&
           version?.value !== String(CURRENT_STATE_SCHEMA_VERSION)) ||
         new Set(requiredObjects.map((object) => object.name)).size !==
           (version.value === "1" ? 6 : version.value === "2" ? 12 : 13)

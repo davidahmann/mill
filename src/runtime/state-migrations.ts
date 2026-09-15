@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { ExitCode, MillError } from "../errors.js";
 
-export const CURRENT_STATE_SCHEMA_VERSION = 3;
+export const CURRENT_STATE_SCHEMA_VERSION = 4;
 
 export interface AppliedStateMigration {
   version: number;
@@ -120,6 +120,58 @@ function addV2RunColumns(database: DatabaseSync): void {
   }
 }
 
+function expandRepairCount(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE runs_v4 (
+      id TEXT PRIMARY KEY,
+      repository_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      task_digest TEXT NOT NULL,
+      config_digest TEXT NOT NULL,
+      status TEXT NOT NULL,
+      base_commit TEXT NOT NULL,
+      worktree_path TEXT,
+      context_digest TEXT,
+      context_json TEXT,
+      control_json TEXT,
+      candidate_commit TEXT,
+      candidate_tree TEXT,
+      deadline_at TEXT NOT NULL,
+      active_process_id TEXT,
+      active_pid INTEGER,
+      active_process_group INTEGER,
+      active_process_identity TEXT,
+      cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0, 1)),
+      repair_count INTEGER NOT NULL DEFAULT 0 CHECK(repair_count BETWEEN 0 AND 2),
+      attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count BETWEEN 0 AND 2),
+      block_code TEXT,
+      validation_json TEXT,
+      review_json TEXT,
+      delivery_json TEXT,
+      remote_feedback_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    INSERT INTO runs_v4 (
+      id, repository_id, task_id, task_digest, config_digest, status, base_commit,
+      worktree_path, context_digest, context_json, control_json, candidate_commit,
+      candidate_tree, deadline_at, active_process_id, active_pid,
+      active_process_group, active_process_identity, cancel_requested, repair_count,
+      attempt_count, block_code, validation_json, review_json, delivery_json,
+      remote_feedback_json, created_at, updated_at
+    ) SELECT
+      id, repository_id, task_id, task_digest, config_digest, status, base_commit,
+      worktree_path, context_digest, context_json, control_json, candidate_commit,
+      candidate_tree, deadline_at, active_process_id, active_pid,
+      active_process_group, active_process_identity, cancel_requested, repair_count,
+      attempt_count, block_code, validation_json, review_json, delivery_json,
+      remote_feedback_json, created_at, updated_at
+    FROM runs;
+    DROP TABLE runs;
+    ALTER TABLE runs_v4 RENAME TO runs;
+  `);
+}
+
 const stateMigrations: readonly StateMigration[] = [
   {
     version: 1,
@@ -135,6 +187,11 @@ const stateMigrations: readonly StateMigration[] = [
     version: 3,
     name: "numbered-migration-ledger",
     apply: () => undefined,
+  },
+  {
+    version: 4,
+    name: "fixture-only-second-repair-capacity",
+    apply: expandRepairCount,
   },
 ];
 
@@ -237,7 +294,10 @@ function validateRecordedMigrations(
 
 export function applyStateMigrations(database: DatabaseSync): void {
   let transactionStarted = false;
+  let foreignKeysDisabled = false;
   try {
+    database.exec("PRAGMA foreign_keys = OFF");
+    foreignKeysDisabled = true;
     database.exec("BEGIN IMMEDIATE");
     transactionStarted = true;
     database.exec(`
@@ -267,6 +327,18 @@ export function applyStateMigrations(database: DatabaseSync): void {
     }
     database.exec("COMMIT");
     transactionStarted = false;
+    database.exec("PRAGMA foreign_keys = ON");
+    foreignKeysDisabled = false;
+    const foreignKeyViolation = database
+      .prepare("PRAGMA foreign_key_check")
+      .get();
+    if (foreignKeyViolation !== undefined) {
+      throw new MillError(
+        "STATE_MIGRATION_FOREIGN_KEY_FAILURE",
+        "Operational state migration produced an invalid foreign-key reference.",
+        ExitCode.data,
+      );
+    }
   } catch (error) {
     if (transactionStarted) {
       try {
@@ -282,6 +354,8 @@ export function applyStateMigrations(database: DatabaseSync): void {
       ExitCode.io,
       { cause: String(error) },
     );
+  } finally {
+    if (foreignKeysDisabled) database.exec("PRAGMA foreign_keys = ON");
   }
 }
 
