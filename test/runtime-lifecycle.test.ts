@@ -36,10 +36,11 @@ const original = {
   docker: process.env.MILL_DOCKER_PATH,
 };
 const execFileAsync = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 async function git(root: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",

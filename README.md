@@ -78,9 +78,13 @@ For its one qualified shape, Mill can:
     names the next attended safe action without taking it;
 13. report the built-in builder's trusted-host boundary and reject an
     unqualified request for isolated execution rather than silently claiming
-    containment. Mill does not autonomously research the web or invent a product
-    specification in this alpha. The operator supplies the structured proposal
-    that Mill assesses and freezes.
+    containment; and
+14. report redacted aggregate lifecycle, attempt and repair counts for the
+    current repository with `millctl stats`.
+
+Mill does not autonomously research the web or invent a product specification in
+this alpha. The operator supplies the structured proposal that Mill assesses and
+freezes.
 
 ## Repository playbooks, run timelines and outcomes
 
@@ -182,6 +186,22 @@ npx --no-install millctl doctor --mode inspect
 npx --no-install millctl inspect --prd product/PRD.md
 npx --no-install millctl adopt --scan-only
 ```
+
+If the repository already has one approved ready outcome, use the shortest
+attended delivery route:
+
+```sh
+millctl --json start --prd product/PRD.md --attended
+millctl --json status
+millctl --json stats
+```
+
+`start` selects that one outcome or resumes its existing lifecycle. It checks
+authority before dependency or model spend. `status` explains the selected run;
+`stats` gives a redacted aggregate for the repository. None of these commands
+approve a push, pull request, merge or release. Use the expert sequence below
+when you need to inspect each boundary. See the [glossary](docs/glossary.md)
+before creating or reviewing authority files.
 
 ### Discover a TypeScript repository
 
@@ -367,6 +387,18 @@ conditions and outstanding live evidence for delivery
 `01801a1b-58f9-480f-8cee-54ea2bbeabb2`. Human readiness, merge authority, and
 exact candidate/tree checks remain required.
 
+## Public interface
+
+The supported programmatic surface is the `millctl` CLI, its versioned JSON
+result envelope, and the published JSON schemas. Shell automation should invoke
+the CLI with `--json` and check `ok`, `status`, and `reasons`; it should not
+parse the human-readable formatter.
+
+The package also exports TypeScript modules for repository development and
+experimentation. Those direct JavaScript imports are prerelease APIs and can
+change in a minor Mill release. Build integrations on the CLI and schemas until
+Mill publishes a separately supported library contract.
+
 ## Trust model
 
 Mill separates four principals:
@@ -382,6 +414,11 @@ Codex uses your existing Codex CLI session and therefore your own provider
 billing. GitHub operations use your existing `gh` session. Another maintainer
 can clone Mill and use their own Codex and GitHub accounts after the downstream
 repo explicitly allows their identity. Mill stores neither credential.
+
+Use a separate, repository-scoped GitHub identity where the risk warrants it.
+The [delivery credential guide](docs/delivery-access.md) describes the required
+review and current limits. Mill does not inspect or attest the permissions of
+the `gh` session it invokes.
 
 The Codex worker runs on the trusted host with a workspace-write sandbox. This
 is not containment against hostile code, host files, keychains, processes, or
@@ -405,6 +442,7 @@ interrupted, inspect before acting:
 millctl --json status --run <run-id>
 millctl --json continuation --run <run-id>
 millctl --json timeline --run <run-id>
+millctl --json stats
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>

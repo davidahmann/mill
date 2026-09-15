@@ -47,7 +47,7 @@ allowed_paths:
   - package-lock.json
   - vitest.config.ts
 forbidden_paths:
-  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - docs/history/TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
   - .env*
   - .mill/**
   - .github/workflows/release.yml

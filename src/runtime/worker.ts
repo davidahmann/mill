@@ -8,6 +8,7 @@ import type {
 } from "../contracts/schemas.js";
 import { workerInvocationSchema } from "../contracts/schemas.js";
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
+import { ExitCode, MillError } from "../errors.js";
 import type { ContextManifest } from "./context.js";
 import type { TaskPacket } from "./inputs.js";
 import type { ActiveProcess } from "./process.js";
@@ -51,7 +52,7 @@ export interface ReviewerWorkerInput extends WorkerLifecycle {
 }
 
 export interface WorkerAdapter {
-  readonly id: "codex-cli";
+  readonly id: string;
   profile(root: string, role: WorkerProfile["role"]): Promise<WorkerProfile>;
   runBuilder(input: BuilderWorkerInput): Promise<{
     usage: ProviderUsage;
@@ -61,6 +62,48 @@ export interface WorkerAdapter {
     review: z.infer<typeof reviewResultSchema>;
     usage: ProviderUsage;
   }>;
+}
+
+/**
+ * The registry is deliberately small: registering an adapter only makes its
+ * implementation selectable by runtime code. It does not expand a task
+ * schema, grant credentials, or qualify a new isolation boundary.
+ */
+export class WorkerAdapterRegistry {
+  readonly #adapters: ReadonlyMap<string, WorkerAdapter>;
+
+  constructor(adapters: readonly WorkerAdapter[]) {
+    const entries = new Map<string, WorkerAdapter>();
+    for (const adapter of adapters) {
+      if (entries.has(adapter.id)) {
+        throw new MillError(
+          "DUPLICATE_WORKER_ADAPTER",
+          "A worker adapter identifier may be registered only once.",
+          ExitCode.configuration,
+          { adapterId: adapter.id },
+        );
+      }
+      entries.set(adapter.id, adapter);
+    }
+    this.#adapters = entries;
+  }
+
+  ids(): string[] {
+    return [...this.#adapters.keys()].sort();
+  }
+
+  require(id: string): WorkerAdapter {
+    const adapter = this.#adapters.get(id);
+    if (adapter === undefined) {
+      throw new MillError(
+        "WORKER_ADAPTER_UNAVAILABLE",
+        "The requested worker adapter is not registered.",
+        ExitCode.configuration,
+        { adapterId: id, registeredAdapterIds: this.ids() },
+      );
+    }
+    return adapter;
+  }
 }
 
 export function createWorkerInvocation(input: {

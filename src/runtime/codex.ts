@@ -33,6 +33,7 @@ import type {
   WorkerAdapter,
   WorkerProfile,
 } from "./worker.js";
+import { WorkerAdapterRegistry } from "./worker.js";
 
 export type { ProviderUsage } from "./worker.js";
 
@@ -655,3 +656,7 @@ export const codexWorkerAdapter: WorkerAdapter = {
   runBuilder: runCodexBuilder,
   runReviewer: runCodexReview,
 };
+
+export const codexWorkerAdapters = new WorkerAdapterRegistry([
+  codexWorkerAdapter,
+]);

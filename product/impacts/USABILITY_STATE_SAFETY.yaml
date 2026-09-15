@@ -1,0 +1,27 @@
+schemaVersion: "2"
+id: mill-usability-state-safety
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-15 authorizing a temporary plan,
+  implementation, validation, cross-check, green delivery, release and
+  documentation update.
+source_base: 20623a29fc9b317fa17a9e82237d7ac5a681ff79
+authority: product/usability-state-safety.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+material_changes:
+  - Documents the existing attended entry path and the supported public API.
+  - Replaces implicit local-state version handling with recorded migrations.
+  - Adds a redacted aggregate state view without a new external effect.
+  - Makes current worker and delivery credential limits explicit.
+verification:
+  - migration, aggregate-view, JSON-envelope, canonical JSON and safe-path tests
+  - native check, package inspection, generated schemas and exact-candidate
+    audit
+  - independent complete-diff review and green pull-request checks
+exceptions:
+  - No provider credential, GitHub setting, release, customer system or remote
+    action occurs under this implementation authority.

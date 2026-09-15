@@ -25,6 +25,7 @@ import { textDigest } from "../src/runtime/inputs.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 
 const execute = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 const saved = {
   MILL_STATE_HOME: process.env.MILL_STATE_HOME,
   MILL_CODEX_PATH: process.env.MILL_CODEX_PATH,
@@ -361,7 +362,7 @@ if (sandbox < 0 || args[sandbox + 1] !== (args.includes("--output-schema") ? "re
 const cwd = args[args.indexOf("--cd") + 1];
 let prompt = ""; for await (const chunk of process.stdin) prompt += chunk;
 if (args.includes("--output-schema")) {
-  const candidateCommit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
+  const candidateCommit = execFileSync(${JSON.stringify(gitExecutable)}, ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
   const scope = JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0] ?? "null");
   const output = args[args.indexOf("--output-last-message") + 1];
   await writeFile(output, JSON.stringify({ schemaVersion: "1", candidateCommit, scope, summary: "clean", findings: [] }), { mode: 0o600 });
@@ -440,7 +441,7 @@ if (command === "preservation") {
   );
   await chmod(fixture.dockerPath, 0o755);
   await execute(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Replay",
@@ -452,7 +453,7 @@ if (command === "preservation") {
     { cwd: fixture.root },
   );
   await execute(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Replay",

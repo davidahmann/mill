@@ -25,6 +25,7 @@ const auditCategories = [
   "operations",
   "release",
 ] as const;
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 function commit(character: string): string {
   return character.repeat(40);
@@ -254,7 +255,7 @@ describe("public-alpha longitudinal qualification", () => {
   it("exposes the assessment through the stable CLI envelope", async () => {
     const temporary = await temporaryDirectory("mill-public-alpha-cli-");
     try {
-      execFileSync("/usr/bin/git", ["init", "--quiet"], {
+      execFileSync(gitExecutable, ["init", "--quiet"], {
         cwd: temporary.path,
       });
       await writeFile(

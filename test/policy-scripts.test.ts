@@ -28,6 +28,7 @@ const artifactMetadataSchema = z.object({
   builders: z.array(z.object({ contentsDigest: z.string() })).length(2),
   selectedArtifact: z.object({ filename: z.string() }),
 });
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 function run(
   executable: string,
@@ -55,7 +56,7 @@ function run(
 }
 
 function git(arguments_: readonly string[], cwd: string): string {
-  const result = run("/usr/bin/git", arguments_, cwd);
+  const result = run(gitExecutable, arguments_, cwd);
   if (result.status !== 0) {
     throw new Error(`git ${arguments_.join(" ")} failed: ${result.stderr}`);
   }

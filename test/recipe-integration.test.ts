@@ -55,6 +55,7 @@ const execFileAsync = promisify(execFile);
 const originalDocker = process.env.MILL_DOCKER_PATH;
 const originalGit = process.env.MILL_GIT_PATH;
 const originalStateHome = process.env.MILL_STATE_HOME;
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 function capture() {
   const stdout: string[] = [];
@@ -80,7 +81,7 @@ afterEach(() => {
 
 async function git(root: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
@@ -147,7 +148,7 @@ async function cancellingGit(directory: string): Promise<string> {
     `#!${process.execPath}
 const {spawnSync}=require("node:child_process");
 const args=process.argv.slice(2);
-const result=spawnSync("/usr/bin/git",args,{env:process.env,stdio:"inherit"});
+const result=spawnSync(${JSON.stringify(gitExecutable)},args,{env:process.env,stdio:"inherit"});
 if(result.status===0&&args.includes("commit"))process.kill(process.ppid,"SIGINT");
 process.exit(result.status??1);
 `,

@@ -48,6 +48,184 @@ function startWorkerInvocation(
 }
 
 describe("operational state", () => {
+  it.each(["1", "2"])(
+    "migrates supported v%s state to the numbered current schema without losing runs",
+    async (legacyVersion) => {
+      const temporary = await temporaryDirectory("mill-state-migration-");
+      process.env.MILL_STATE_HOME = temporary.path;
+      const repositoryId = "11111111-1111-4111-8111-111111111111";
+      const store = await StateStore.open(repositoryId, temporary.path);
+      const run = store.createRun({
+        repositoryId,
+        taskId: "preserved-run",
+        taskDigest: `sha256:${"a".repeat(64)}`,
+        configDigest: `sha256:${"b".repeat(64)}`,
+        baseCommit: "c".repeat(40),
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const databasePath = store.databasePath;
+      store.close();
+      const database = new DatabaseSync(databasePath);
+      try {
+        database.exec("DELETE FROM schema_migrations");
+        database
+          .prepare("UPDATE metadata SET value = ? WHERE key = 'schema_version'")
+          .run(legacyVersion);
+      } finally {
+        database.close();
+      }
+      const migrated = await StateStore.open(repositoryId, temporary.path);
+      try {
+        expect(migrated.getRun(run.id)).toMatchObject({
+          id: run.id,
+          taskId: "preserved-run",
+        });
+        expect(migrated.stats()).toMatchObject({
+          schemaVersion: 3,
+          migrations: [
+            { version: 1, name: "initial-durable-state" },
+            { version: 2, name: "worker-and-delivery-recovery-columns" },
+            { version: 3, name: "numbered-migration-ledger" },
+          ],
+          runs: { total: 1 },
+        });
+      } finally {
+        migrated.close();
+        await temporary.cleanup();
+      }
+    },
+  );
+
+  it("blocks a future state schema before using local records", async () => {
+    const temporary = await temporaryDirectory("mill-state-schema-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const databasePath = store.databasePath;
+    store.close();
+    const database = new DatabaseSync(databasePath);
+    try {
+      database
+        .prepare("UPDATE metadata SET value = '4' WHERE key = 'schema_version'")
+        .run();
+    } finally {
+      database.close();
+    }
+    await expect(
+      StateStore.open(repositoryId, temporary.path),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED_STATE_SCHEMA",
+    });
+    await temporary.cleanup();
+  });
+
+  it("does not write a migration ledger into an unsupported future state", async () => {
+    const temporary = await temporaryDirectory("mill-state-future-schema-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const databasePath = store.databasePath;
+    store.close();
+    const database = new DatabaseSync(databasePath);
+    try {
+      database.exec("DROP TABLE schema_migrations");
+      database
+        .prepare("UPDATE metadata SET value = '4' WHERE key = 'schema_version'")
+        .run();
+    } finally {
+      database.close();
+    }
+    await expect(
+      StateStore.open(repositoryId, temporary.path),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED_STATE_SCHEMA",
+    });
+    const unchanged = new DatabaseSync(databasePath);
+    try {
+      const ledger = unchanged
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+        )
+        .get();
+      expect(ledger).toBeUndefined();
+    } finally {
+      unchanged.close();
+      await temporary.cleanup();
+    }
+  });
+
+  it("blocks a current schema whose migration ledger is incomplete", async () => {
+    const temporary = await temporaryDirectory("mill-state-ledger-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const databasePath = store.databasePath;
+    store.close();
+    const database = new DatabaseSync(databasePath);
+    try {
+      database.exec("DELETE FROM schema_migrations WHERE version = 2");
+    } finally {
+      database.close();
+    }
+    await expect(
+      StateStore.open(repositoryId, temporary.path),
+    ).rejects.toMatchObject({
+      code: "STATE_MIGRATION_INCOMPLETE",
+    });
+    await temporary.cleanup();
+  });
+
+  it("rejects a current backup whose migration ledger was tampered with", async () => {
+    const temporary = await temporaryDirectory("mill-state-backup-ledger-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const backupPath = await store.backup();
+    store.close();
+    const backup = new DatabaseSync(backupPath);
+    try {
+      backup.exec("DELETE FROM schema_migrations WHERE version = 3");
+    } finally {
+      backup.close();
+    }
+    await expect(
+      restoreStateBackup(repositoryId, temporary.path, backupPath),
+    ).rejects.toMatchObject({ code: "INVALID_STATE_BACKUP" });
+    await temporary.cleanup();
+  });
+
+  it("does not project an unknown status from corrupted local state", async () => {
+    const temporary = await temporaryDirectory("mill-state-status-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const store = await StateStore.open(repositoryId, temporary.path);
+    const run = store.createRun({
+      repositoryId,
+      taskId: "status-check",
+      taskDigest: `sha256:${"a".repeat(64)}`,
+      configDigest: `sha256:${"b".repeat(64)}`,
+      baseCommit: "c".repeat(40),
+      deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const databasePath = store.databasePath;
+    store.close();
+    const database = new DatabaseSync(databasePath);
+    try {
+      database
+        .prepare("UPDATE runs SET status = 'unknown' WHERE id = ?")
+        .run(run.id);
+    } finally {
+      database.close();
+    }
+    const reopened = await StateStore.open(repositoryId, temporary.path);
+    try {
+      expect(() => reopened.stats()).toThrow(/unknown run status/u);
+    } finally {
+      reopened.close();
+      await temporary.cleanup();
+    }
+  });
+
   it("backs up authority intents, rejects poisoned paths and prevents uncommitted purge", async () => {
     const temporary = await temporaryDirectory("mill-authority-state-");
     process.env.MILL_STATE_HOME = temporary.path;

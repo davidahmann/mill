@@ -27,6 +27,13 @@ import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
 import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
 import {
+  applyStateMigrations,
+  assertCurrentStateMigrations,
+  CURRENT_STATE_SCHEMA_VERSION,
+  stateMigrationHistory,
+  type AppliedStateMigration,
+} from "./state-migrations.js";
+import {
   assertEffectAllowsNewWork,
   externalEffectBoundary,
   reconcilableDraftEffect,
@@ -168,6 +175,17 @@ export type PublicRunRecord = Omit<
   | "reviewJson"
 >;
 
+export interface StateStats {
+  schemaVersion: number;
+  migrations: AppliedStateMigration[];
+  runs: {
+    total: number;
+    byStatus: Record<RunStatus, number>;
+    builderAttempts: number;
+    repairs: number;
+  };
+}
+
 export function publicRunRecord(run: RunRecord): PublicRunRecord {
   const publicRun = { ...run };
   delete publicRun.worktreePath;
@@ -213,6 +231,26 @@ interface RunRow {
   created_at: string;
   updated_at: string;
 }
+
+const runStatuses = [
+  "approved",
+  "ready",
+  "running",
+  "committed",
+  "verified",
+  "reviewed",
+  "proposing",
+  "effect_unknown",
+  "awaiting_ci",
+  "awaiting_human",
+  "merged",
+  "post_merge_verified",
+  "closed",
+  "blocked",
+  "cancelled",
+  "failed",
+  "stale",
+] as const satisfies readonly RunStatus[];
 
 const terminal = new Set<RunStatus>(["closed", "cancelled", "failed", "stale"]);
 
@@ -412,115 +450,13 @@ export class StateStore {
       PRAGMA synchronous = FULL;
       PRAGMA foreign_keys = ON;
       PRAGMA trusted_schema = OFF;
-      CREATE TABLE IF NOT EXISTS metadata (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      ) STRICT;
-      INSERT OR IGNORE INTO metadata(key, value) VALUES ('schema_version', '2');
-      CREATE TABLE IF NOT EXISTS runs (
-        id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
-        task_digest TEXT NOT NULL,
-        config_digest TEXT NOT NULL,
-        status TEXT NOT NULL,
-        base_commit TEXT NOT NULL,
-        worktree_path TEXT,
-        context_digest TEXT,
-        context_json TEXT,
-        control_json TEXT,
-        candidate_commit TEXT,
-        candidate_tree TEXT,
-        deadline_at TEXT NOT NULL,
-        active_process_id TEXT,
-        active_pid INTEGER,
-        active_process_group INTEGER,
-        active_process_identity TEXT,
-        cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0, 1)),
-        repair_count INTEGER NOT NULL DEFAULT 0 CHECK(repair_count BETWEEN 0 AND 1),
-        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count BETWEEN 0 AND 2),
-        block_code TEXT,
-        validation_json TEXT,
-        review_json TEXT,
-        delivery_json TEXT,
-        remote_feedback_json TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      ) STRICT;
-      CREATE TABLE IF NOT EXISTS run_events (
-        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-        run_id TEXT NOT NULL REFERENCES runs(id),
-        occurred_at TEXT NOT NULL,
-        type TEXT NOT NULL,
-        data_json TEXT NOT NULL
-      ) STRICT;
-      CREATE TABLE IF NOT EXISTS baseline_qualifications (
-        approval_digest TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL,
-        task_digest TEXT NOT NULL,
-        config_digest TEXT NOT NULL,
-        base_commit TEXT NOT NULL,
-        evidence_digest TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      ) STRICT;
-      CREATE TABLE IF NOT EXISTS worker_invocations (
-        id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL REFERENCES runs(id),
-        phase TEXT NOT NULL,
-        envelope_digest TEXT NOT NULL,
-        envelope_json TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      ) STRICT;
-      CREATE TABLE IF NOT EXISTS worker_invocation_events (
-        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-        invocation_id TEXT NOT NULL REFERENCES worker_invocations(id),
-        occurred_at TEXT NOT NULL,
-        type TEXT NOT NULL,
-        data_json TEXT NOT NULL
-      ) STRICT;
-      CREATE TRIGGER IF NOT EXISTS run_events_no_update
-        BEFORE UPDATE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
-      CREATE TRIGGER IF NOT EXISTS run_events_no_delete
-        BEFORE DELETE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
-      CREATE TRIGGER IF NOT EXISTS worker_invocations_no_update
-        BEFORE UPDATE ON worker_invocations BEGIN SELECT RAISE(ABORT, 'worker invocations are immutable'); END;
-      CREATE TRIGGER IF NOT EXISTS worker_invocations_no_delete
-        BEFORE DELETE ON worker_invocations BEGIN SELECT RAISE(ABORT, 'worker invocations are immutable'); END;
-      CREATE TRIGGER IF NOT EXISTS worker_invocation_events_no_update
-        BEFORE UPDATE ON worker_invocation_events BEGIN SELECT RAISE(ABORT, 'worker invocation events are append-only'); END;
-      CREATE TRIGGER IF NOT EXISTS worker_invocation_events_no_delete
-        BEFORE DELETE ON worker_invocation_events BEGIN SELECT RAISE(ABORT, 'worker invocation events are append-only'); END;
     `);
-    const runColumns = database
-      .prepare("PRAGMA table_info(runs)")
-      .all() as unknown as { name: string }[];
-    for (const column of [
-      "active_process_id TEXT",
-      "active_process_group INTEGER",
-      "active_process_identity TEXT",
-      "delivery_json TEXT",
-      "remote_feedback_json TEXT",
-    ]) {
-      const name = column.split(" ")[0];
-      if (!runColumns.some((candidate) => candidate.name === name)) {
-        database.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
-      }
-    }
-    const version = database
-      .prepare("SELECT value FROM metadata WHERE key = 'schema_version'")
-      .get() as { value?: string } | undefined;
-    if (version?.value !== "1" && version?.value !== "2") {
+    try {
+      applyStateMigrations(database);
+      assertCurrentStateMigrations(database);
+    } catch (error) {
       database.close();
-      throw new MillError(
-        "UNSUPPORTED_STATE_SCHEMA",
-        "Operational state uses an unsupported schema version.",
-        ExitCode.configuration,
-      );
-    }
-    if (version.value === "1") {
-      database
-        .prepare("UPDATE metadata SET value = '2' WHERE key = 'schema_version'")
-        .run();
+      throw error;
     }
     await chmod(databasePath, 0o600);
     return new StateStore(directory, database);
@@ -531,6 +467,44 @@ export class StateStore {
       this.#database.close();
       this.#closed = true;
     }
+  }
+
+  stats(): StateStats {
+    const byStatus = Object.fromEntries(
+      runStatuses.map((status) => [status, 0]),
+    ) as Record<RunStatus, number>;
+    const rows = this.#database
+      .prepare(
+        `SELECT status, COUNT(*) AS count
+         FROM runs GROUP BY status`,
+      )
+      .all() as unknown as { status: RunStatus; count: number }[];
+    for (const row of rows) {
+      if (!runStatuses.includes(row.status)) {
+        throw new MillError(
+          "INVALID_RUN_STATUS",
+          "Operational state contains an unknown run status.",
+          ExitCode.data,
+        );
+      }
+      byStatus[row.status] = row.count;
+    }
+    const totals = this.#database
+      .prepare(
+        `SELECT COUNT(*) AS total, COALESCE(SUM(attempt_count), 0) AS builder_attempts,
+                COALESCE(SUM(repair_count), 0) AS repairs FROM runs`,
+      )
+      .get() as { total: number; builder_attempts: number; repairs: number };
+    return {
+      schemaVersion: CURRENT_STATE_SCHEMA_VERSION,
+      migrations: stateMigrationHistory(this.#database),
+      runs: {
+        total: totals.total,
+        byStatus,
+        builderAttempts: totals.builder_attempts,
+        repairs: totals.repairs,
+      },
+    };
   }
 
   createRun(input: {
@@ -2011,6 +1985,7 @@ export async function restoreStateBackup(
            WHERE (type = 'table' AND name IN ('metadata', 'runs', 'run_events'))
               OR (type = 'table' AND name = 'baseline_qualifications')
               OR (type = 'table' AND name IN ('worker_invocations', 'worker_invocation_events'))
+              OR (type = 'table' AND name = 'schema_migrations')
               OR (type = 'trigger' AND name IN (
                 'run_events_no_update', 'run_events_no_delete',
                 'worker_invocations_no_update', 'worker_invocations_no_delete',
@@ -2025,11 +2000,16 @@ export async function restoreStateBackup(
         .all() as unknown as { worktree_path: string }[];
       if (
         integrity?.integrity_check !== "ok" ||
-        (version?.value !== "1" && version?.value !== "2") ||
+        (version?.value !== "1" &&
+          version?.value !== "2" &&
+          version?.value !== String(CURRENT_STATE_SCHEMA_VERSION)) ||
         new Set(requiredObjects.map((object) => object.name)).size !==
-          (version.value === "1" ? 6 : 12)
+          (version.value === "1" ? 6 : version.value === "2" ? 12 : 13)
       ) {
         throw new Error("backup integrity, schema version, or objects invalid");
+      }
+      if (version.value === String(CURRENT_STATE_SCHEMA_VERSION)) {
+        assertCurrentStateMigrations(candidate);
       }
       const worktreesDirectory = path.join(directory, "worktrees");
       const plans = candidate

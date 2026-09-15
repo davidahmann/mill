@@ -33,6 +33,7 @@ import { runtimeFixture } from "./runtime-fixture.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 const originalDocker = process.env.MILL_DOCKER_PATH;
 
 afterEach(() => {
@@ -42,7 +43,7 @@ afterEach(() => {
 
 async function git(root: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",

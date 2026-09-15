@@ -49,6 +49,7 @@ import {
   resumeRun,
   reviewRun,
   runOutcome,
+  runStats,
   runStatus,
   runTimeline,
   startLocalRun,
@@ -1300,6 +1301,26 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         io,
         global.json === true,
         commandResult({ command: "status", ok: true, data }),
+      );
+    });
+
+  program
+    .command("stats")
+    .description(
+      "report redacted aggregate lifecycle, attempt and repair counts for this repository",
+    )
+    .action(async () => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "stats",
+          ok: true,
+          data: await runStats({ root }),
+        }),
       );
     });
 

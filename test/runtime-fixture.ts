@@ -9,10 +9,11 @@ import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 async function git(root: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Mill Test",
@@ -330,7 +331,7 @@ const index=args.indexOf("--cd");
 const cwd=index>=0?args[index+1]:process.cwd();
 let prompt="";for await(const chunk of process.stdin){prompt+=chunk}
 if(args.includes("--output-schema")){
-  const candidate=execFileSync("/usr/bin/git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
+  const candidate=execFileSync(${JSON.stringify(gitExecutable)},["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   ${reviewer}
   const scope=JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0]??"null");
   const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:findings.length?"repair required":"clean",findings});

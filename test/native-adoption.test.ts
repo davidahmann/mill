@@ -12,6 +12,7 @@ import {
 import { temporaryDirectory } from "./helpers.js";
 
 const execute = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 const original = process.env.MILL_STATE_HOME;
 afterEach(() => {
   if (original === undefined) delete process.env.MILL_STATE_HOME;
@@ -19,7 +20,7 @@ afterEach(() => {
 });
 const git = (root: string, args: string[]) =>
   execute(
-    "/usr/bin/git",
+    gitExecutable,
     [
       "-c",
       "user.name=Native Test",

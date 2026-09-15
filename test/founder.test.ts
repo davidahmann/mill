@@ -27,6 +27,7 @@ const originalEnvironment = {
   state: process.env.MILL_STATE_HOME,
 };
 const execFileAsync = promisify(execFile);
+const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
 
 afterEach(() => {
   if (originalEnvironment.codex === undefined)
@@ -181,7 +182,7 @@ describe("founder workflow", { concurrent: false }, () => {
         }),
       );
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -193,7 +194,7 @@ describe("founder workflow", { concurrent: false }, () => {
         { cwd: fixture.root },
       );
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -382,7 +383,7 @@ describe("founder workflow", { concurrent: false }, () => {
         planSource.replace(fixture.taskPath, otherTaskPath),
       );
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -395,7 +396,7 @@ describe("founder workflow", { concurrent: false }, () => {
         { cwd: fixture.root },
       );
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -519,7 +520,7 @@ describe("founder workflow", { concurrent: false }, () => {
         "export const value = 0;\n",
       );
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",
@@ -532,7 +533,7 @@ describe("founder workflow", { concurrent: false }, () => {
         { cwd: baseline.root },
       );
       await execFileAsync(
-        "/usr/bin/git",
+        gitExecutable,
         [
           "-c",
           "user.name=Mill Test",

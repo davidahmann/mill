@@ -39,7 +39,7 @@ allowed_paths:
   - eslint.config.js
   - package.json
 forbidden_paths:
-  - TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
+  - docs/history/TEMP_MILL_GREENFIELD_WORK_PLAN_2026-08-31.md
   - .env*
   - .github/workflows/release.yml
 acceptance_items:
