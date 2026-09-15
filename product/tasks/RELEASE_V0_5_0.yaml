@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-release-v0.5.0
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 99c987040f3d81e07b01b96e459d8103ab340147
 execution_mode: approved_native_maintainer
@@ -48,3 +48,11 @@ constraints:
 stop_conditions:
   - ambiguous tag, tree, artifact, candidate-run, provenance or provider effect
   - unavailable independent verification or recurring P0/P1 release finding
+closure:
+  status: failed_candidate_preserved
+  recorded_at: 2026-09-15
+  candidate_run: https://github.com/davidahmann/mill/actions/runs/35019460189
+  disposition: >-
+    Qualification rejected malformed manually constructed JSON input before npm
+    publication or GitHub Release creation. The immutable v0.5.0 tag and failed
+    candidate remain evidence; v0.6.0 requires fresh reviewed authority.

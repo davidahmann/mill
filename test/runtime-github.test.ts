@@ -11,12 +11,15 @@ import { temporaryDirectory } from "./helpers.js";
 
 const originalGh = process.env.MILL_GH_PATH;
 const originalGit = process.env.MILL_GIT_PATH;
+const originalToken = process.env.MILL_GITHUB_TOKEN;
 
 afterEach(() => {
   if (originalGh === undefined) delete process.env.MILL_GH_PATH;
   else process.env.MILL_GH_PATH = originalGh;
   if (originalGit === undefined) delete process.env.MILL_GIT_PATH;
   else process.env.MILL_GIT_PATH = originalGit;
+  if (originalToken === undefined) delete process.env.MILL_GITHUB_TOKEN;
+  else process.env.MILL_GITHUB_TOKEN = originalToken;
 });
 
 const sha = "a".repeat(40);
@@ -53,6 +56,7 @@ describe("GitHub CLI adapter", () => {
 import {appendFileSync,existsSync,readFileSync} from "node:fs";
 const modeUrl=new URL("./mode.json",import.meta.url);const mode=existsSync(modeUrl)?JSON.parse(readFileSync(modeUrl,"utf8")):{};
 appendFileSync(new URL("./calls.log",import.meta.url),JSON.stringify(process.argv.slice(2))+"\\n");
+if(process.env.GH_TOKEN!==undefined)appendFileSync(new URL("./token.log",import.meta.url),process.env.GH_TOKEN==="scoped-token"?"present\\n":"unexpected\\n");
 const args=process.argv.slice(2);const endpoint=args.includes("graphql")?"graphql":args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
 const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:"<!-- mill-delivery-key:fixture -->",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
 const listedPull={...pull};delete listedPull.merged;delete listedPull.merged_by;delete listedPull.merged_at;
@@ -86,6 +90,31 @@ else process.exit(2);
         repositoryNodeId: "R_example",
         fullName: "example/app",
       });
+      const tokenConfig: ProposeConfig = {
+        ...config,
+        deliveryCredential: {
+          mode: "fine_grained_token",
+          environment: "MILL_GITHUB_TOKEN",
+        },
+      };
+      await expect(
+        adapter.inspect({
+          config: tokenConfig,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).rejects.toMatchObject({ code: "GITHUB_TOKEN_UNAVAILABLE" });
+      process.env.MILL_GITHUB_TOKEN = "scoped-token";
+      await expect(
+        adapter.inspect({
+          config: tokenConfig,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({ actorLogin: "operator" });
+      expect(
+        (await readFile(path.join(tools.path, "token.log"), "utf8"))
+          .trim()
+          .split("\n"),
+      ).toEqual(expect.arrayContaining(["present"]));
       await expect(
         adapter.findPullRequests({
           config,

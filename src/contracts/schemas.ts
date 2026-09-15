@@ -446,6 +446,14 @@ export const checkProducerSchema = z.strictObject({
   postMergeEvent: z.literal("push"),
 });
 
+const deliveryCredentialSchema = z.discriminatedUnion("mode", [
+  z.strictObject({ mode: z.literal("operator_session") }),
+  z.strictObject({
+    mode: z.literal("fine_grained_token"),
+    environment: z.literal("MILL_GITHUB_TOKEN"),
+  }),
+]);
+
 const shallowWorkspacePathSchema = z
   .string()
   .regex(
@@ -475,6 +483,9 @@ export const millConfigSchema = z
     repositoryId: z.uuid(),
     trustCeiling: z.enum(["inspect", "build", "propose"]),
     sensitivePaths: z.array(repositoryPathPatternSchema).default([]),
+    reporting: z
+      .strictObject({ selfHosted: z.boolean().default(false) })
+      .optional(),
     verifier: z
       .strictObject({
         image: z.string().regex(/^[^@\s]+@sha256:[a-f0-9]{64}$/u),
@@ -503,6 +514,7 @@ export const millConfigSchema = z
         checkProducers: z
           .record(z.string().min(1), checkProducerSchema)
           .optional(),
+        deliveryCredential: deliveryCredentialSchema.optional(),
         attendedMerge: z.literal(true).optional(),
         postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
         reviewPolicy: githubReviewPolicySchema,
@@ -793,6 +805,13 @@ export const taskPacketV1Schema = z.strictObject({
 export const taskPacketV2Schema = z.strictObject({
   schemaVersion: z.literal("2"),
   ...taskPacketCommonShape,
+  repairExperiment: z
+    .strictObject({
+      scope: z.literal("fixture_only"),
+      maximumRepairGenerations: z.literal(2),
+      evidenceLabel: z.string().min(1),
+    })
+    .optional(),
   baselineCommandIds: z.array(z.string().min(1)).min(1).optional(),
   authority: z.strictObject({
     productContract: authorityReferenceSchema,

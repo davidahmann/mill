@@ -48,7 +48,7 @@ function startWorkerInvocation(
 }
 
 describe("operational state", () => {
-  it.each(["1", "2"])(
+  it.each(["1", "2", "3"])(
     "migrates supported v%s state to the numbered current schema without losing runs",
     async (legacyVersion) => {
       const temporary = await temporaryDirectory("mill-state-migration-");
@@ -80,12 +80,14 @@ describe("operational state", () => {
           id: run.id,
           taskId: "preserved-run",
         });
+        expect(migrated.events(run.id)).toHaveLength(1);
         expect(migrated.stats()).toMatchObject({
-          schemaVersion: 3,
+          schemaVersion: 4,
           migrations: [
             { version: 1, name: "initial-durable-state" },
             { version: 2, name: "worker-and-delivery-recovery-columns" },
             { version: 3, name: "numbered-migration-ledger" },
+            { version: 4, name: "fixture-only-second-repair-capacity" },
           ],
           runs: { total: 1 },
         });
@@ -106,7 +108,7 @@ describe("operational state", () => {
     const database = new DatabaseSync(databasePath);
     try {
       database
-        .prepare("UPDATE metadata SET value = '4' WHERE key = 'schema_version'")
+        .prepare("UPDATE metadata SET value = '5' WHERE key = 'schema_version'")
         .run();
     } finally {
       database.close();
@@ -130,7 +132,7 @@ describe("operational state", () => {
     try {
       database.exec("DROP TABLE schema_migrations");
       database
-        .prepare("UPDATE metadata SET value = '4' WHERE key = 'schema_version'")
+        .prepare("UPDATE metadata SET value = '5' WHERE key = 'schema_version'")
         .run();
     } finally {
       database.close();
@@ -678,6 +680,30 @@ describe("operational state", () => {
         expect.objectContaining({ code: "REPAIR_BUDGET_EXHAUSTED" }),
       );
 
+      const fixtureOnlyRepair = create();
+      store.transition(fixtureOnlyRepair.id, "ready", "ready");
+      store.transition(fixtureOnlyRepair.id, "running", "running");
+      store.commitCandidate(
+        fixtureOnlyRepair.id,
+        "9".repeat(40),
+        "a".repeat(40),
+      );
+      store.completeValidation(fixtureOnlyRepair.id, '{"passed":false}', false);
+      store.beginRepair(fixtureOnlyRepair.id, 2);
+      store.commitCandidate(
+        fixtureOnlyRepair.id,
+        "b".repeat(40),
+        "c".repeat(40),
+      );
+      store.completeValidation(fixtureOnlyRepair.id, '{"passed":false}', false);
+      store.beginRepair(fixtureOnlyRepair.id, 2);
+      expect(() => store.beginRepair(fixtureOnlyRepair.id, 2)).toThrow(
+        expect.objectContaining({ code: "REPAIR_BUDGET_EXHAUSTED" }),
+      );
+      expect(() => store.beginRepair(fixtureOnlyRepair.id, 3)).toThrow(
+        expect.objectContaining({ code: "INVALID_REPAIR_BUDGET" }),
+      );
+
       const reviewed = create();
       store.transition(reviewed.id, "ready", "ready");
       store.transition(reviewed.id, "running", "running");
@@ -736,7 +762,7 @@ describe("operational state", () => {
       expect(requested.cancelRequested).toBe(true);
       store.transition(cancelled.id, "cancelled", "cancelled");
       expect(store.requestCancellation(cancelled.id).status).toBe("cancelled");
-      expect(store.runs()).toHaveLength(5);
+      expect(store.runs()).toHaveLength(6);
     } finally {
       store.close();
       store.close();

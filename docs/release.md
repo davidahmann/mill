@@ -128,12 +128,17 @@ Do not move, recreate, or reuse a published tag or version.
 
 ### 3. Build and qualify the candidate
 
-Encode the exact qualified support tuple and longitudinal record without line
-breaks, then start the `candidate` workflow:
+Validate and encode the exact qualified support tuple and longitudinal record
+with Mill's local helper, then start the `candidate` workflow. Do not hand-roll
+the base64 input: a valid-looking value can still decode to invalid JSON.
 
 ```sh
-support_tuple_base64=$(base64 < /absolute/path/support-tuple.json | tr -d '\n')
-sequence_base64=$(base64 < /absolute/path/sequence.json | tr -d '\n')
+support_tuple_base64=$(node scripts/encode-release-qualification-inputs.mjs \
+  --field support_tuple_base64 \
+  /absolute/path/support-tuple.json /absolute/path/sequence.json)
+sequence_base64=$(node scripts/encode-release-qualification-inputs.mjs \
+  --field sequence_base64 \
+  /absolute/path/support-tuple.json /absolute/path/sequence.json)
 gh workflow run release.yml --ref "$tag" \
   -f mode=candidate \
   -f tag="$tag" \

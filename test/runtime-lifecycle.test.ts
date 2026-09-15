@@ -1350,4 +1350,41 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
       await fixture.cleanup();
     }
   });
+
+  it("allows two fixture-only review repairs with validation and review after each", async () => {
+    const fixture = await runtimeFixture({
+      reviewRepair: true,
+      twoReviewRepairs: true,
+      retryCount: 0,
+    });
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      await verifyRun(input);
+      expect((await reviewRun(input)).run.blockCode).toBe("REVIEW_FINDINGS");
+      expect(await resumeRun(input)).toMatchObject({
+        status: "committed",
+        repairCount: 1,
+      });
+      await verifyRun(input);
+      expect((await reviewRun(input)).run.blockCode).toBe("REVIEW_FINDINGS");
+      expect(await resumeRun(input)).toMatchObject({
+        status: "committed",
+        repairCount: 2,
+      });
+      await verifyRun(input);
+      expect((await reviewRun(input)).run.status).toBe("reviewed");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });

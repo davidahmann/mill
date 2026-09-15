@@ -1,4 +1,4 @@
-# v0.5.0 attended release authority
+# v0.5.0 attended release authority and failed candidate record
 
 ## Authorization
 
@@ -28,3 +28,11 @@ Stop before publication if the candidate tag, source tree, preserved artifact,
 candidate run, qualification, npm provenance, registry readback, or GitHub asset
 identity differs. A failed candidate or ambiguous external effect requires a new
 reviewed version; it never permits retagging or republishing.
+
+## Outcome
+
+The v0.5.0 tag and candidate workflow were created. The independent builds and
+packed canaries passed, but qualification failed before publication because a
+manually written workflow input appended literal `\n` characters after JSON. No
+npm package, GitHub Release, `alpha`, or `latest` update occurred. Preserve this
+record and the failed candidate; v0.6.0 is the next reviewed version.

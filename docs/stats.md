@@ -20,6 +20,9 @@ millctl --json stats
 Use the result as an operating signal, not a productivity score. A higher repair
 count can reflect a harder change, a weak acceptance case, or a runtime failure.
 Inspect the affected run's [timeline](run-timeline.md) and
-[outcome](run-outcome.md) before changing policy. The current task schema keeps
-one repair wave. A later increase needs fixture evidence and an explicit state
-migration because the database enforces that limit.
+[outcome](run-outcome.md) before changing policy. The default task schema keeps
+one repair wave. A task may opt into exactly two waves only for the named
+fixture-only experiment, where each repaired candidate still goes through fresh
+validation and review. It is not a general retry increase.
+
+For a broader redacted operating view, use [reports](report.md).

@@ -1,10 +1,34 @@
 # From approved intent to tasks
 
-Mill separates prose, approval and execution. `plan specification` assesses a
-structured source-backed product proposal. `plan tasks` then compiles approved
-product/scenario/impact authority into bounded executable packets. Neither
-command invents an approved PRD, performs autonomous web research, or treats a
-model-generated acceptance test as independent authority.
+Mill separates prose, approval and execution. `init propose` reads an inspected
+PRD and existing planning drafts together without writing authority.
+`plan specification` assesses a structured source-backed product proposal.
+`plan tasks` then compiles approved product/scenario/impact authority into
+bounded executable packets. None of these commands invent an approved PRD,
+perform autonomous web research, or treat a model-generated acceptance test as
+independent authority.
+
+## Read-only proposal summary
+
+Use `init propose` when the PRD, source manifest, proposal, product contract,
+scenarios, impact, and change request are already available as drafts. It
+returns inspection, assessment, and compiled-task data in one JSON result. It
+does not create files, approve the drafts, or make them executable.
+
+```sh
+millctl --json init propose \
+  --prd product/PRD.md \
+  --sources product/sources.yaml \
+  --proposal product/proposal.yaml \
+  --product product/contract.yaml \
+  --scenarios quality/scenarios.yaml \
+  --impact product/impact.yaml \
+  --request product/change.yaml
+```
+
+Read the returned blockers and digests before using the ordinary review and
+approval process. The command is a guide to existing draft material; it does not
+generate product claims from the PRD.
 
 ## Change request
 

@@ -1,6 +1,8 @@
 schemaVersion: "1"
 repositoryId: 889e67bd-0768-4f73-9e18-286f2fb8b5f3
 trustCeiling: propose
+reporting:
+  selfHosted: true
 sensitivePaths: [".env", ".npmrc", ".mill/**"]
 propose:
   forge: github

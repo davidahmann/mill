@@ -124,17 +124,45 @@ describe("runtime CLI contracts", () => {
           command: "stats",
           ok: true,
           data: {
-            schemaVersion: 3,
+            schemaVersion: 4,
             migrations: [
               { version: 1, name: "initial-durable-state" },
               { version: 2, name: "worker-and-delivery-recovery-columns" },
               { version: 3, name: "numbered-migration-ledger" },
+              { version: 4, name: "fixture-only-second-repair-capacity" },
             ],
             runs: { total: 0, builderAttempts: 0, repairs: 0 },
           },
         },
       });
       expect(JSON.stringify(stats.value)).not.toContain(fixture.root);
+
+      const report = await jsonCommand(["--cwd", fixture.root, "report"]);
+      expect(report).toMatchObject({
+        exitCode: 0,
+        value: {
+          command: "report",
+          ok: true,
+          data: {
+            schemaVersion: "1",
+            redacted: true,
+            runs: {
+              total: 0,
+              verification: { passed: 0, failed: 0, notRecorded: 0 },
+              repairs: 0,
+              builderAttempts: 0,
+            },
+            elapsed: { totalMilliseconds: 0, averageMilliseconds: null },
+            selfHosting: {
+              declared: false,
+              eligibleRuns: 0,
+              completedRuns: 0,
+              completionRate: null,
+            },
+          },
+        },
+      });
+      expect(JSON.stringify(report.value)).not.toContain(fixture.root);
 
       const baseline = await jsonCommand([
         "--cwd",

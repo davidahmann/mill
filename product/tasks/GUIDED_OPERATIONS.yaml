@@ -1,0 +1,51 @@
+schemaVersion: "2"
+task_id: mill-guided-operations
+status: approved
+owner: davidahmann
+base_commit: 307a4fed29a515de22713354368b590c2d9ed02c
+execution_mode: approved_native_maintainer
+authority: product/guided-operations.md
+impact_manifest: product/impacts/GUIDED_OPERATIONS.yaml
+objective: >-
+  Make Mill easier to operate and release without weakening its authority,
+  evidence, credential, repair, package, or public-support boundaries.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - .github/**
+  - docs/**
+  - product/**
+  - README.md
+  - AGENTS.md
+  - mill.yaml
+  - package.json
+  - package-lock.json
+  - CHANGELOG.md
+authority_preparation_paths:
+  - product/**
+  - docs/**
+acceptance_items:
+  - GO-01 guided proposal assembly remains read-only and explicitly requires
+    repository approval before execution
+  - GO-02 scoped token reference cannot disclose a token or silently fall back
+  - GO-03 report output is redacted, measured-only, and local to one repository
+  - GO-04 the second repair exists only in the named fixture and repeats gates
+  - GO-05 the packed public API is limited to CLI and schemas
+  - GO-06 release inputs reject malformed JSON before qualification assembly
+  - GO-07 README, AGENTS, and related operator documents remain accurate and
+    direct
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+required_reviews:
+  - required pull-request checks and GitHub review feedback on the complete diff
+constraints:
+  - one native-maintainer writer in a disposable worktree
+  - preserve all prior tags, release records, npm versions, and failed evidence
+  - no external publication or tag under this source task
+stop_conditions:
+  - ambiguous authority, secret disclosure, package-boundary regression, or
+    unavailable mandatory check
+  - recurring same-subsystem P0 or P1 finding

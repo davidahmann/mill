@@ -16,6 +16,12 @@ export const releaseDispatchCheck = [
   'test -d docs && test ! -L docs && test -d "$notes_dir" && test ! -L "$notes_dir" && test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"',
 ].join("\n");
 
+export const releaseQualificationInputCheck = [
+  'test -n "$SUPPORT_TUPLE_BASE64"',
+  'test -n "$SEQUENCE_BASE64"',
+  'node -e \'for(const name of ["SUPPORT_TUPLE_BASE64","SEQUENCE_BASE64"]){const decoded=Buffer.from(process.env[name],"base64").toString("utf8");const value=JSON.parse(decoded);if(typeof value!=="object"||value===null||Array.isArray(value))throw new Error(`${name} must decode to one JSON object`)}\'',
+].join("\n");
+
 const releaseTagInput = "${{ inputs.tag }}";
 
 /** Every requested-tag release job starts with one exact immutable dispatch boundary. */
@@ -55,6 +61,32 @@ export function releaseDispatchFailures(jobs) {
     }
   }
   return failures;
+}
+
+/** Candidate input must be valid before a runner spends time on builds or canaries. */
+export function releaseQualificationInputFailures(jobs) {
+  const job = jobs.qualify;
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const checks = steps
+    .map((step, index) => ({ step, index }))
+    .filter(({ step }) => step?.id === "validate-qualification-inputs");
+  const check = checks[0];
+  if (
+    checks.length !== 1 ||
+    check?.index !== 2 ||
+    typeof check.step.run !== "string" ||
+    check.step.run.trim() !== releaseQualificationInputCheck ||
+    check.step.env?.SUPPORT_TUPLE_BASE64 !==
+      "${{ inputs.support_tuple_base64 }}" ||
+    check.step.env?.SEQUENCE_BASE64 !== "${{ inputs.sequence_base64 }}" ||
+    check.step.if !== undefined ||
+    ![undefined, false].includes(check.step["continue-on-error"])
+  ) {
+    return [
+      "qualify: qualification input must be validated before setup and candidate execution",
+    ];
+  }
+  return [];
 }
 
 /** A public-alpha release remains plainly labelled while GitHub can mark it Latest. */

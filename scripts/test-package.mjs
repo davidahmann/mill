@@ -157,6 +157,19 @@ try {
     "@davidahmann",
     "mill",
   );
+  const publicImport = spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", 'await import("@davidahmann/mill")'],
+    { cwd: temporary, encoding: "utf8", timeout: 10_000 },
+  );
+  if (
+    publicImport.status === 0 ||
+    !publicImport.stderr.includes("ERR_PACKAGE_PATH_NOT_EXPORTED")
+  ) {
+    throw new Error(
+      "packed package must expose only its documented CLI and schemas",
+    );
+  }
   const installedMill = await import(
     pathToFileURL(path.join(installedPackageRoot, "dist", "index.js")).href
   );
@@ -224,6 +237,7 @@ try {
   for (const command of [
     "audit",
     "discover",
+    "init",
     "playbooks",
     "new",
     "adopt",
@@ -234,6 +248,7 @@ try {
     "qualify",
     "run",
     "status",
+    "report",
     "outcome",
     "timeline",
     "verify",

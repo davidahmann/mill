@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.3
+Version: 2.4
 
 Status: normative
 
@@ -23,7 +23,7 @@ locally reviewed candidate and, when separately approved, a draft GitHub pull
 request. It is local-first and attended. The coding agent writes only in a
 disposable worktree; native tests decide whether the candidate is valid; a
 separate read-only reviewer judges the exact commit; and only the attended
-shipper may use the operator's GitHub session.
+shipper may use the operator's GitHub session or a configured scoped token.
 
 For every task, follow this path:
 
@@ -123,6 +123,9 @@ two-step plan/apply wrapper, never as implicit push authority.
   approval. Inspect the proposal before separately approved attended apply.
   Generated authority needs committed-file reconciliation before task execution
   or cleanup.
+- `init propose` combines an inspected PRD and existing structured planning
+  drafts into one read-only review summary. It does not write authority files,
+  approve a proposal, or spend model or delivery authority.
 - `discover` and opt-in repository-map context are bounded, revision-bound
   derived evidence, not executed test coverage or permission to change scope.
 - Repository playbooks are optional, repository-owned, digest-bound context.
@@ -141,6 +144,10 @@ two-step plan/apply wrapper, never as implicit push authority.
   release authority.
 - Report measured, partial and unavailable usage truthfully. Routine output must
   not expose private emails, commit trailers, raw worker context or logs.
+- `stats` and `report` are read-only, redacted local aggregates. A report's
+  self-hosting rate is meaningful only when the repository has explicitly set
+  `reporting.selfHosted: true`; it is not a productivity or customer-value
+  measure.
 - `continuation` is a read-only, versioned state projection. It may name one
   attended safe next action but must never perform that action, expose a
   worktree/prompt/delivery receipt, or route an uncertain worker or external
@@ -164,7 +171,9 @@ two-step plan/apply wrapper, never as implicit push authority.
 - A candidate becomes reviewable only after Mill creates its lifecycle-owned
   commit and binds its commit and tree identities.
 - Review is read-only and exact-candidate-bound. Batch one complete review into
-  one systemic repair generation; do not churn one PR per comment.
+  one systemic repair generation; do not churn one PR per comment. A task may
+  use two generations only through its explicit `fixture_only` experiment; each
+  repaired candidate requires fresh validation and review.
 - Before any remote attempt, stale full-diff scope may use attended
   `review --refresh --base <exact-provider-commit>`. Preserve candidate, native
   validation, prior receipts, deadline and remaining review budget; do not move
@@ -172,6 +181,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   interrupted prepared refresh with ordinary `review`.
 - The shipper may push only the unchanged verified candidate to its configured
   branch and may open only a draft PR in the bound repository.
+- A repository may select `propose.deliveryCredential` with the fixed
+  `MILL_GITHUB_TOKEN` environment name. Pass its bytes only to attended shipper
+  GitHub/Git processes. Never persist, print, add to a prompt, or include the
+  token in state or support output. The operator still reviews its actual GitHub
+  scope and expiry; Mill cannot attest either.
 - `requiredChecks` are exact pull-request-head requirements. When configured,
   `postMergeRequiredChecks` is a nonempty subset used only for resulting-main
   readback; do not list a pull-request-only job there. A skipped check blocks
@@ -220,6 +234,7 @@ Do not rerun a possibly started mutation blindly.
 ```sh
 millctl --json status --run <run-id>
 millctl --json continuation --run <run-id>
+millctl --json report
 millctl --json resume --task product/tasks/TASK.yaml --run <run-id>
 millctl --json cancel --run <run-id>
 millctl --json pr reconcile --task product/tasks/TASK.yaml --run <run-id>
@@ -228,7 +243,7 @@ millctl --json support-bundle --run <run-id>
 ```
 
 - `resume` is permitted only when Mill can prove no prior worker still owns the
-  effect or when it is performing the one bounded review-repair pass.
+  effect or when it is performing the approved bounded review-repair pass.
 - `cancel` records intent; only the live foreground controller may signal its
   own child process group.
 - An uncertain push or PR operation remains `effect_unknown` until GitHub

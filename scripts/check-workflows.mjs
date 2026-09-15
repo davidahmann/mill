@@ -4,6 +4,7 @@ import path from "node:path";
 import { parse } from "yaml";
 import {
   releaseDispatchFailures,
+  releaseQualificationInputFailures,
   releasePublicationFailures,
   releaseVerifierPreparationFailures,
 } from "./release-workflow-policy.mjs";
@@ -46,6 +47,7 @@ for (const file of files) {
   }
   if (file === "release.yml") {
     failures.push(...releaseDispatchFailures(jobs));
+    failures.push(...releaseQualificationInputFailures(jobs));
     failures.push(...releasePublicationFailures(jobs));
     failures.push(...releaseVerifierPreparationFailures(jobs));
   }

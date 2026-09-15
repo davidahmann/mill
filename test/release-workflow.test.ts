@@ -125,6 +125,27 @@ describe("release verifier preparation policy", () => {
       );
     },
   );
+  it.each(["missing", "late", "conditional", "weakened"])(
+    "rejects %s qualification-input validation",
+    async (mutation) => {
+      const workflow = await fixture();
+      const job = workflow.jobs.qualify;
+      const index =
+        job?.steps.findIndex(
+          (step) => step.id === "validate-qualification-inputs",
+        ) ?? -1;
+      const step = job?.steps[index];
+      if (!job || !step || index < 0)
+        throw new Error("missing qualification-input fixture");
+      if (mutation === "missing") job.steps.splice(index, 1);
+      if (mutation === "late") job.steps.push(...job.steps.splice(index, 1));
+      if (mutation === "conditional") step.if = "false";
+      if (mutation === "weakened") step.run = 'test -n "$SUPPORT_TUPLE_BASE64"';
+      await expect(check(workflow)).rejects.toThrow(
+        "qualification input must be validated",
+      );
+    },
+  );
   it.each([
     "hard-coded-tag",
     "conditional",

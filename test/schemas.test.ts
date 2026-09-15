@@ -1073,6 +1073,35 @@ describe("compact schemas", () => {
     expect(contractSchemas.millConfig.safeParse(localReview).success).toBe(
       true,
     );
+    const scopedToken = {
+      ...localReview,
+      reporting: { selfHosted: true },
+      propose: {
+        ...localReview.propose,
+        deliveryCredential: {
+          mode: "fine_grained_token",
+          environment: "MILL_GITHUB_TOKEN",
+        },
+      },
+    } as const;
+    expect(validate(scopedToken)).toBe(true);
+    expect(contractSchemas.millConfig.safeParse(scopedToken).success).toBe(
+      true,
+    );
+    const invalidTokenEnvironment = {
+      ...scopedToken,
+      propose: {
+        ...scopedToken.propose,
+        deliveryCredential: {
+          mode: "fine_grained_token",
+          environment: "GH_TOKEN",
+        },
+      },
+    };
+    expect(validate(invalidTokenEnvironment)).toBe(false);
+    expect(
+      contractSchemas.millConfig.safeParse(invalidTokenEnvironment).success,
+    ).toBe(false);
     const splitCheckPolicy = {
       ...localReview,
       propose: {
