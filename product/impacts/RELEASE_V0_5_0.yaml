@@ -1,0 +1,33 @@
+schemaVersion: "2"
+id: mill-release-v0.5.0
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-15 authorizing a temporary plan,
+  implementation, validation, cross-check, green delivery, new GitHub Release,
+  npm publication and documentation update.
+source_base: 99c987040f3d81e07b01b96e459d8103ab340147
+authority: product/release-v0.5.0.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Advances the immutable package identity to v0.5.0.
+  - Publishes approved source usability and local-state safety improvements
+    without expanding the qualified support matrix.
+  - Updates installation and release documentation to the exact v0.5.0 identity.
+affected_surfaces:
+  - package and CLI version identity
+  - public README, changelog, release record, product plan and task closure
+  - exact release record, npm environment admission and public distribution
+verification:
+  - native check, exact-candidate audit and green source PR and main checks
+  - annotated-tag identity and two independent candidate builds
+  - independent policy, registry-package, npm provenance and GitHub-asset
+    readback
+exceptions:
+  - This attended maintainer release may merge, create and push the annotated
+    v0.5.0 tag, add its exact npm-environment rule, publish one preserved
+    artifact, create the normal GitHub Release, and promote only its alpha and
+    latest npm dist-tags as specified in its authority record.

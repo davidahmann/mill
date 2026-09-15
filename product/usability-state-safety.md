@@ -1,6 +1,6 @@
 # Usability and state-safety increment
 
-Status: approved for implementation on 2026-09-15
+Status: completed in PR #48 on 2026-09-15; v0.5.0 release qualification pending
 
 Mill's approval boundaries and release evidence are useful only when a
 maintainer can understand and operate them without recreating the internal
@@ -43,6 +43,12 @@ claim restricted host credentials or model egress.
 - Native Node 24 check, package inspection, generated schemas, and audit of the
   exact candidate pass.
 - Tests cover new state and CLI behavior plus expected failure routes.
-- An independent read-only review covers the full candidate diff before merge.
+- Required PR checks and GitHub review feedback cover the full candidate diff
+  before merge.
 - The implementation task records the exact merge and test evidence before the
   separate release task begins.
+
+The exact source change merged as `99c987040f3d81e07b01b96e459d8103ab340147`
+after green validate, dependency review, DCO, and CodeQL checks. The local
+exact-candidate audit, package canary, and 356-test coverage run also passed.
+GitHub reported no review feedback on the exact head.

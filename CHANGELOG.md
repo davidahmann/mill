@@ -4,6 +4,33 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-15
+
+### Added
+
+- Add `millctl --json stats`, a redacted aggregate lifecycle view that reports
+  local migration history and run, builder-attempt, and repair counts without
+  exposing task IDs, paths, prompts, credentials, raw output, event payloads,
+  review data, or delivery receipts.
+- Add an operator glossary and a repository-scoped GitHub delivery-access guide.
+- Add property-based canonical JSON and repository-path tests, state-migration
+  regression coverage, and stable JSON-contract coverage for `stats`.
+
+### Changed
+
+- Replace implicit SQLite state-version handling with atomic, numbered,
+  idempotent migrations and a durable migration ledger. Existing v1 and v2 local
+  state upgrades to v3; future, conflicting, incomplete, and tampered migration
+  state blocks before use.
+- Surface Mill's existing attended `start` route and supported CLI/schema
+  interface more directly in the README. Direct TypeScript imports remain
+  prerelease APIs.
+- Represent the built-in `codex-cli` worker through a registry seam without
+  adding a second adapter or changing the trusted-host boundary.
+- Let local documentation, release-validation, package-canary, and test tooling
+  use an explicit `MILL_GIT_PATH` when the system Git is not the active Git.
+- Move the historical greenfield work plan to `docs/history/`.
+
 ## [0.4.0] - 2026-09-14
 
 ### Added

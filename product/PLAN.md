@@ -34,6 +34,13 @@ and one constrained pnpm workspace preparation shape. It does not change branch
 protection, add a product-specific integration, claim Docker qualification, or
 expand the published support matrix.
 
+The [usability and state-safety](usability-state-safety.md) increment landed in
+PR #48 on 2026-09-15. It makes the existing attended path easier to find, adds
+redacted aggregate local run statistics, records atomic numbered state
+migrations, and clarifies worker and delivery-access boundaries. It does not add
+a second worker, expand the repair budget, introduce a daemon or MCP service, or
+change delivery authority or the qualified support matrix.
+
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
 2. **Local delivery:** durable state, disposable worktree, bounded Codex build,
