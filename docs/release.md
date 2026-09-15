@@ -200,11 +200,18 @@ publishes the normal GitHub Release.
 
 ### 5. Close the release
 
-Record the workflow run, tag commit/tree, tarball digest/integrity, npm tarball
-and provenance, GitHub Release URL and asset digest, qualification digest,
-support tuple, and canary window. Reinstall the exact newly qualified version in
-an empty directory with lifecycle scripts disabled and confirm its version and
-help.
+The protected workflow attaches `release-evidence-final.json` to the normal
+GitHub Release after provider readback. It records the workflow runs, tag
+commit/tree, tarball digest/integrity, npm tarball and provenance, GitHub
+Release URL and asset digests, qualification digest, support tuple, and canary
+window. That asset is the canonical provider closure. Reinstall the exact newly
+qualified version in an empty directory with lifecycle scripts disabled and
+confirm its version and help.
+
+The immutable `docs/releases/vX.Y.Z.md` file records source scope before
+tagging. Do not add a source-only follow-up merely to repeat provider facts
+after publication. Link users to the release evidence and require an exact
+version pin.
 
 The release becomes the trust root for qualifying the next candidate. It does
 not qualify a new stack, host tuple, worker profile, model identity, or forge.

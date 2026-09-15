@@ -99,6 +99,21 @@ describe("release verifier preparation policy", () => {
       );
     },
   );
+  it("rejects a public release that omits final release evidence", async () => {
+    const workflow = await fixture();
+    const finalize = workflow.jobs.publish?.steps.find(
+      (entry) =>
+        entry.name === "Read back GitHub Release and finalize evidence",
+    );
+    if (!finalize?.run) throw new Error("missing release finalization fixture");
+    finalize.run = finalize.run.replace(
+      'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"',
+      "true",
+    );
+    await expect(check(workflow)).rejects.toThrow(
+      "final release evidence must be attached before publication",
+    );
+  });
   it.each(["alpha", "missing-readback"])(
     "rejects a %s npm latest publication contract",
     async (mutation) => {

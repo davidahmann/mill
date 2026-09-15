@@ -1,0 +1,33 @@
+schemaVersion: "2"
+id: mill-release-v0.6.1
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-15: “Ok do what is needed until all is
+  green,” following explicit authorization for Mill release, npm publication,
+  GitHub Release creation, documentation updates, and provider readback.
+source_base: 3ba27571af6447abf3100b2b35e673031e82fcb7
+authority: product/release-v0.6.1.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Advances the package and CLI identity to v0.6.1.
+  - Exercises protected OIDC publication directly to npm latest with one
+    preserved qualified artifact.
+  - Keeps public installation guidance release-stable and assigns exact provider
+    facts to final release evidence.
+affected_surfaces:
+  - package and CLI version identity
+  - public installation, release, repository-settings and operator guidance
+  - exact release authority, npm environment admission and public distribution
+verification:
+  - native check, exact-candidate audit, clean PR review and required checks
+  - exact annotated-tag identity and two independent candidate builds
+  - independent policy, registry package, npm provenance/latest and GitHub asset
+    readback
+exceptions:
+  - The attended maintainer may add the exact v0.6.1 npm-environment tag rule,
+    create and push the annotated tag, publish one preserved artifact, and
+    create the normal GitHub Release only as bound by the authority record.

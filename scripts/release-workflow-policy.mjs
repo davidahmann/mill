@@ -139,13 +139,26 @@ export function releasePublicationFailures(jobs) {
       "publish: GitHub release must be a plainly labelled normal public-alpha release",
     );
   }
+  const finalEvidenceUpload =
+    'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"';
+  const finalRelease = 'gh release edit "$RELEASE_TAG" --draft=false';
   if (
     typeof finalize?.run !== "string" ||
-    !finalize.run.includes('gh release edit "$RELEASE_TAG" --draft=false') ||
+    !finalize.run.includes(finalRelease) ||
     finalize.run.includes("--prerelease")
   ) {
     failures.push(
       "publish: final GitHub release must remain a normal public-alpha release",
+    );
+  }
+  if (
+    typeof finalize?.run !== "string" ||
+    !finalize.run.includes(finalEvidenceUpload) ||
+    finalize.run.indexOf(finalEvidenceUpload) >
+      finalize.run.indexOf(finalRelease)
+  ) {
+    failures.push(
+      "publish: final release evidence must be attached before publication",
     );
   }
   return failures;

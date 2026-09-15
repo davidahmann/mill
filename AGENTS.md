@@ -289,9 +289,10 @@ needs its own source authority, environment-policy authorization, and provider
 readback; never use a wildcard or bypass the reviewer gate. Main branch
 protections remain unchanged.
 
-The current public version, npm channel pointers, GitHub Latest record, support
-tuple, and expiry belong in the current `docs/releases/vX.Y.Z.md` record and
-provider readback. They are distribution facts, not authority to broaden
+The current npm channel pointers, GitHub Latest record, support tuple and expiry
+belong in the protected workflow's final release-evidence asset and provider
+readback. New immutable `docs/releases/vX.Y.Z.md` records state only the source
+candidate's scope. These are distribution facts, not authority to broaden
 supported stacks or autonomy. The v0.1.5 verifier remains the workflow's
 independently pinned policy; do not silently replace it with the newest version.
 
