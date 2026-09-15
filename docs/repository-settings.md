@@ -97,12 +97,12 @@ admission change, not a protection bypass or an npm token grant. Future release
 tags require their own explicit policy authorization; do not replace the exact
 tag rules with a wildcard or an unrestricted environment.
 
-## Current distribution channels
+## Distribution channels
 
-The current release record captures GitHub Latest, npm channel values, and the
-named public release identity from provider readback. A later correction to an
-existing channel uses the provider's supported maintainer authentication. Do not
-create a bypass-2FA token for that purpose. A draft and public release can share
-a tag, so recovery must use the public release identity rather than a tag-only
-lookup. Channel labels do not expand Mill's qualified public-alpha support tuple
-or authorize republishing.
+The protected workflow attaches final release evidence with GitHub Latest, npm
+channel values and public release identity after provider readback. A later
+correction to an existing channel uses the provider's supported maintainer
+authentication. Do not create a bypass-2FA token for that purpose. A draft and
+public release can share a tag, so recovery must use the public release identity
+rather than a tag-only lookup. Channel labels do not expand Mill's qualified
+public-alpha support tuple or authorize republishing.

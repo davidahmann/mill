@@ -1,0 +1,59 @@
+schemaVersion: "2"
+task_id: mill-release-v0.6.1-source-preparation
+status: closed
+owner: davidahmann
+base_commit: 3ba27571af6447abf3100b2b35e673031e82fcb7
+execution_mode: approved_native_maintainer
+authority: product/release-v0.6.1.md
+impact_manifest: product/impacts/RELEASE_V0_6_1.yaml
+objective: >-
+  Prepare the exact v0.6.1 public-alpha source candidate and release-stable
+  documentation for protected OIDC publication directly to npm latest.
+allowed_paths:
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - scripts/release-workflow-policy.mjs
+  - test/release-workflow.test.ts
+  - README.md
+  - AGENTS.md
+  - docs/release.md
+  - docs/repository-settings.md
+  - docs/releases/v0.6.1.md
+  - product/PLAN.md
+  - product/release-v0.6.1.md
+  - product/impacts/RELEASE_V0_6_1.yaml
+  - product/tasks/RELEASE_V0_6_1.yaml
+authority_preparation_paths:
+  - product/**
+  - docs/releases/**
+acceptance_items:
+  - R061-01 package and CLI identify v0.6.1
+  - R061-02 public installation guidance requires a live provider check and an
+    explicit exact version pin rather than a hard-coded current version
+  - R061-03 the release runbook, repository settings and operator contract name
+    final release evidence as the canonical provider closure
+  - R061-04 native check, exact-candidate audit, complete review and required PR
+    checks pass
+  - R061-05 only the release authority may add the exact tag rule, tag, publish
+    one preserved artifact and create the normal GitHub Release
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+  - MILL_RELEASE_TAG=v0.6.1 node scripts/verify-release-tag.mjs
+required_reviews:
+  - required PR checks and GitHub review feedback on the complete committed Mill
+    release-preparation diff
+constraints:
+  - single attended maintainer writer
+  - exact v0.6.1 environment-tag admission only; no wildcard or bypass
+  - preserve all historical tags, npm versions, releases and evidence
+stop_conditions:
+  - ambiguous tag, tree, artifact, candidate-run, provenance or provider effect
+  - unavailable independent verification or recurring P0/P1 release finding
+closure:
+  status: source_candidate_prepared
+  provider_closure: >-
+    The protected release workflow must attach final evidence after its own
+    provider readback. No post-release source update may alter the tagged
+    candidate or duplicate those provider facts.

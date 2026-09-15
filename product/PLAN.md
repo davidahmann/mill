@@ -48,12 +48,11 @@ reference, confines a second repair to one fixture, limits the packed public API
 to CLI and schemas, and validates release input encoding. It preserves the
 v0.5.0 failed candidate as evidence and does not add a GitHub App, second
 worker, general retry increase, daemon, MCP service, or public support claim.
-Version `0.6.0` completed candidate qualification, protected OIDC publication,
-registry requalification, and a normal GitHub Release on 2026-09-15. Its npm
-`alpha` tag resolves to `0.6.0`; the existing `latest` tag remains `0.4.0`
-because npm rejected the later tag change without a TOTP. Mill stores no bypass
-token. Future fresh releases publish directly to `latest` through the protected
-OIDC workflow.
+The v0.6.0 release record retains its candidate qualification, protected OIDC
+publication, registry requalification, normal GitHub Release and unchanged npm
+channel state. Mill stores no bypass token. Future fresh releases publish
+directly to `latest` through the protected OIDC workflow, whose final release
+evidence is the canonical provider closure.
 
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
