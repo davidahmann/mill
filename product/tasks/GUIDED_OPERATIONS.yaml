@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-guided-operations
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 307a4fed29a515de22713354368b590c2d9ed02c
 execution_mode: approved_native_maintainer
@@ -49,3 +49,19 @@ stop_conditions:
   - ambiguous authority, secret disclosure, package-boundary regression, or
     unavailable mandatory check
   - recurring same-subsystem P0 or P1 finding
+closure:
+  status: completed
+  owner: attended_maintainer_not_builder
+  recorded_at: 2026-09-15
+  merged_pull_request: https://github.com/davidahmann/mill/pull/50
+  merge_commit: 52bb0a4196196207a37392e4c11f1406c518338f
+  validation:
+    - >-
+      PR #50 validate, dependency-review, DCO, and CodeQL checks passed on the
+      exact head.
+    - >-
+      Local format, lint, typecheck, documentation, workflow, schema, 364-test
+      coverage, package-canary, and exact-candidate audit checks passed.
+  disposition: >-
+    The v0.6.0 source increment is complete. The separate release authority owns
+    tag creation, qualification, publication and provider readback.

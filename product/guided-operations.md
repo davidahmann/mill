@@ -1,6 +1,6 @@
 # Guided operations increment
 
-Status: proposed for v0.6.0 on 2026-09-15
+Status: source increment landed on 2026-09-15; release pending
 
 Mill needs a shorter route from inspected repository material to a reviewed
 draft PR while keeping the existing approval and evidence boundaries. This
@@ -50,3 +50,12 @@ support matrix.
   pull request.
 - A new annotated v0.6.0 tag, two independent builds, qualification, protected
   publication, and npm/GitHub readback bind to one preserved artifact.
+
+## Source closure
+
+PR #50 merged the source increment at
+`52bb0a4196196207a37392e4c11f1406c518338f`. The exact PR head and resulting
+`main` passed required CI, dependency review, DCO, and CodeQL. Local validation
+passed the full native gate, packed-package canary, and exact-candidate audit.
+The separate v0.6.0 release authority owns tagging, qualification, publication,
+and provider readback.

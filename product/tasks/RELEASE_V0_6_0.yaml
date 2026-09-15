@@ -1,0 +1,47 @@
+schemaVersion: "2"
+task_id: mill-release-v0.6.0
+status: approved
+owner: davidahmann
+base_commit: 52bb0a4196196207a37392e4c11f1406c518338f
+execution_mode: approved_native_maintainer
+authority: product/release-v0.6.0.md
+impact_manifest: product/impacts/RELEASE_V0_6_0.yaml
+objective: >-
+  Ship the exact v0.6.0 public-alpha artifact with current installation and
+  release documentation.
+allowed_paths:
+  - README.md
+  - CHANGELOG.md
+  - docs/releases/v0.6.0.md
+  - product/PLAN.md
+  - product/guided-operations.md
+  - product/release-v0.6.0.md
+  - product/impacts/RELEASE_V0_6_0.yaml
+  - product/tasks/GUIDED_OPERATIONS.yaml
+  - product/tasks/RELEASE_V0_6_0.yaml
+authority_preparation_paths:
+  - product/**
+  - docs/releases/**
+acceptance_items:
+  - R060-01 public installation and current-release documentation name v0.6.0
+  - R060-02 the package and CLI identify the fresh v0.6.0 version
+  - R060-03 guided-operation limits and public-alpha support limits remain
+    accurate
+  - R060-04 native check, exact-candidate audit, required PR checks and review
+    feedback pass or are resolved
+  - R060-05 annotated tag, candidate, protected publication, readback, release
+    and npm alpha/latest pointers bind to one preserved artifact
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+  - MILL_RELEASE_TAG=v0.6.0 node scripts/verify-release-tag.mjs
+required_reviews:
+  - required PR checks and GitHub review feedback on the complete committed Mill
+    release-preparation diff
+constraints:
+  - single attended maintainer writer
+  - exact v0.6.0 environment-tag admission only; no wildcard or bypass
+  - preserve all historical tags, npm versions, releases and evidence
+stop_conditions:
+  - ambiguous tag, tree, artifact, candidate-run, provenance or provider effect
+  - unavailable independent verification or recurring P0/P1 release finding
