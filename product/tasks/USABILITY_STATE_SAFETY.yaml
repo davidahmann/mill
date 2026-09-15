@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-usability-state-safety
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 20623a29fc9b317fa17a9e82237d7ac5a681ff79
 execution_mode: approved_native_maintainer

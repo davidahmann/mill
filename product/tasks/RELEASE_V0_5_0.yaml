@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-release-v0.5.0
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 99c987040f3d81e07b01b96e459d8103ab340147
 execution_mode: approved_native_maintainer
