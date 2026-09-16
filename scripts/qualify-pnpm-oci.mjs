@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
@@ -10,11 +11,91 @@ const execute = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "..");
 const baseImage =
   "node:24-bookworm@sha256:f22d6a1f082c02f292e86929b5b0442ac2e5eaf438a5dea9b1566601c3e05940";
-const imageTag = "local/mill-pnpm-oci-canary:node24-pnpm10-23";
+const registryImage =
+  "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33";
 const workspace = await mkdtemp(path.join(tmpdir(), "mill-pnpm-oci-"));
 const state = await mkdtemp(path.join(tmpdir(), "mill-pnpm-oci-state-"));
+const registryContainer = `mill-pnpm-oci-registry-${randomUUID()}`;
+let registryStarted = false;
+
+async function availableLoopbackPort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        server.close(() =>
+          reject(new Error("could not allocate a loopback port")),
+        );
+        return;
+      }
+      server.close((error) => {
+        if (error !== undefined) {
+          reject(error);
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+  });
+}
+
+async function startLoopbackRegistry() {
+  const port = await availableLoopbackPort();
+  await execute("docker", ["pull", registryImage], { cwd: root });
+  await execute(
+    "docker",
+    [
+      "run",
+      "--detach",
+      "--rm",
+      "--network",
+      "host",
+      "--pull",
+      "never",
+      "--name",
+      registryContainer,
+      "--env",
+      `REGISTRY_HTTP_ADDR=127.0.0.1:${port}`,
+      registryImage,
+    ],
+    { cwd: root },
+  );
+  registryStarted = true;
+  const registry = `127.0.0.1:${port}`;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const running = (
+    await execute(
+      "docker",
+      ["inspect", "--format", "{{.State.Running}}", registryContainer],
+      { cwd: root },
+    )
+  ).stdout.trim();
+  if (running !== "true") {
+    throw new Error("pnpm OCI canary registry did not remain running");
+  }
+  return registry;
+}
+
+async function pushCanaryImage(imageTag) {
+  const deadline = Date.now() + 15_000;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      await execute("docker", ["push", imageTag], { cwd: root });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw lastError;
+}
 
 try {
+  const registry = await startLoopbackRegistry();
+  const imageTag = `${registry}/mill-pnpm-oci-canary:node24-pnpm10-23`;
   await execute("docker", ["pull", baseImage], { cwd: root });
   const [
     { millConfigSchema },
@@ -152,6 +233,7 @@ try {
     ],
     { cwd: root },
   );
+  await pushCanaryImage(imageTag);
   const inspected = JSON.parse(
     (
       await execute("docker", ["image", "inspect", imageTag], {
@@ -162,7 +244,7 @@ try {
   const image = inspected[0]?.RepoDigests?.find(
     (candidate) =>
       typeof candidate === "string" &&
-      candidate.startsWith("local/mill-pnpm-oci-canary@sha256:"),
+      candidate.startsWith(`${registry}/mill-pnpm-oci-canary@sha256:`),
   );
   if (typeof image !== "string") {
     throw new Error(
@@ -357,6 +439,11 @@ try {
     )}\n`,
   );
 } finally {
+  if (registryStarted) {
+    await execute("docker", ["rm", "--force", registryContainer], {
+      cwd: root,
+    }).catch(() => undefined);
+  }
   await Promise.all([
     rm(workspace, { recursive: true, force: true }),
     rm(state, { recursive: true, force: true }),
