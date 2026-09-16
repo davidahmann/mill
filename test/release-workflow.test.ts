@@ -131,7 +131,7 @@ describe("release verifier preparation policy", () => {
       "draft release must retain the qualified candidate and independent verifier records",
     );
   });
-  it.each(["alpha", "missing-readback"])(
+  it.each(["alpha", "missing-readback", "missing-install-retry"])(
     "rejects a %s npm latest publication contract",
     async (mutation) => {
       const workflow = await fixture();
@@ -147,13 +147,17 @@ describe("release verifier preparation policy", () => {
         throw new Error("missing npm publication fixture");
       if (mutation === "alpha") {
         publish.run = publish.run.replace("--tag latest", "--tag alpha");
-      } else {
+      } else if (mutation === "missing-readback") {
         readback.run = readback.run.replace("tags.latest!==version", "false");
+      } else {
+        readback.run = readback.run.replace("retry-npm-install.mjs", "retry");
       }
       await expect(check(workflow)).rejects.toThrow(
         mutation === "alpha"
           ? "trusted publication must advance latest"
-          : "registry readback must bind latest",
+          : mutation === "missing-readback"
+            ? "registry readback must bind latest"
+            : "package reachability must settle",
       );
     },
   );

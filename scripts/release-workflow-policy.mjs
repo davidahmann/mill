@@ -140,6 +140,17 @@ export function releasePublicationFailures(jobs) {
     );
   }
   if (
+    typeof registryReadback?.run !== "string" ||
+    !registryReadback.run.includes("retry-npm-install.mjs") ||
+    !registryReadback.run.includes("retry-npm-signatures.mjs") ||
+    registryReadback.run.indexOf("retry-npm-install.mjs") >
+      registryReadback.run.indexOf("retry-npm-signatures.mjs")
+  ) {
+    failures.push(
+      "publish: package reachability must settle before signature verification",
+    );
+  }
+  if (
     typeof create?.run !== "string" ||
     !create.run.includes(
       'gh release create "$RELEASE_TAG" --verify-tag --draft',

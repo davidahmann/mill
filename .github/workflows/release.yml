@@ -382,7 +382,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/registry-install"
           cd "$RUNNER_TEMP/registry-install"
           npm init --yes >/dev/null
-          npm install --ignore-scripts "@davidahmann/mill@$version"
+          node "$GITHUB_WORKSPACE/scripts/retry-npm-install.mjs" \
+            "$RUNNER_TEMP/registry-install" "@davidahmann/mill@$version"
           node "$GITHUB_WORKSPACE/scripts/retry-npm-signatures.mjs" "$RUNNER_TEMP/registry-install"
       - name: Requalify the registry-downloaded package
         run: |

@@ -214,9 +214,10 @@ npm publish "$artifact" --provenance --access public --tag latest
 ```
 
 It does not run `npm pack` again. It verifies that npm's `latest` dist-tag names
-the exact version, reads the package back, verifies registry signatures with a
-bounded propagation retry, downloads and requalifies the registry artifact,
-creates a plainly labelled draft public-alpha release with the same
+the exact version, retries package installation until the registry serves that
+exact version, then verifies registry signatures with a bounded propagation
+retry. It downloads and requalifies the registry artifact, creates a plainly
+labelled draft public-alpha release with the same
 tarball/checksum/SBOM/evidence, downloads the GitHub asset, checks every
 identity, uploads final evidence using the durable tag URL, and only then
 publishes the normal GitHub Release.
