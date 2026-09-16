@@ -24,6 +24,7 @@ const releaseReadbackScript = path.resolve(
 const npmSignatureReadbackScript = path.resolve(
   "scripts/retry-npm-signatures.mjs",
 );
+const npmInstallReadbackScript = path.resolve("scripts/retry-npm-install.mjs");
 const qualifyReleaseArtifactScript = path.resolve(
   "scripts/qualify-release-artifact.mjs",
 );
@@ -781,6 +782,66 @@ describe("repository policy scripts", () => {
       expect(exhausted.status).toBe(1);
       expect(exhausted.stderr).toContain(
         "npm audit signatures did not settle after 2 attempts",
+      );
+      expect(await readFile(counter, "utf8")).toBe("2");
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it("retries bounded npm package propagation before signature verification", async () => {
+    const temporary = await temporaryDirectory("mill-npm-install-");
+    try {
+      const fakeBin = path.join(temporary.path, "bin");
+      await mkdir(fakeBin);
+      const fakeNpm = path.join(fakeBin, "npm");
+      const counter = path.join(temporary.path, "attempts");
+      await writeFile(
+        fakeNpm,
+        [
+          "#!/usr/bin/env node",
+          'import {readFileSync,writeFileSync} from "node:fs";',
+          "const file=process.env.MILL_TEST_COUNTER;",
+          'const count=Number(readFileSync(file,"utf8"))+1;',
+          "writeFileSync(file,String(count));",
+          'if(process.argv.slice(2).join(" ")!=="install --ignore-scripts --no-audit --no-fund --prefer-online @davidahmann/mill@0.7.0")process.exit(2);',
+          'if(count<3){process.stderr.write("package not propagated\\n");process.exit(1);}',
+          'process.stdout.write("installed package\\n");',
+          "",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+      await writeFile(counter, "0");
+      const recovered = run(
+        process.execPath,
+        [npmInstallReadbackScript, temporary.path, "@davidahmann/mill@0.7.0"],
+        temporary.path,
+        {
+          MILL_NPM_INSTALL_ATTEMPTS: "3",
+          MILL_NPM_INSTALL_DELAY_MS: "1",
+          MILL_TEST_COUNTER: counter,
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        },
+      );
+      expect(recovered.status, recovered.stderr).toBe(0);
+      expect(recovered.stdout).toContain("installed package");
+      expect(await readFile(counter, "utf8")).toBe("3");
+
+      await writeFile(counter, "0");
+      const exhausted = run(
+        process.execPath,
+        [npmInstallReadbackScript, temporary.path, "@davidahmann/mill@0.7.0"],
+        temporary.path,
+        {
+          MILL_NPM_INSTALL_ATTEMPTS: "2",
+          MILL_NPM_INSTALL_DELAY_MS: "1",
+          MILL_TEST_COUNTER: counter,
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        },
+      );
+      expect(exhausted.status).toBe(1);
+      expect(exhausted.stderr).toContain(
+        "npm package readback did not settle after 2 attempts",
       );
       expect(await readFile(counter, "utf8")).toBe("2");
     } finally {
