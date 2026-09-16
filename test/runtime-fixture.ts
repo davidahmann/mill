@@ -379,6 +379,9 @@ const sourceMount=mounts.find((value)=>value.includes("target=/workspace/src,rea
 const source=/source=([^,]+)/u.exec(sourceMount)?.[1];
 if(!source)process.exit(2);
 const value=await readFile(path.join(source,"value.js"),"utf8");
+const passed=/value = [1-9]/u.test(value)&&!(${options.nativeRepair === true}&&/value = 2/u.test(value));
+const marker=args.find((entry)=>entry.startsWith("MILL_ARTIFACT_PROTOCOL="))?.slice("MILL_ARTIFACT_PROTOCOL=".length);
+if(marker!==undefined){const contents='{"baseline":true}\\n';process.stdout.write(\`\\n\${marker}:begin\\nregular:\${Buffer.byteLength(contents)}\\n\${Buffer.from(contents).toString("base64")}\\n\${marker}:end:\${passed?0:1}\\n\`)}
 process.exit(/value = [1-9]/u.test(value)&&!(${options.nativeRepair === true}&&/value = 2/u.test(value))?0:1);
 `,
     { mode: 0o755 },

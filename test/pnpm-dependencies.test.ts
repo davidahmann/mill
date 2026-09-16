@@ -221,6 +221,39 @@ describe("generic pnpm dependency preparation", () => {
     }
   });
 
+  it("rejects a dangling link inside a newly present workspace dependency tree", async () => {
+    const value = await pnpmFixture();
+    try {
+      const prepared = await prepareDependencySnapshot({
+        root: value.repository.path,
+        stateDirectory: value.state.path,
+        config: value.config,
+        attended: true,
+      });
+      const workspaceModules = path.join(
+        prepared.directory,
+        "packages",
+        "example",
+        "node_modules",
+      );
+      await mkdir(workspaceModules, { recursive: true });
+      await symlink("missing-target", path.join(workspaceModules, "dangling"));
+      await expect(
+        dependencySnapshotDirectory({
+          root: value.repository.path,
+          stateDirectory: value.state.path,
+          config: value.config,
+        }),
+      ).rejects.toMatchObject({ code: "VERIFIER_DEPENDENCIES_UNAVAILABLE" });
+    } finally {
+      await Promise.all([
+        value.repository.cleanup(),
+        value.state.cleanup(),
+        value.tools.cleanup(),
+      ]);
+    }
+  });
+
   it("rejects pnpm native-build exceptions before registry access", async () => {
     const value = await pnpmFixture();
     try {

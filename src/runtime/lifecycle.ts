@@ -812,6 +812,7 @@ export async function qualifyBaseline(input: {
           store.directory,
           "baseline-artifacts",
           qualified.baseCommit,
+          randomUUID(),
         ),
         candidateCommit: qualified.baseCommit,
         config: inputs.config,

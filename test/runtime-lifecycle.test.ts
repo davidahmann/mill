@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
@@ -85,6 +85,66 @@ async function qualifiedApproval(
 }
 
 describe("local delivery lifecycle", () => {
+  it("keeps repeated baseline retained-artifact collection in distinct storage", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const configPath = path.join(fixture.root, "mill.yaml");
+      const config = await readFile(configPath, "utf8");
+      await writeFile(
+        configPath,
+        config.replace(
+          "    execution: oci\n",
+          `    execution: oci
+    retainedArtifacts:
+      paths: [reports/check.json]
+      required: true
+      maxFiles: 1
+      maxFileBytes: 1024
+      maxTotalBytes: 1024
+`,
+        ),
+      );
+      await git(fixture.root, ["add", "mill.yaml"]);
+      await git(fixture.root, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: retain baseline reports",
+      ]);
+      const first = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      const second = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      expect(first.evidence.passed).toBe(true);
+      expect(second.evidence.passed).toBe(true);
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      try {
+        const directories = await readdir(
+          path.join(
+            store.directory,
+            "baseline-artifacts",
+            first.evidence.candidateCommit,
+          ),
+        );
+        expect(directories).toHaveLength(2);
+        expect(new Set(directories).size).toBe(2);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("lists only candidate-bound retained verifier artifacts and detects later tampering", async () => {
     const fixture = await runtimeFixture();
     activate(fixture);

@@ -135,6 +135,7 @@ try {
         "if (artifactRoot === undefined) throw new Error('artifact output is unavailable');",
         "await mkdir(`${artifactRoot}/reports`, { recursive: true });",
         "await writeFile(`${artifactRoot}/reports/pnpm-oci.json`, JSON.stringify({ owner, body }) + '\\n');",
+        "await writeFile(`${artifactRoot}/reports/owner's.json`, 'ok');",
       ].join("\n"),
     ),
   ]);
@@ -201,9 +202,9 @@ try {
         execution: "oci",
         writablePaths: ["scratch"],
         retainedArtifacts: {
-          paths: ["reports/pnpm-oci.json"],
+          paths: ["reports/pnpm-oci.json", "reports/owner's.json"],
           required: true,
-          maxFiles: 1,
+          maxFiles: 2,
           maxFileBytes: 4096,
           maxTotalBytes: 4096,
         },
@@ -266,7 +267,9 @@ try {
       )}`,
     );
   }
-  const artifact = evidence.commands[0]?.artifacts?.[0];
+  const artifact = evidence.commands[0]?.artifacts?.find(
+    (candidate) => candidate.path === "reports/pnpm-oci.json",
+  );
   if (artifact?.path !== "reports/pnpm-oci.json") {
     throw new Error(
       "pnpm OCI canary did not retain its declared scenario report",
@@ -283,6 +286,14 @@ try {
   );
   if (JSON.parse(report).owner !== "finance") {
     throw new Error("pnpm OCI canary retained an unexpected scenario report");
+  }
+  const apostropheArtifact = evidence.commands[0]?.artifacts?.find(
+    (candidate) => candidate.path === "reports/owner's.json",
+  );
+  if (apostropheArtifact?.bytes !== 2) {
+    throw new Error(
+      "pnpm OCI canary did not retain the apostrophe-path scenario report",
+    );
   }
   const assertNoVerifierContainers = async () => {
     const result = await execute(

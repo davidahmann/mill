@@ -181,6 +181,74 @@ describe("operational state", () => {
     },
   );
 
+  it("upgrades a genuine v1 state that predates worker invocation tables", async () => {
+    const temporary = await temporaryDirectory("mill-state-v1-history-");
+    process.env.MILL_STATE_HOME = temporary.path;
+    const repositoryId = "11111111-1111-4111-8111-111111111111";
+    const directory = repositoryStateDirectory(repositoryId, temporary.path);
+    const databasePath = path.join(directory, "state.sqlite3");
+    await mkdir(path.join(directory, "worktrees"), { recursive: true });
+    const legacy = new DatabaseSync(databasePath);
+    try {
+      legacy.exec(`
+        CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+        CREATE TABLE runs (
+          id TEXT PRIMARY KEY, repository_id TEXT NOT NULL, task_id TEXT NOT NULL,
+          task_digest TEXT NOT NULL, config_digest TEXT NOT NULL, status TEXT NOT NULL,
+          base_commit TEXT NOT NULL, worktree_path TEXT, context_digest TEXT,
+          context_json TEXT, control_json TEXT, candidate_commit TEXT,
+          candidate_tree TEXT, deadline_at TEXT NOT NULL, active_pid INTEGER,
+          cancel_requested INTEGER NOT NULL DEFAULT 0, repair_count INTEGER NOT NULL DEFAULT 0,
+          attempt_count INTEGER NOT NULL DEFAULT 0, block_code TEXT, validation_json TEXT,
+          review_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE run_events (
+          sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id),
+          occurred_at TEXT NOT NULL, type TEXT NOT NULL, data_json TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE baseline_qualifications (
+          approval_digest TEXT PRIMARY KEY, repository_id TEXT NOT NULL,
+          task_digest TEXT NOT NULL, config_digest TEXT NOT NULL, base_commit TEXT NOT NULL,
+          evidence_digest TEXT NOT NULL, created_at TEXT NOT NULL
+        ) STRICT;
+      `);
+      legacy
+        .prepare("INSERT INTO metadata(key, value) VALUES (?, ?)")
+        .run("schema_version", "1");
+      legacy
+        .prepare(
+          `INSERT INTO runs(
+             id, repository_id, task_id, task_digest, config_digest, status,
+             base_commit, deadline_at, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          "v1-run",
+          repositoryId,
+          "v1-task",
+          `sha256:${"a".repeat(64)}`,
+          `sha256:${"b".repeat(64)}`,
+          "ready",
+          "c".repeat(40),
+          "2026-09-02T00:00:00.000Z",
+          "2026-09-01T00:00:00.000Z",
+          "2026-09-01T00:00:00.000Z",
+        );
+    } finally {
+      legacy.close();
+    }
+    const migrated = await StateStore.open(repositoryId, temporary.path);
+    try {
+      expect(migrated.getRun("v1-run")).toMatchObject({ taskId: "v1-task" });
+      const invocationId = startWorkerInvocation(migrated, "v1-run", "build");
+      expect(invocationId).toMatch(/^[0-9a-f-]{36}$/u);
+      expect(migrated.stats().schemaVersion).toBe(4);
+    } finally {
+      migrated.close();
+      await temporary.cleanup();
+    }
+  });
+
   it("upgrades the populated v0.5.0 release schema without losing its evidence", async () => {
     const temporary = await temporaryDirectory("mill-state-v050-release-");
     process.env.MILL_STATE_HOME = temporary.path;

@@ -612,12 +612,14 @@ async function optionalDependencyTreeDigest(
   containmentRoot = directory,
 ): Promise<string> {
   try {
-    return await dependencyTreeDigest(directory, containmentRoot);
+    await lstat(directory);
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return "absent";
+    }
     throw error;
   }
+  return await dependencyTreeDigest(directory, containmentRoot);
 }
 
 async function pnpmWorkspaceTreeDigests(

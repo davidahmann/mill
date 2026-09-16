@@ -96,8 +96,15 @@ function artifactTransportBudget(
   return encodedPayload + framing;
 }
 
+function artifactTmpfsBytes(
+  retained: NonNullable<MillConfig["commands"][string]["retainedArtifacts"]>,
+): number {
+  const pageBytes = 4096;
+  return retained.maxTotalBytes + (retained.maxFiles + 1) * pageBytes;
+}
+
 function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\\"'\\\"'")}'`;
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
 
 function retainedArtifactProtocolScript(input: {
@@ -1149,13 +1156,14 @@ export async function verifyDeclaredCommands(input: {
           `type=tmpfs,target=/workspace/${writablePath},tmpfs-size=268435456,tmpfs-mode=1777`,
         );
       }
+      const retainedArtifactsConfig = command.retainedArtifacts;
       const artifactOutput =
-        command.retainedArtifacts === undefined
+        retainedArtifactsConfig === undefined
           ? undefined
           : await mkdtemp(path.join(tmpdir(), "mill-verifier-artifacts-"));
       if (artifactOutput !== undefined) await chmod(artifactOutput, 0o700);
       const artifactProtocol =
-        command.retainedArtifacts === undefined ? undefined : randomUUID();
+        retainedArtifactsConfig === undefined ? undefined : randomUUID();
       let result: ProcessResult;
       let retainedArtifacts:
         Awaited<ReturnType<typeof collectRetainedArtifacts>> | undefined;
@@ -1197,11 +1205,11 @@ export async function verifyDeclaredCommands(input: {
             ...workspace.mounts,
             ...dependencyMounts,
             ...writableMounts,
-            ...(artifactOutput === undefined
+            ...(retainedArtifactsConfig === undefined
               ? []
               : [
                   "--tmpfs",
-                  `/mill-artifacts:rw,size=${command.retainedArtifacts?.maxTotalBytes ?? 0},mode=1777`,
+                  `/mill-artifacts:rw,size=${artifactTmpfsBytes(retainedArtifactsConfig)},mode=1777`,
                 ]),
             "--workdir",
             containerCwd,
@@ -1215,7 +1223,7 @@ export async function verifyDeclaredCommands(input: {
             "NEXT_TELEMETRY_DISABLED=1",
             "--env",
             "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
-            ...(artifactOutput === undefined
+            ...(retainedArtifactsConfig === undefined
               ? []
               : [
                   "--env",
@@ -1224,15 +1232,17 @@ export async function verifyDeclaredCommands(input: {
                   `MILL_ARTIFACT_PROTOCOL=${artifactProtocol}`,
                 ]),
             "--entrypoint",
-            artifactOutput === undefined ? commandExecutable : "/bin/sh",
+            retainedArtifactsConfig === undefined
+              ? commandExecutable
+              : "/bin/sh",
             input.config.verifier.image,
-            ...(artifactOutput === undefined
+            ...(retainedArtifactsConfig === undefined
               ? command.argv.slice(1)
               : [
                   "-ec",
                   retainedArtifactProtocolScript({
-                    paths: command.retainedArtifacts?.paths ?? [],
-                    maxFileBytes: command.retainedArtifacts?.maxFileBytes ?? 0,
+                    paths: retainedArtifactsConfig.paths,
+                    maxFileBytes: retainedArtifactsConfig.maxFileBytes,
                   }),
                   "mill-artifact-protocol",
                   commandExecutable,
@@ -1249,9 +1259,9 @@ export async function verifyDeclaredCommands(input: {
           deadlineMs: commandDeadline,
           maxOutputBytes:
             input.maxOutputBytes +
-            (command.retainedArtifacts === undefined
+            (retainedArtifactsConfig === undefined
               ? 0
-              : artifactTransportBudget(command.retainedArtifacts)),
+              : artifactTransportBudget(retainedArtifactsConfig)),
           ...(input.signal === undefined ? {} : { signal: input.signal }),
           ...(input.onSpawn === undefined ? {} : { onSpawn: input.onSpawn }),
           ...(input.onExit === undefined ? {} : { onExit: input.onExit }),

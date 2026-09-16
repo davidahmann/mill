@@ -64,6 +64,16 @@ function createInitialTables(database: DatabaseSync): void {
       evidence_digest TEXT NOT NULL,
       created_at TEXT NOT NULL
     ) STRICT;
+    CREATE TRIGGER IF NOT EXISTS run_events_no_update
+      BEFORE UPDATE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS run_events_no_delete
+      BEFORE DELETE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
+  `);
+  createWorkerInvocationTables(database);
+}
+
+function createWorkerInvocationTables(database: DatabaseSync): void {
+  database.exec(`
     CREATE TABLE IF NOT EXISTS worker_invocations (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES runs(id),
@@ -79,10 +89,6 @@ function createInitialTables(database: DatabaseSync): void {
       type TEXT NOT NULL,
       data_json TEXT NOT NULL
     ) STRICT;
-    CREATE TRIGGER IF NOT EXISTS run_events_no_update
-      BEFORE UPDATE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS run_events_no_delete
-      BEFORE DELETE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
     CREATE TRIGGER IF NOT EXISTS worker_invocations_no_update
       BEFORE UPDATE ON worker_invocations BEGIN SELECT RAISE(ABORT, 'worker invocations are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS worker_invocations_no_delete
@@ -118,6 +124,7 @@ function addV2RunColumns(database: DatabaseSync): void {
       database.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
     }
   }
+  createWorkerInvocationTables(database);
 }
 
 function expandRepairCount(database: DatabaseSync): void {
