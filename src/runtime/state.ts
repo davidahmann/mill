@@ -30,6 +30,7 @@ import {
   applyStateMigrations,
   assertCurrentStateMigrations,
   CURRENT_STATE_SCHEMA_VERSION,
+  stateSchemaVersion,
   stateMigrationHistory,
   type AppliedStateMigration,
 } from "./state-migrations.js";
@@ -293,7 +294,7 @@ const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
     "failed",
     "stale",
   ],
-  awaiting_human: ["merged", "blocked", "failed", "stale"],
+  awaiting_human: ["merged", "blocked", "cancelled", "failed", "stale"],
   merged: ["post_merge_verified", "blocked", "failed", "stale"],
   post_merge_verified: ["closed", "blocked", "failed", "stale"],
   closed: [],
@@ -440,25 +441,133 @@ export class StateStore {
     await chmod(directory, 0o700);
     await chmod(path.join(directory, "worktrees"), 0o700);
     const databasePath = path.join(directory, "state.sqlite3");
+    const information = await lstat(databasePath)
+      .then((entry) => entry)
+      .catch((error: unknown) => {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          return undefined;
+        throw error;
+      });
+    if (
+      information !== undefined &&
+      (!information.isFile() || information.isSymbolicLink())
+    ) {
+      throw new MillError(
+        "INVALID_STATE_FILE",
+        "Operational state must be a regular Mill-owned database file.",
+        ExitCode.configuration,
+      );
+    }
+    const existed = information !== undefined;
+    let before = 0;
+    if (existed) {
+      const probe = new DatabaseSync(databasePath, {
+        readOnly: true,
+        allowExtension: false,
+        enableDoubleQuotedStringLiterals: false,
+      });
+      try {
+        before = stateSchemaVersion(probe);
+      } finally {
+        probe.close();
+      }
+    }
+    const migrationLease =
+      before < CURRENT_STATE_SCHEMA_VERSION
+        ? await acquireExclusiveLease({
+            path: path.join(directory, "writer-lease.sqlite3"),
+            activeCode: "WRITER_ALREADY_ACTIVE",
+            activeMessage:
+              "Another Mill writer is active for this repository; state upgrade is deferred.",
+            unavailableCode: "WRITER_LEASE_UNAVAILABLE",
+            unavailableMessage:
+              "The repository state upgrade lease could not be acquired safely.",
+          })
+        : undefined;
+    try {
+      const database = new DatabaseSync(databasePath, {
+        timeout: 5_000,
+        allowExtension: false,
+        enableDoubleQuotedStringLiterals: false,
+      });
+      database.exec(`
+        PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = FULL;
+        PRAGMA foreign_keys = ON;
+        PRAGMA trusted_schema = OFF;
+      `);
+      try {
+        if (existed && before > 0 && before < CURRENT_STATE_SCHEMA_VERSION) {
+          const preUpgrade = path.join(
+            directory,
+            `state-backup-preupgrade-v${before}-${new Date().toISOString().replaceAll(/[:.]/gu, "-")}.sqlite3`,
+          );
+          await backup(database, preUpgrade);
+          await chmod(preUpgrade, 0o600);
+        }
+        applyStateMigrations(database);
+        assertCurrentStateMigrations(database);
+      } catch (error) {
+        database.close();
+        throw error;
+      }
+      await chmod(databasePath, 0o600);
+      return new StateStore(directory, database);
+    } finally {
+      await migrationLease?.release();
+    }
+  }
+
+  /** Opens an existing current state without creating, upgrading, or locking it. */
+  static async openReadOnly(
+    repositoryId: string,
+    commonDirectory: string,
+  ): Promise<StateStore | undefined> {
+    const directory = repositoryStateDirectory(repositoryId, commonDirectory);
+    const databasePath = path.join(directory, "state.sqlite3");
+    let information;
+    try {
+      information = await lstat(databasePath);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return undefined;
+      throw error;
+    }
+    if (!information.isFile() || information.isSymbolicLink()) {
+      throw new MillError(
+        "INVALID_STATE_FILE",
+        "Operational state must be a regular Mill-owned database file.",
+        ExitCode.configuration,
+      );
+    }
     const database = new DatabaseSync(databasePath, {
+      readOnly: true,
       timeout: 5_000,
       allowExtension: false,
       enableDoubleQuotedStringLiterals: false,
     });
-    database.exec(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = FULL;
-      PRAGMA foreign_keys = ON;
-      PRAGMA trusted_schema = OFF;
-    `);
     try {
-      applyStateMigrations(database);
+      database.exec(
+        "PRAGMA foreign_keys = ON; PRAGMA trusted_schema = OFF; PRAGMA query_only = ON;",
+      );
+      const schemaVersion = stateSchemaVersion(database);
+      if (schemaVersion < CURRENT_STATE_SCHEMA_VERSION) {
+        throw new MillError(
+          "STATE_UPGRADE_REQUIRED",
+          "Operational state is older than this Mill version; run an attended mutating command to upgrade it.",
+          ExitCode.configuration,
+          { schemaVersion, currentSchemaVersion: CURRENT_STATE_SCHEMA_VERSION },
+        );
+      }
       assertCurrentStateMigrations(database);
     } catch (error) {
       database.close();
       throw error;
     }
-    await chmod(databasePath, 0o600);
     return new StateStore(directory, database);
   }
 
@@ -1990,6 +2099,9 @@ export async function restoreStateBackup(
       candidate.exec("PRAGMA trusted_schema = OFF; PRAGMA foreign_keys = ON;");
       const integrity = candidate.prepare("PRAGMA integrity_check").get() as
         { integrity_check?: string } | undefined;
+      const foreignKeyViolations = candidate
+        .prepare("PRAGMA foreign_key_check")
+        .all();
       const version = candidate
         .prepare("SELECT value FROM metadata WHERE key = 'schema_version'")
         .get() as { value?: string } | undefined;
@@ -2014,6 +2126,7 @@ export async function restoreStateBackup(
         .all() as unknown as { worktree_path: string }[];
       if (
         integrity?.integrity_check !== "ok" ||
+        foreignKeyViolations.length > 0 ||
         (version?.value !== "1" &&
           version?.value !== "2" &&
           version?.value !== "3" &&

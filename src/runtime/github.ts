@@ -821,7 +821,7 @@ class GhGitHubAdapter implements GitHubAdapter {
       if (
         review.body.trim().length === 0 ||
         review.commitId === null ||
-        reviewPriority === "unclassified"
+        review.state === "APPROVED"
       ) {
         return [];
       }

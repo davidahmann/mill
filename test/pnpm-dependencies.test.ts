@@ -12,10 +12,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { stringify as yaml } from "yaml";
 
 import { millConfigSchema } from "../src/contracts/schemas.js";
+import type { TaskPacket } from "../src/runtime/inputs.js";
 import {
   dependencySnapshotDirectory,
   prepareDependencySnapshot,
 } from "../src/runtime/dependencies.js";
+import { verifyDeclaredCommands } from "../src/runtime/verifier.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const originalDocker = process.env.MILL_DOCKER_PATH;
@@ -106,11 +108,11 @@ const args=process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+"\\n");
 if(args[0]==="image"||args[0]==="rm")process.exit(0);
 if(args[0]!=="run")process.exit(2);
-const mount=args.find((value)=>value.startsWith("type=bind,")&&value.endsWith("target=/workspace"));
+const mount=args.find((value)=>value.startsWith("type=bind,")&&value.includes("target=/workspace"));
 if(mount===undefined)process.exit(3);
 const prefix="type=bind,source=";
-const suffix=",target=/workspace";
-mkdirSync(path.join(mount.slice(prefix.length,-suffix.length),"node_modules"),{recursive:true});
+const source=mount.slice(prefix.length,mount.indexOf(",target=/workspace"));
+mkdirSync(path.join(source,"node_modules"),{recursive:true});
 process.exit(0);
 `,
     { mode: 0o755 },
@@ -121,6 +123,54 @@ process.exit(0);
 }
 
 describe("generic pnpm dependency preparation", () => {
+  it("mounts each prepared shallow-workspace dependency directory into the read-only candidate", async () => {
+    const value = await pnpmFixture();
+    try {
+      const prepared = await prepareDependencySnapshot({
+        root: value.repository.path,
+        stateDirectory: value.state.path,
+        config: value.config,
+        attended: true,
+      });
+      await mkdir(
+        path.join(prepared.directory, "packages", "example", "node_modules"),
+        { recursive: true },
+      );
+      const evidence = await verifyDeclaredCommands({
+        root: value.repository.path,
+        dependencyRoot: prepared.directory,
+        candidateCommit: "a".repeat(40),
+        config: value.config,
+        task: { commandIds: ["test"] } as TaskPacket,
+        deadlineMs: Date.now() + 30_000,
+        maxOutputBytes: 1024,
+      });
+      expect(evidence).toMatchObject({
+        passed: true,
+        commands: [{ commandId: "test", status: "passed" }],
+      });
+      const calls = (await readFile(value.log, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[]);
+      const verify = calls.find(
+        (call) =>
+          call.includes("--network") &&
+          call.includes("none") &&
+          call.includes("/usr/local/bin/pnpm"),
+      );
+      expect(verify?.join(" ")).toContain(
+        "target=/workspace/packages/example/node_modules,readonly",
+      );
+    } finally {
+      await Promise.all([
+        value.repository.cleanup(),
+        value.state.cleanup(),
+        value.tools.cleanup(),
+      ]);
+    }
+  });
+
   it("binds the root, workspace manifests, lockfile, pnpm version, and disabled lifecycle scripts", async () => {
     const value = await pnpmFixture();
     try {
@@ -139,6 +189,17 @@ describe("generic pnpm dependency preparation", () => {
           config: value.config,
         }),
       ).resolves.toBe(prepared.directory);
+      await mkdir(
+        path.join(prepared.directory, "packages", "example", "node_modules"),
+        { recursive: true },
+      );
+      await expect(
+        dependencySnapshotDirectory({
+          root: value.repository.path,
+          stateDirectory: value.state.path,
+          config: value.config,
+        }),
+      ).rejects.toMatchObject({ code: "VERIFIER_DEPENDENCIES_UNAVAILABLE" });
       const calls = (await readFile(value.log, "utf8"))
         .trim()
         .split("\n")
@@ -151,6 +212,39 @@ describe("generic pnpm dependency preparation", () => {
       expect(install).toContain("MILL_PNPM_VERSION=10.23.0");
       expect(install?.join(" ")).toContain("pnpm --version");
       expect(install?.join(" ")).toContain("--ignore-scripts");
+    } finally {
+      await Promise.all([
+        value.repository.cleanup(),
+        value.state.cleanup(),
+        value.tools.cleanup(),
+      ]);
+    }
+  });
+
+  it("rejects a dangling link inside a newly present workspace dependency tree", async () => {
+    const value = await pnpmFixture();
+    try {
+      const prepared = await prepareDependencySnapshot({
+        root: value.repository.path,
+        stateDirectory: value.state.path,
+        config: value.config,
+        attended: true,
+      });
+      const workspaceModules = path.join(
+        prepared.directory,
+        "packages",
+        "example",
+        "node_modules",
+      );
+      await mkdir(workspaceModules, { recursive: true });
+      await symlink("missing-target", path.join(workspaceModules, "dangling"));
+      await expect(
+        dependencySnapshotDirectory({
+          root: value.repository.path,
+          stateDirectory: value.state.path,
+          config: value.config,
+        }),
+      ).rejects.toMatchObject({ code: "VERIFIER_DEPENDENCIES_UNAVAILABLE" });
     } finally {
       await Promise.all([
         value.repository.cleanup(),

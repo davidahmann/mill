@@ -1,28 +1,29 @@
 # Local delivery statistics
 
-`millctl --json stats` returns a redacted aggregate for the current repository's
-Mill state. It is for a maintainer deciding where delivery is stalling or
-whether a repair budget needs investigation.
-
-Opening an older supported state records the required local schema migration
-before the aggregate is read. The command does not create a run, change run
-evidence, or perform a repository or remote effect.
-
-The response includes the state schema version and named applied migrations, the
-total number of runs grouped by lifecycle status, total builder attempts, and
-completed repair waves. It does not include task IDs, paths, prompts,
-credentials, command output, review data, delivery receipts, or event payloads.
+`millctl --json stats` reads the current repository's local Mill state. It is
+for finding a stalled lifecycle stage or deciding where a repair budget needs
+attention.
 
 ```sh
 millctl --json stats
 ```
 
-Use the result as an operating signal, not a productivity score. A higher repair
-count can reflect a harder change, a weak acceptance case, or a runtime failure.
-Inspect the affected run's [timeline](run-timeline.md) and
-[outcome](run-outcome.md) before changing policy. The default task schema keeps
-one repair wave. A task may opt into exactly two waves only for the named
-fixture-only experiment, where each repaired candidate still goes through fresh
-validation and review. It is not a general retry increase.
+The command opens state read-only. With no state it reports an empty aggregate.
+With an older supported state it stops with an upgrade-required error instead of
+recording a migration while answering a diagnostic request. Use an attended
+mutating command to perform the guarded upgrade and retain its backup.
 
-For a broader redacted operating view, use [reports](report.md).
+The response includes the state schema version, applied migrations, runs by
+lifecycle status, builder attempts, and completed repair waves. It excludes task
+IDs, paths, prompts, credentials, command output, review data, delivery
+receipts, and event payloads.
+
+Use the result as an operating signal, not a productivity score. A higher repair
+count may reflect a harder change, weak acceptance cases, or a runtime failure.
+Inspect the affected [timeline](run-timeline.md) and [outcome](run-outcome.md)
+before changing policy. The default task schema keeps one repair wave. A task
+may opt into two waves only through its named fixture-only experiment; every
+repaired candidate still receives fresh validation and review.
+
+For the declared change denominator and maintainer-entered effort measurements,
+use [`report`](report.md).

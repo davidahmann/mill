@@ -730,7 +730,7 @@ export function reviewsPassed(
           review.actorLogin === login && review.commitId === candidateCommit,
       )
       .at(-1);
-    return latest?.state === "APPROVED" || latest?.state === "COMMENTED";
+    return latest?.state === "APPROVED";
   });
 }
 

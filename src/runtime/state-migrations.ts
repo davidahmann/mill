@@ -64,6 +64,16 @@ function createInitialTables(database: DatabaseSync): void {
       evidence_digest TEXT NOT NULL,
       created_at TEXT NOT NULL
     ) STRICT;
+    CREATE TRIGGER IF NOT EXISTS run_events_no_update
+      BEFORE UPDATE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS run_events_no_delete
+      BEFORE DELETE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
+  `);
+  createWorkerInvocationTables(database);
+}
+
+function createWorkerInvocationTables(database: DatabaseSync): void {
+  database.exec(`
     CREATE TABLE IF NOT EXISTS worker_invocations (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES runs(id),
@@ -79,10 +89,6 @@ function createInitialTables(database: DatabaseSync): void {
       type TEXT NOT NULL,
       data_json TEXT NOT NULL
     ) STRICT;
-    CREATE TRIGGER IF NOT EXISTS run_events_no_update
-      BEFORE UPDATE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS run_events_no_delete
-      BEFORE DELETE ON run_events BEGIN SELECT RAISE(ABORT, 'run events are append-only'); END;
     CREATE TRIGGER IF NOT EXISTS worker_invocations_no_update
       BEFORE UPDATE ON worker_invocations BEGIN SELECT RAISE(ABORT, 'worker invocations are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS worker_invocations_no_delete
@@ -118,6 +124,7 @@ function addV2RunColumns(database: DatabaseSync): void {
       database.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
     }
   }
+  createWorkerInvocationTables(database);
 }
 
 function expandRepairCount(database: DatabaseSync): void {
@@ -195,7 +202,13 @@ const stateMigrations: readonly StateMigration[] = [
   },
 ];
 
-function stateVersion(database: DatabaseSync): number {
+export function stateSchemaVersion(database: DatabaseSync): number {
+  const metadata = database
+    .prepare(
+      "SELECT 1 AS present FROM sqlite_schema WHERE type = 'table' AND name = 'metadata'",
+    )
+    .get() as { present: number } | undefined;
+  if (metadata?.present !== 1) return 0;
   const row = database
     .prepare("SELECT value FROM metadata WHERE key = 'schema_version'")
     .get() as { value: string } | undefined;
@@ -311,34 +324,33 @@ export function applyStateMigrations(database: DatabaseSync): void {
         applied_at TEXT NOT NULL
       ) STRICT;
     `);
-    const current = stateVersion(database);
+    const current = stateSchemaVersion(database);
     validateRecordedMigrations(database, current);
     if (current === CURRENT_STATE_SCHEMA_VERSION) {
       assertCurrentStateMigrations(database);
     } else {
       for (const migration of stateMigrations) {
         if (migration.version <= current) {
-          migration.apply(database);
           recordMigration(database, migration);
           continue;
         }
         applyMigration(database, migration);
       }
     }
-    database.exec("COMMIT");
-    transactionStarted = false;
-    database.exec("PRAGMA foreign_keys = ON");
-    foreignKeysDisabled = false;
-    const foreignKeyViolation = database
+    const foreignKeyViolations = database
       .prepare("PRAGMA foreign_key_check")
-      .get();
-    if (foreignKeyViolation !== undefined) {
+      .all();
+    if (foreignKeyViolations.length > 0) {
       throw new MillError(
         "STATE_MIGRATION_FOREIGN_KEY_FAILURE",
         "Operational state migration produced an invalid foreign-key reference.",
         ExitCode.data,
       );
     }
+    database.exec("COMMIT");
+    transactionStarted = false;
+    database.exec("PRAGMA foreign_keys = ON");
+    foreignKeysDisabled = false;
   } catch (error) {
     if (transactionStarted) {
       try {

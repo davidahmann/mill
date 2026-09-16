@@ -170,6 +170,29 @@ this historical artifact-name prefix.
 Inspect that artifact and workflow result. A missing or skipped required result
 is a failure, not an exception.
 
+### Evidence retained with the release
+
+Actions artifacts are short-lived operational inputs. The GitHub Release is the
+durable evidence location. Before publication, the workflow uploads a
+prepublication evidence file and the selected tarball, qualification, SBOM, and
+identity. It then records a draft-release observation in
+`release-evidence-draft.json`, publishes the release, reads it back again, and
+attaches `release-evidence-final.json`. The two files bind the same artifact,
+support tuple, candidate and publish workflow identities. They differ only in
+the observed GitHub Release state and timestamp.
+
+Use `scripts/reconstruct-release-evidence.mjs` with a directory of retained
+release assets and the draft/final evidence names to validate the chain without
+Actions artifacts. It rejects missing, swapped, or mismatched identities. A
+later readback of an already public release cannot recreate an observation that
+was not retained while the release was a draft.
+
+`v0.6.1` has an additive
+[`release-evidence-supplement-2026-09-16.json`](https://github.com/davidahmann/mill/releases/download/v0.6.1/release-evidence-supplement-2026-09-16.json)
+because its candidate artifact was nearing expiry. The supplement records
+published-release and registry observations. It does not claim a historical
+draft observation. New releases use the ordered draft/final assets above.
+
 ### 4. Publish the preserved artifact
 
 Publication requires separate authorization, the successful candidate workflow

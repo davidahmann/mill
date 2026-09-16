@@ -1192,7 +1192,7 @@ describe("run outcome projection", () => {
       postMergePolicyDelivery,
     );
     expect(outcome(postMergePolicyMismatch).integrity.reasons).toContainEqual(
-      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_INVALID" }),
     );
   });
 

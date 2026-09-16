@@ -390,7 +390,6 @@ async function invoke(
       {
         exitCode: result.exitCode,
         durationMs: result.durationMs,
-        stderr: result.stderr.slice(0, 2_000),
         ...(safeProviderErrorCode === undefined
           ? {}
           : { providerErrorCode: safeProviderErrorCode }),

@@ -22,7 +22,12 @@
     },
     "reporting": {
       "type": "object",
-      "properties": { "selfHosted": { "default": false, "type": "boolean" } },
+      "properties": {
+        "ledgerPath": {
+          "type": "string",
+          "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+$"
+        }
+      },
       "additionalProperties": false
     },
     "verifier": {
@@ -296,7 +301,40 @@
               "pattern": "^(?!\\.\\.?$)(?!.*[,/])[^*?[\\]\\\\]+$"
             }
           },
-          "executableFixtureScratch": { "type": "boolean", "const": true }
+          "executableFixtureScratch": { "type": "boolean", "const": true },
+          "retainedArtifacts": {
+            "type": "object",
+            "properties": {
+              "paths": {
+                "minItems": 1,
+                "maxItems": 32,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "uniqueItems": true
+              },
+              "required": { "default": true, "type": "boolean" },
+              "maxFiles": {
+                "default": 16,
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 32
+              },
+              "maxFileBytes": {
+                "default": 1000000,
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000
+              },
+              "maxTotalBytes": {
+                "default": 5000000,
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50000000
+              }
+            },
+            "required": ["paths"],
+            "additionalProperties": false
+          }
         },
         "required": ["argv", "cwd", "controlPaths", "capability"],
         "additionalProperties": false,

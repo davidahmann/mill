@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
@@ -11,6 +11,7 @@ import {
   cancelRun,
   qualifyBaseline,
   reviewRun,
+  retainedVerifierArtifacts,
   resumeRun,
   runStatus,
   startLocalRun,
@@ -84,6 +85,162 @@ async function qualifiedApproval(
 }
 
 describe("local delivery lifecycle", () => {
+  it("keeps repeated baseline retained-artifact collection in distinct storage", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const configPath = path.join(fixture.root, "mill.yaml");
+      const config = await readFile(configPath, "utf8");
+      await writeFile(
+        configPath,
+        config.replace(
+          "    execution: oci\n",
+          `    execution: oci
+    retainedArtifacts:
+      paths: [reports/check.json]
+      required: true
+      maxFiles: 1
+      maxFileBytes: 1024
+      maxTotalBytes: 1024
+`,
+        ),
+      );
+      await git(fixture.root, ["add", "mill.yaml"]);
+      await git(fixture.root, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: retain baseline reports",
+      ]);
+      const first = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      const second = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      expect(first.evidence.passed).toBe(true);
+      expect(second.evidence.passed).toBe(true);
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      try {
+        const directories = await readdir(
+          path.join(
+            store.directory,
+            "baseline-artifacts",
+            first.evidence.candidateCommit,
+          ),
+        );
+        expect(directories).toHaveLength(2);
+        expect(new Set(directories).size).toBe(2);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("lists only candidate-bound retained verifier artifacts and detects later tampering", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const candidateCommit = started.run.candidateCommit;
+      if (candidateCommit === undefined) {
+        throw new Error("started fixture run has no candidate commit");
+      }
+      const contents = '{"scenario":"passed"}\n';
+      const digest = `sha256:${createHash("sha256").update(contents).digest("hex")}`;
+      const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      const store = await StateStore.open(
+        inputs.config.repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      const artifact = path.join(
+        store.directory,
+        "artifacts",
+        started.run.id,
+        candidateCommit,
+        createHash("sha256").update("test").digest("hex"),
+        "reports",
+        "scenario.json",
+      );
+      try {
+        await mkdir(path.dirname(artifact), { recursive: true, mode: 0o700 });
+        await writeFile(artifact, contents, { mode: 0o600 });
+        store.completeValidation(
+          started.run.id,
+          JSON.stringify({
+            schemaVersion: "1",
+            candidateCommit,
+            verifierImage:
+              inputs.config.verifier?.image ??
+              "node@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e",
+            network: "none",
+            commands: [
+              {
+                commandId: "test",
+                required: true,
+                status: "passed",
+                exitCode: 0,
+                durationMs: 1,
+                outputDigest: `sha256:${"a".repeat(64)}`,
+                artifacts: [
+                  {
+                    path: "reports/scenario.json",
+                    sha256: digest,
+                    bytes: Buffer.byteLength(contents),
+                  },
+                ],
+              },
+            ],
+            passed: true,
+          }),
+          true,
+        );
+      } finally {
+        store.close();
+      }
+      await expect(
+        retainedVerifierArtifacts({
+          root: fixture.root,
+          runId: started.run.id,
+        }),
+      ).resolves.toEqual({
+        candidateCommit: started.run.candidateCommit,
+        artifacts: [
+          {
+            commandId: "test",
+            path: "reports/scenario.json",
+            sha256: digest,
+            bytes: Buffer.byteLength(contents),
+            available: true,
+          },
+        ],
+      });
+      await writeFile(artifact, "tampered\n", { mode: 0o600 });
+      await expect(
+        retainedVerifierArtifacts({
+          root: fixture.root,
+          runId: started.run.id,
+        }),
+      ).resolves.toMatchObject({
+        artifacts: [{ path: "reports/scenario.json", available: false }],
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("repairs a committed native failure once and retains its original evidence and deadline", async () => {
     const fixture = await runtimeFixture({ nativeRepair: true });
     activate(fixture);

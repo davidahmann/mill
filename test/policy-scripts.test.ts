@@ -658,6 +658,10 @@ describe("repository policy scripts", () => {
           JSON.stringify({
             url: "https://github.com/davidahmann/mill/releases/tag/v0.1.0",
             tagName: "v0.1.0",
+            isDraft: false,
+            isPrerelease: false,
+            publishedAt: "2026-09-16T00:00:00.000Z",
+            databaseId: 1,
             assets: [{ name: path.basename(downloaded) }],
           }),
         ),
@@ -686,6 +690,8 @@ describe("repository policy scripts", () => {
       expect(JSON.parse(await readFile(githubOutput, "utf8"))).toMatchObject({
         tag: "v0.1.0",
         artifactDigest,
+        state: "published",
+        releaseId: "1",
       });
 
       await writeFile(
@@ -693,6 +699,10 @@ describe("repository policy scripts", () => {
         JSON.stringify({
           url: "https://github.com/davidahmann/mill/releases/tag/untagged-draft",
           tagName: "v0.1.0",
+          isDraft: true,
+          isPrerelease: false,
+          publishedAt: null,
+          databaseId: 1,
           assets: [{ name: path.basename(downloaded) }],
         }),
       );

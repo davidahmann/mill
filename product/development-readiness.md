@@ -40,9 +40,10 @@ API, a customer configuration, or a new product's acceptance criteria.
   declared shallow pnpm workspace shape. The adapter binds the exact pnpm
   version, lockfile, workspace file, and direct workspace manifests. It rejects
   lifecycle scripts, native-build allowlists, hook files, and registry config.
-- DR-05 Documentation calls the pnpm path source-only and unqualified. It does
-  not turn deterministic fake-OCI tests into a Docker canary or a public-alpha
-  support claim.
+- DR-05 originally recorded the pnpm path as source-only and unqualified. The
+  later MREV OCI canary exercises one pinned shallow workspace. It does not
+  claim broad workspace support, native dependency support, or a public-alpha
+  expansion.
 - DR-06 Native checks, generated-schema checks, the packed-package check, a
   clean audit, independent review, and required pull-request checks pass before
   any later merge decision. No release occurs.

@@ -337,6 +337,11 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" > "$RUNNER_TEMP/candidate-run.json"
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID/jobs?per_page=100" > "$RUNNER_TEMP/candidate-jobs.json"
           node scripts/verify-independent-release.mjs "$RUNNER_TEMP/qualified" "$RUNNER_TEMP/trusted/trusted-verifier.json" "$RUNNER_TEMP/candidate-run.json" "$RUNNER_TEMP/candidate-jobs.json" "$RUNNER_TEMP/identity.json"
+      - name: Bind candidate and publish workflow identities
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          node -e 'const fs=require("node:fs");const candidate=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/candidate-run.json","utf8"));const current={id:String(process.env.GITHUB_RUN_ID),url:`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,headCommit:process.env.GITHUB_SHA};const bound={candidate:{id:String(candidate.id),url:candidate.html_url,headCommit:candidate.head_sha},publish:current};if(!/^[1-9][0-9]*$/.test(bound.candidate.id)||!/^[1-9][0-9]*$/.test(bound.publish.id)||typeof bound.candidate.url!=="string"||!/^[a-f0-9]{40}$/.test(bound.candidate.headCommit)||!/^[a-f0-9]{40}$/.test(bound.publish.headCommit))throw new Error("invalid workflow run identity");fs.writeFileSync(process.env.RUNNER_TEMP+"/workflow-runs.json",`${JSON.stringify(bound)}\n`,{flag:"wx",mode:0o600})'
       - name: Verify preserved public-alpha qualification
         run: |
           qualification_input=.mill-release-qualification.json
@@ -353,9 +358,10 @@ jobs:
           node scripts/assemble-release-evidence.mjs \
             "$RUNNER_TEMP/qualified/artifact-metadata.json" \
             "$RUNNER_TEMP/qualified/qualification.json" \
-            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
-            "$RUNNER_TEMP/identity.json" \
-            "$RUNNER_TEMP/qualified/release-evidence-prepublication.json"
+          "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+          "$RUNNER_TEMP/identity.json" \
+          "$RUNNER_TEMP/qualified/release-evidence-prepublication.json" \
+          - - "$RUNNER_TEMP/workflow-runs.json"
       - name: Prepare the pinned verifier before immutable publication
         id: prepare-release-verifier
         run: |
@@ -399,8 +405,15 @@ jobs:
             --notes-file "$notes_file" \
             "$artifact" "$checksum" \
             "$RUNNER_TEMP/qualified/sbom.cdx.json" \
-            "$RUNNER_TEMP/qualified/release-evidence-prepublication.json"
-      - name: Read back GitHub Release and finalize evidence
+            "$RUNNER_TEMP/qualified/release-evidence-prepublication.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/audit.json" \
+            "$RUNNER_TEMP/qualified/identity.json" \
+            "$RUNNER_TEMP/qualified/release-canary.json" \
+            "$RUNNER_TEMP/trusted/trusted-verifier.json" \
+            "$RUNNER_TEMP/trusted/trusted-canary.json"
+      - name: Read back draft GitHub Release evidence
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
@@ -408,7 +421,7 @@ jobs:
           artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
           filename=$(basename "$artifact")
           mkdir -p "$RUNNER_TEMP/github-download"
-          gh release view "$RELEASE_TAG" --json url,tagName,assets > "$RUNNER_TEMP/github-release.json"
+          gh release view "$RELEASE_TAG" --json url,tagName,isDraft,isPrerelease,publishedAt,databaseId,assets > "$RUNNER_TEMP/github-release.json"
           node -e 'const fs=require("node:fs");const file=process.argv[1];const release=JSON.parse(fs.readFileSync(file,"utf8"));release.url=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/releases/tag/${encodeURIComponent(process.env.RELEASE_TAG)}`;fs.writeFileSync(file,`${JSON.stringify(release)}\n`,{flag:"w",mode:0o600})' "$RUNNER_TEMP/github-release.json"
           gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/github-download"
           node scripts/capture-release-readback.mjs \
@@ -423,8 +436,43 @@ jobs:
             "$RUNNER_TEMP/qualified/qualification.json" \
             "$RUNNER_TEMP/qualified/sbom.cdx.json" \
             "$RUNNER_TEMP/identity.json" \
-            "$RUNNER_TEMP/release-evidence-final.json" \
+            "$RUNNER_TEMP/release-evidence-draft.json" \
             "$RUNNER_TEMP/registry-readback.json" \
-            "$RUNNER_TEMP/github-readback.json"
-          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"
+            "$RUNNER_TEMP/github-readback.json" \
+            "$RUNNER_TEMP/workflow-runs.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-draft.json"
+      - name: Publish GitHub Release after draft evidence readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
           gh release edit "$RELEASE_TAG" --draft=false
+      - name: Read back published GitHub Release and attach final evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          filename=$(basename "$artifact")
+          rm -rf "$RUNNER_TEMP/github-download"
+          mkdir -p "$RUNNER_TEMP/github-download"
+          gh release view "$RELEASE_TAG" --json url,tagName,isDraft,isPrerelease,publishedAt,databaseId,assets > "$RUNNER_TEMP/github-release-published.json"
+          node -e 'const fs=require("node:fs");const file=process.argv[1];const release=JSON.parse(fs.readFileSync(file,"utf8"));release.url=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/releases/tag/${encodeURIComponent(process.env.RELEASE_TAG)}`;fs.writeFileSync(file,`${JSON.stringify(release)}\n`,{flag:"w",mode:0o600})' "$RUNNER_TEMP/github-release-published.json"
+          gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/github-download"
+          node scripts/capture-release-readback.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/registry-dist.json" \
+            "$RUNNER_TEMP/github-release-published.json" \
+            "$RUNNER_TEMP/github-download/$filename" \
+            "$RUNNER_TEMP/registry-readback-published.json" \
+            "$RUNNER_TEMP/github-readback-published.json"
+          node scripts/assemble-release-evidence.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/identity.json" \
+            "$RUNNER_TEMP/release-evidence-final.json" \
+            "$RUNNER_TEMP/registry-readback-published.json" \
+            "$RUNNER_TEMP/github-readback-published.json" \
+            "$RUNNER_TEMP/workflow-runs.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"

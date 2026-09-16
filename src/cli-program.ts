@@ -5,7 +5,12 @@ import { parse as parseYaml } from "yaml";
 
 import { auditRepository } from "./audit/repository.js";
 import { findRepositoryRoot, enforceExactVersion } from "./config/lock.js";
-import { contractSchemas, type ContractKind } from "./contracts/schemas.js";
+import {
+  changeRequestSchema,
+  contractSchemas,
+  type ContractKind,
+} from "./contracts/schemas.js";
+import { canonicalDigest, type JsonValue } from "./contracts/canonical.js";
 import { doctor, doctorReady, type DoctorMode } from "./doctor.js";
 import { asMillError, ExitCode, MillError } from "./errors.js";
 import { inspectPrd } from "./intake/prd.js";
@@ -48,6 +53,7 @@ import {
   qualifyBaseline,
   resumeRun,
   reviewRun,
+  retainedVerifierArtifacts,
   runOutcome,
   runReport,
   runStats,
@@ -278,7 +284,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
         const global = globals(program);
         const root = await findRepositoryRoot(global.cwd);
         await enforceExactVersion(root);
-        const [inspection, planning, proposal, impactInputs, tasks] =
+        const [inspection, planning, proposal, impactInputs, requestText] =
           await Promise.all([
             inspectPrd(root, options.prd),
             loadPlanningSources({
@@ -293,7 +299,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
               scenarioPath: options.scenarios,
               impactPath: options.impact,
             }),
-            compileChangeTasks({ root, requestPath: options.request }),
+            safeReadText(root, options.request, 2 * 1024 * 1024),
           ]);
         const specification = assessSpecificationProposal({
           proposal,
@@ -307,7 +313,54 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           product: impactInputs.product,
           scenarios: impactInputs.scenarios,
         });
-        const blockers = [...specification.blockers, ...impact.blockers];
+        const request = changeRequestSchema.parse(parseYaml(requestText));
+        const coherenceBlockers: string[] = [];
+        const proposalProductDigest = canonicalDigest(
+          proposal.productContract as unknown as JsonValue,
+        );
+        const selectedProductDigest = canonicalDigest(
+          impactInputs.product as unknown as JsonValue,
+        );
+        const proposalScenarioDigest = canonicalDigest(
+          proposal.scenarioSet as unknown as JsonValue,
+        );
+        const selectedScenarioDigest = canonicalDigest(
+          impactInputs.scenarios as unknown as JsonValue,
+        );
+        if (proposalProductDigest !== selectedProductDigest) {
+          coherenceBlockers.push(
+            "proposal product contract differs from --product input",
+          );
+        }
+        if (proposalScenarioDigest !== selectedScenarioDigest) {
+          coherenceBlockers.push(
+            "proposal scenario set differs from --scenarios input",
+          );
+        }
+        if (
+          request.source.path !== options.prd ||
+          request.productPath !== options.product ||
+          request.scenariosPath !== options.scenarios ||
+          request.tasks.some((task) => task.impactPath !== options.impact)
+        ) {
+          coherenceBlockers.push(
+            "change request paths do not match the selected proposal bundle",
+          );
+        }
+        const blockers = [
+          ...specification.blockers,
+          ...impact.blockers,
+          ...coherenceBlockers,
+        ];
+        const tasks =
+          blockers.length === 0
+            ? await compileChangeTasks({ root, requestPath: options.request })
+            : {
+                status: "not_compiled",
+                reason:
+                  "Task compilation requires one approved, matching proposal bundle.",
+                files: [],
+              };
         emit(
           io,
           global.json === true,
@@ -1420,7 +1473,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
   program
     .command("report")
     .description(
-      "report redacted lifecycle outcomes, measured usage and declared self-hosting progress",
+      "report redacted lifecycle outcomes, measured usage and declared development evidence",
     )
     .action(async () => {
       const global = globals(program);
@@ -1433,6 +1486,27 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
           command: "report",
           ok: true,
           data: await runReport({ root }),
+        }),
+      );
+    });
+
+  program
+    .command("artifacts")
+    .description(
+      "list candidate-bound retained verifier artifacts without exposing their bytes",
+    )
+    .requiredOption("--run <id>", "run identifier")
+    .action(async (options: { run: string }) => {
+      const global = globals(program);
+      const root = await findRepositoryRoot(global.cwd);
+      await enforceExactVersion(root);
+      emit(
+        io,
+        global.json === true,
+        commandResult({
+          command: "artifacts",
+          ok: true,
+          data: await retainedVerifierArtifacts({ root, runId: options.run }),
         }),
       );
     });

@@ -49,6 +49,17 @@ Mill makes those boundaries explicit:
 Mill is a small delivery control plane around the coding agent you already use.
 It makes scope, evidence, and external actions inspectable.
 
+## Capability status
+
+| Capability                                   | Status                                           | Evidence and limit                                                                                                                             |
+| -------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core Node/npm delivery path                  | Qualified for the release-specific support tuple | See the release evidence attached to the selected version.                                                                                     |
+| Proposal assessment                          | Shipped and exercised                            | `init propose` is read-only; approval remains outside Mill.                                                                                    |
+| Cancellation, diagnostics, and state upgrade | Shipped and tested                               | Diagnostics do not create or upgrade state. A mutating command takes the writer lease and preserves a pre-upgrade backup.                      |
+| Retained verifier reports                    | Shipped and exercised                            | Paths and limits are task-controlled. Mill lists descriptors, not report bytes.                                                                |
+| Shallow pnpm workspace                       | Exercised                                        | One pinned [OCI fixture](docs/development.md#pnpm-workspace-oci-canary) only. It is not general pnpm or native-package support.                |
+| Synthetic provider migration replay          | Exercised                                        | [Private disposable fixtures](docs/canaries/mrev-maintenance-replays.md), not live provider behavior, customer acceptance, or demand evidence. |
+
 ## What it can do
 
 For its one qualified shape, Mill can:
@@ -79,9 +90,8 @@ For its one qualified shape, Mill can:
 13. report the built-in builder's trusted-host boundary and reject an
     unqualified request for isolated execution rather than silently claiming
     containment; and
-14. report redacted aggregate lifecycle counts with `millctl stats`, plus
-    verification, measured usage, elapsed time, and an optional repository-local
-    self-hosting measure with `millctl report`.
+14. report redacted aggregate lifecycle counts with `millctl stats`, plus a
+    repository-owned development-evidence ledger with `millctl report`.
 
 Mill does not autonomously research the web or turn prose into approved product
 intent. The operator supplies the structured drafts that Mill assesses and
@@ -113,11 +123,12 @@ These capabilities remain outside the qualified public-alpha support claim until
 separately qualified. They do not grant a builder authority to change acceptance
 criteria, deliver, merge, or release.
 
-The source also contains a constrained pnpm workspace preparation path. It binds
-the pnpm version, lockfile, workspace declaration, and direct workspace package
-manifests before an offline verifier uses the prepared dependencies. It rejects
-install hooks and native-build allowlists. It is source-only and unqualified;
-the public alpha does not support pnpm workspaces.
+The source also contains a constrained pnpm workspace path. A real local OCI
+canary exercised Node 24, pnpm 10.23.0, a shallow workspace, a service, CLI,
+SQLite scratch state, an offline verifier, a retained report, and cleanup under
+failure, timeout, and cancellation. It rejects install hooks, native-build
+allowlists, and arbitrary layouts. That evidence is limited to the pinned
+fixture; the public alpha does not support general pnpm workspaces.
 
 ## Supported shape
 
@@ -231,11 +242,10 @@ millctl --json report
 
 `start` checks authority before dependency or model spend. `status` explains the
 selected run; `stats` gives lifecycle counters; `report` adds redacted outcome
-and measured-usage aggregates. Then review the candidate and make the separately
-proposed draft delivery effect:
+and measured-usage aggregates. When `start` reports a reviewed candidate, plan
+and make the separately proposed draft delivery effect:
 
 ```sh
-millctl --json review --task product/tasks/TASK.yaml --run <run-id>
 millctl --json pr plan --task product/tasks/TASK.yaml --run <run-id>
 millctl --json pr open --task product/tasks/TASK.yaml --run <run-id> \
   --approve sha256:<delivery-plan> --attended

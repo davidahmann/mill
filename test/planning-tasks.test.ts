@@ -106,7 +106,7 @@ async function requestFixture(kind = "prd", allowedPaths = ["src/value.js"]) {
 
 describe("change-plan task compilation", () => {
   it("combines reviewed planning drafts without creating authority files", async () => {
-    const { fixture, input } = await requestFixture();
+    const { fixture, input, request } = await requestFixture();
     try {
       const product = parseYaml(
         await readFile(
@@ -156,31 +156,44 @@ describe("change-plan task compilation", () => {
       await writeFile(path.join(fixture.root, "proposal.yaml"), yaml(proposal));
       await git(fixture.root, ["add", "proposal.yaml"]);
       await git(fixture.root, ["commit", "-m", "test: add proposal draft"]);
+      const initProposalArgs = (impactPath: string, requestPath: string) => [
+        "--json",
+        "--cwd",
+        fixture.root,
+        "init",
+        "propose",
+        "--prd",
+        "product/PRD.md",
+        "--sources",
+        "product/sources.yaml",
+        "--proposal",
+        "proposal.yaml",
+        "--product",
+        "product/contract.yaml",
+        "--scenarios",
+        "quality/scenarios.yaml",
+        "--impact",
+        impactPath,
+        "--request",
+        requestPath,
+      ];
+      const captureInitProposal = () => {
+        const output: string[] = [];
+        const errors: string[] = [];
+        return {
+          stdout: output,
+          stderr: errors,
+          io: {
+            stdout: { write: (value: string) => void output.push(value) },
+            stderr: { write: (value: string) => void errors.push(value) },
+          },
+        };
+      };
       const stdout: string[] = [];
       const stderr: string[] = [];
       expect(
         await runCli(
-          [
-            "--json",
-            "--cwd",
-            fixture.root,
-            "init",
-            "propose",
-            "--prd",
-            "product/PRD.md",
-            "--sources",
-            "product/sources.yaml",
-            "--proposal",
-            "proposal.yaml",
-            "--product",
-            "product/contract.yaml",
-            "--scenarios",
-            "quality/scenarios.yaml",
-            "--impact",
-            "product/impact.yaml",
-            "--request",
-            input.requestPath,
-          ],
+          initProposalArgs("product/impact.yaml", input.requestPath),
           {
             stdout: { write: (value) => void stdout.push(value) },
             stderr: { write: (value) => void stderr.push(value) },
@@ -204,6 +217,75 @@ describe("change-plan task compilation", () => {
           "utf8",
         ),
       ).rejects.toMatchObject({ code: "ENOENT" });
+
+      const unapprovedImpact = parseYaml(
+        await readFile(
+          path.join(fixture.root, "product", "impact.yaml"),
+          "utf8",
+        ),
+      ) as Record<string, unknown>;
+      await writeFile(
+        path.join(fixture.root, "product", "impact-unapproved.yaml"),
+        yaml({ ...unapprovedImpact, approval: null }),
+      );
+      const unapprovedRequest = {
+        ...request,
+        tasks: request.tasks.map((task) => ({
+          ...task,
+          impactPath: "product/impact-unapproved.yaml",
+        })),
+      };
+      await writeFile(
+        path.join(fixture.root, "change-unapproved.yaml"),
+        yaml(unapprovedRequest),
+      );
+      const unapproved = captureInitProposal();
+      expect(
+        await runCli(
+          initProposalArgs(
+            "product/impact-unapproved.yaml",
+            "change-unapproved.yaml",
+          ),
+          unapproved.io,
+        ),
+      ).toBe(0);
+      expect(JSON.parse(unapproved.stdout.join(""))).toMatchObject({
+        command: "init.propose",
+        ok: true,
+        status: "blocked",
+        data: {
+          impact: { approved: false },
+          tasks: { status: "not_compiled", files: [] },
+        },
+      });
+
+      const mismatchedRequest = {
+        ...request,
+        productPath: "product/not-the-selected-contract.yaml",
+      };
+      await writeFile(
+        path.join(fixture.root, "change-mismatched.yaml"),
+        yaml(mismatchedRequest),
+      );
+      const mismatched = captureInitProposal();
+      expect(
+        await runCli(
+          initProposalArgs("product/impact.yaml", "change-mismatched.yaml"),
+          mismatched.io,
+        ),
+      ).toBe(0);
+      expect(JSON.parse(mismatched.stdout.join(""))).toMatchObject({
+        command: "init.propose",
+        ok: true,
+        status: "blocked",
+        data: { tasks: { status: "not_compiled", files: [] } },
+        reasons: [
+          expect.objectContaining({
+            message:
+              "change request paths do not match the selected proposal bundle",
+          }),
+        ],
+      });
     } finally {
       await fixture.cleanup();
     }

@@ -1,0 +1,74 @@
+schemaVersion: "2"
+task_id: mill-mrev-architecture-development-review
+status: active
+owner: davidahmann
+base_commit: 5b5803e353c67bad8a547fe4bd7d81d3db634734
+execution_mode: approved_native_maintainer
+authority: product/mrev-architecture-dev-review.md
+impact_manifest: product/impacts/MREV_ARCH_DEV_REVIEW.yaml
+objective: >-
+  Complete the accepted MREV-01 through MREV-13 architecture and development
+  review follow-through, then prepare one independently qualified v0.7.0 source
+  candidate for separately authorized release effects.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - recipes/**
+  - docs/**
+  - architecture/**
+  - quality/**
+  - product/**
+  - .github/**
+  - README.md
+  - AGENTS.md
+  - WORKFLOW.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+  - mill.yaml
+authority_preparation_paths:
+  - product/**
+  - quality/**
+acceptance_items:
+  - MREV-01 durable release evidence reconstructs qualification and publication
+  - MREV-02 required GitHub feedback cannot be silently treated as clean
+  - MREV-03 cancellation preserves uncertain and confirmed external effects
+  - MREV-04 reads, upgrades, backups and restores preserve valid state
+  - MREV-05 public worker failures never expose raw stderr
+  - MREV-06 draft proposal assessment requires coherent matching inputs
+  - MREV-07 first-run instructions match the literal supported coordinator path
+  - MREV-08 one bounded pnpm workspace environment is actually qualified
+  - MREV-09 declared verifier artifacts are bounded and candidate-bound
+  - MREV-10 eligible-change reporting separates measured facts from inference
+  - MREV-11 two historical maintenance replays test frozen playbook reuse
+  - MREV-12 docs state shipped, exercised and qualified support truthfully
+  - MREV-13 exact candidate, review, CI and delivery evidence reconcile scope
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+  - required digest-pinned OCI canaries with recorded no-network behavior
+required_reviews:
+  - read-only review of the complete committed diff, including authority, tests,
+    schemas, release workflow, replay evidence and documentation
+constraints:
+  - one attended maintainer writer and no reuse of closed authority
+  - preserve existing acceptance, support tuples, release bytes and failure
+    evidence
+  - no forge credential for builders or reviewers, no automatic merge or
+    deployment
+  - no secret disclosure, customer data, historical rewrite, retag or republish
+  - exact maintenance-replay acceptance remains separate from reusable playbook
+    content
+stop_conditions:
+  - ambiguous authority, replay target, external effect identity or support
+    tuple
+  - unavailable required runtime, OCI lane, review evidence or release
+    provenance
+  - recurring P0 or P1 defect in the same subsystem after a design repair
+closure:
+  status: pending
+  disposition: >-
+    Close only after every MREV item is reconciled against durable evidence and
+    the resulting v0.7.0 release is separately read back.

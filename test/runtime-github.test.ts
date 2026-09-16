@@ -74,7 +74,7 @@ else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({enforce_adm
 else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markPullRequestReadyForReview:{pullRequest:{id:"PR_example",isDraft:false}}}}));
 else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
-else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"[P1] top-level finding",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11"}]]));
+else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
 else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
 else process.exit(2);
 `,
@@ -155,14 +155,29 @@ else process.exit(2);
             actorLogin: "codex-review",
             state: "COMMENTED",
             commitId: sha,
-            body: "[P1] top-level finding",
+            body: "Top-level concern without a priority label",
           },
         ],
         feedback: [
-          { priority: "P1", commitId: sha, path: null },
+          { priority: "unclassified", commitId: sha, path: null },
           { priority: "P2", commitId: sha, path: "src/index.ts" },
         ],
       });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({ review: { state: "APPROVED", body: "LGTM" } }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [{ state: "APPROVED", body: "LGTM" }],
+        feedback: [{ priority: "P2", path: "src/index.ts" }],
+      });
+      await writeFile(path.join(tools.path, "mode.json"), "{}");
       const calls = await readFile(path.join(tools.path, "calls.log"), "utf8");
       const producerConfig: ProposeConfig = {
         ...config,

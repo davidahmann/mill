@@ -54,6 +54,14 @@ channel state. Mill stores no bypass token. Future fresh releases publish
 directly to `latest` through the protected OIDC workflow, whose final release
 evidence is the canonical provider closure.
 
+The
+[architecture and development review follow-through](mrev-architecture-dev-review.md)
+is the current attended increment. It tightens review and recovery controls,
+adds draft coherence checks, bounded verifier artifacts, measured development
+evidence, a narrow pnpm OCI canary, and two synthetic historical maintenance
+replays. These records exercise the local workflow. They do not establish
+customer demand, recurring value, or general stack support.
+
 1. **Foundation:** repository constitution, exact-version CLI, compact schemas,
    static source/repository inspection, native CI, and security/release design.
 2. **Local delivery:** durable state, disposable worktree, bounded Codex build,
