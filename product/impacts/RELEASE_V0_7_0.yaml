@@ -1,0 +1,33 @@
+schemaVersion: "2"
+id: mill-release-v0.7.0
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-16 authorizing end-to-end execution,
+  green delivery, new GitHub Release, npm publication to latest, and provider
+  readback for the approved MREV increment.
+source_base: 5b5803e353c67bad8a547fe4bd7d81d3db634734
+authority: product/release-v0.7.0.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Distributes the reviewed MREV source increment as v0.7.0.
+  - Publishes one preserved qualified artifact through protected OIDC to npm
+    latest and creates a normal GitHub Release.
+  - Retains ordered draft and final release evidence with provider readback.
+affected_surfaces:
+  - package and CLI version identity
+  - release workflow, permanent evidence, public release record, and npm
+    distribution
+verification:
+  - native check, exact-candidate audit, complete review, and green source PR
+    and resulting-main checks
+  - exact annotated-tag identity, two independent candidate builds, independent
+    policy, and reconstructed permanent release evidence
+  - registry package, npm provenance/latest, and GitHub Release asset readback
+exceptions:
+  - The attended maintainer may create and push the annotated v0.7.0 tag,
+    publish one preserved artifact through the protected environment, and create
+    the normal GitHub Release only as bound by this authority.

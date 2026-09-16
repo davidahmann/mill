@@ -1,0 +1,35 @@
+{
+  "id": "darwin-arm64-node24-codex-v0.7.0",
+  "status": "qualified",
+  "testedAt": "2026-09-16T02:26:37.000Z",
+  "expiresAt": "2026-10-16T02:26:37.000Z",
+  "host": {
+    "os": "darwin",
+    "architecture": "arm64"
+  },
+  "runtime": {
+    "node": "24.20.0",
+    "npm": "11.4.1"
+  },
+  "container": {
+    "engine": "docker",
+    "version": "29.7.2",
+    "verifierImage": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e"
+  },
+  "worker": {
+    "adapter": "codex-cli",
+    "harnessVersion": "0.154.0-alpha.6.2",
+    "modelIdentity": "provider-mutable",
+    "authMode": "operator-session"
+  },
+  "forge": {
+    "gitVersion": "2.50.0",
+    "ghVersion": "2.74.2",
+    "host": "github.com"
+  },
+  "recipe": {
+    "id": "node-typescript-next-web",
+    "version": "1.0.0",
+    "digest": "sha256:908489bd1c3257bd421e09807cb024a39234598d11748120583308d016e8f286"
+  }
+}

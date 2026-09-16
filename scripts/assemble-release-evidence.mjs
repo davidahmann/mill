@@ -11,6 +11,7 @@ const [
   outputPath,
   registryPath,
   githubPath,
+  workflowRunsPath,
 ] = process.argv.slice(2);
 if (
   metadataPath === undefined ||
@@ -20,7 +21,7 @@ if (
   outputPath === undefined
 ) {
   throw new Error(
-    "usage: assemble-release-evidence.mjs <artifact-metadata.json> <qualification.json> <sbom.json> <identity.json> <output.json> [registry.json] [github.json]",
+    "usage: assemble-release-evidence.mjs <artifact-metadata.json> <qualification.json> <sbom.json> <identity.json> <output.json> [registry.json] [github.json] [workflow-runs.json]",
   );
 }
 const root = path.resolve(import.meta.dirname, "..");
@@ -35,9 +36,15 @@ const [metadata, qualification, sbomBytes, identity] = await Promise.all([
   readJson(identityPath),
 ]);
 const registry =
-  registryPath === undefined ? null : await readJson(registryPath);
+  registryPath === undefined || registryPath === "-"
+    ? null
+    : await readJson(registryPath);
 const githubRelease =
-  githubPath === undefined ? null : await readJson(githubPath);
+  githubPath === undefined || githubPath === "-"
+    ? null
+    : await readJson(githubPath);
+const workflowRuns =
+  workflowRunsPath === undefined ? undefined : await readJson(workflowRunsPath);
 if (
   !Array.isArray(metadata.builders) ||
   metadata.builders.length !== 2 ||
@@ -104,7 +111,17 @@ const evidence = mill.contractSchemas.releaseEvidence.parse({
   builders: metadata.builders,
   selectedArtifact: metadata.selectedArtifact,
   qualificationDigest: mill.canonicalDigest(qualification),
+  qualification: {
+    supportTuple: {
+      id: qualification.supportTuple.id,
+      status: qualification.supportTuple.status,
+      testedAt: qualification.supportTuple.testedAt,
+      expiresAt: qualification.supportTuple.expiresAt,
+      digest: mill.canonicalDigest(qualification.supportTuple),
+    },
+  },
   sbomDigest: `sha256:${createHash("sha256").update(sbomBytes).digest("hex")}`,
+  ...(workflowRuns === undefined ? {} : { workflowRuns }),
   registry,
   githubRelease,
   generatedAt: new Date().toISOString(),
@@ -133,6 +150,15 @@ if (
 ) {
   throw new Error(
     "GitHub Release readback does not prove tag and artifact identity",
+  );
+}
+if (
+  workflowRuns !== undefined &&
+  (workflowRuns.candidate?.headCommit !== identity.tagCommit ||
+    workflowRuns.publish?.headCommit !== identity.tagCommit)
+) {
+  throw new Error(
+    "workflow run identities do not bind the exact tagged commit",
   );
 }
 await writeFile(outputPath, `${JSON.stringify(evidence, undefined, 2)}\n`, {

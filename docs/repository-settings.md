@@ -77,7 +77,9 @@ The publication boundary is configured as follows:
 - require passkey or 2FA on the npm maintainer account and store recovery codes
   offline;
 - keep GitHub Actions artifact retention long enough for the seven-day
-  candidate-to-publish window;
+  candidate-to-publish window. Copy the selected tarball, qualification, SBOM,
+  identity, and ordered draft/final release evidence to the GitHub Release
+  before the workflow artifact expires;
 - keep release/tag mutation limited to the maintainer and never store an npm
   token in GitHub, the repository, or a task packet. The one package-identity
   bootstrap used the maintainer's interactive 2FA session and stored no token;

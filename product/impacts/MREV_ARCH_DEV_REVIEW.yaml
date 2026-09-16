@@ -1,0 +1,39 @@
+schemaVersion: "2"
+id: mill-mrev-architecture-development-review
+status: approved
+approved_by: davidahmann
+approval_source: >-
+  Attended Codex conversation on 2026-09-16: execute
+  TEMP_MILL_ARCH_DEV_REVIEW_2026-09-15.md end to end, cross-check every item,
+  test and fix, ship to green, and publish the new latest GitHub and npm
+  release.
+source_base: 5b5803e353c67bad8a547fe4bd7d81d3db634734
+authority: product/mrev-architecture-dev-review.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Preserve durable release qualification evidence and published readback.
+  - Fail closed on unclassified required review feedback and unsafe recovery.
+  - Make draft assessment, first-run guidance, pnpm qualification and retained
+    verifier artifacts explicit and testable within stated boundaries.
+  - Record eligible-change and maintenance-replay evidence without claiming
+    customer demand, productivity, or generalized stack support.
+affected_surfaces:
+  - runtime state, delivery, review, verifier, worker, reporting and CLI output
+  - planning contracts, schemas, fixtures, package and release workflow
+  - public and operator documentation, maintained playbooks and qualification
+    records
+verification:
+  - focused positive, negative, recovery, privacy and schema regressions
+  - native check, packed package, real required OCI canaries and exact audit
+  - full-diff independent review, required PR/resulting-main checks and provider
+    readback
+  - two local historical maintenance replays with separately frozen acceptance
+exceptions:
+  - The attended maintainer may update command controls, tests, docs, workflows,
+    product authority and local qualification fixtures together under this task.
+  - Two private disposable replay repositories may receive draft PRs only when
+    their identities and effects are recorded in durable evidence.

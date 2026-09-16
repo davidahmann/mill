@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -938,6 +939,111 @@ playbooks:
     }
   });
 
+  it("retains only declared regular verifier artifacts bound to one command", async () => {
+    const fixture = await runtimeFixture();
+    const tools = await temporaryDirectory("mill-verifier-artifacts-");
+    const artifactDirectory = path.join(tools.path, "retained");
+    let selectedArtifactDirectory = artifactDirectory;
+    const docker = path.join(tools.path, "docker");
+    const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+    const testCommand = inputs.config.commands.test;
+    if (testCommand === undefined) throw new Error("fixture command missing");
+    const config = {
+      ...inputs.config,
+      commands: {
+        ...inputs.config.commands,
+        test: {
+          ...testCommand,
+          retainedArtifacts: {
+            paths: ["reports/check.json"],
+            required: true,
+            maxFiles: 1,
+            maxFileBytes: 1024,
+            maxTotalBytes: 1024,
+          },
+        },
+      },
+    };
+    const writeDocker = async (body: string) => {
+      await writeFile(
+        docker,
+        `#!${process.execPath}\nconst {mkdirSync,symlinkSync,writeFileSync}=require("node:fs");const path=require("node:path");const args=process.argv.slice(2);if(args[0]==="image"||args[0]==="rm")process.exit(0);const mount=args.find((value)=>value.includes("target=/mill-artifacts"));if(!mount)process.exit(2);const source=/source=([^,]+)/u.exec(mount)?.[1];if(!source)process.exit(3);${body}`,
+        { mode: 0o755 },
+      );
+      await chmod(docker, 0o755);
+      process.env.MILL_DOCKER_PATH = docker;
+    };
+    const call = () =>
+      verifyDeclaredCommands({
+        root: fixture.root,
+        artifactDirectory: selectedArtifactDirectory,
+        candidateCommit: "a".repeat(40),
+        config,
+        task: inputs.task,
+        deadlineMs: Date.now() + 30_000,
+        maxOutputBytes: 1024 * 1024,
+      });
+    try {
+      await writeDocker(
+        'mkdirSync(path.join(source,"reports"),{recursive:true});writeFileSync(path.join(source,"reports/check.json"),"{\\"passed\\":true}\\n");process.exit(0);',
+      );
+      const evidence = await call();
+      const digest = `sha256:${createHash("sha256")
+        .update('{"passed":true}\n')
+        .digest("hex")}`;
+      expect(evidence).toMatchObject({
+        passed: true,
+        commands: [
+          {
+            commandId: "test",
+            artifacts: [
+              { path: "reports/check.json", sha256: digest, bytes: 16 },
+            ],
+          },
+        ],
+      });
+      await expect(
+        readFile(
+          path.join(
+            artifactDirectory,
+            createHash("sha256").update("test").digest("hex"),
+            "reports/check.json",
+          ),
+          "utf8",
+        ),
+      ).resolves.toBe('{"passed":true}\n');
+
+      await writeDocker(
+        'mkdirSync(path.join(source,"reports"),{recursive:true});writeFileSync(path.join(source,"reports/check.json"),"{\\"passed\\":false}\\n");process.exit(1);',
+      );
+      selectedArtifactDirectory = path.join(tools.path, "failed");
+      await expect(call()).resolves.toMatchObject({
+        passed: false,
+        commands: [
+          {
+            reason: "NONZERO_EXIT",
+            artifacts: [{ path: "reports/check.json", bytes: 17 }],
+          },
+        ],
+      });
+
+      await writeDocker("process.exit(0);");
+      await expect(call()).resolves.toMatchObject({
+        passed: false,
+        commands: [{ reason: "RETAINED_ARTIFACT_MISSING", artifacts: [] }],
+      });
+
+      await writeDocker(
+        'mkdirSync(path.join(source,"reports"),{recursive:true});symlinkSync("/etc/passwd",path.join(source,"reports/check.json"));process.exit(0);',
+      );
+      await expect(call()).rejects.toMatchObject({
+        code: "VERIFIER_ARTIFACT_TYPE_INVALID",
+      });
+    } finally {
+      await Promise.all([fixture.cleanup(), tools.cleanup()]);
+    }
+  });
+
   it("rejects verifier mounts that hide content or cannot be represented exactly", async () => {
     const fixture = await runtimeFixture();
     process.env.MILL_DOCKER_PATH = fixture.dockerPath;
@@ -1226,22 +1332,31 @@ if(args[0]==="run"){
     const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
     await writeFile(
       docker,
-      `#!${process.execPath}\nconst args=process.argv.slice(2);if(args[0]==="image"||args[0]==="run")process.exit(0);if(args[0]==="rm"){console.error("daemon unavailable");process.exit(9)}process.exit(2);\n`,
+      `#!${process.execPath}\nconst args=process.argv.slice(2);if(args[0]==="image"||args[0]==="run")process.exit(0);if(args[0]==="rm"){console.error("MREV_PRIVATE_CLEANUP_MARKER");process.exit(9)}process.exit(2);\n`,
       { mode: 0o755 },
     );
     await chmod(docker, 0o755);
     process.env.MILL_DOCKER_PATH = docker;
     try {
-      await expect(
-        verifyDeclaredCommands({
-          root: fixture.root,
-          candidateCommit: "a".repeat(40),
-          config: inputs.config,
-          task: inputs.task,
-          deadlineMs: Date.now() + 5_000,
-          maxOutputBytes: 1024,
-        }),
-      ).rejects.toMatchObject({ code: "VERIFIER_CONTAINER_CLEANUP_FAILED" });
+      await verifyDeclaredCommands({
+        root: fixture.root,
+        candidateCommit: "a".repeat(40),
+        config: inputs.config,
+        task: inputs.task,
+        deadlineMs: Date.now() + 5_000,
+        maxOutputBytes: 1024,
+      })
+        .then(() => {
+          throw new Error("expected verifier cleanup failure");
+        })
+        .catch((error: unknown) => {
+          expect(error).toMatchObject({
+            code: "VERIFIER_CONTAINER_CLEANUP_FAILED",
+          });
+          expect(JSON.stringify(error)).not.toContain(
+            "MREV_PRIVATE_CLEANUP_MARKER",
+          );
+        });
     } finally {
       await Promise.all([fixture.cleanup(), tools.cleanup()]);
     }

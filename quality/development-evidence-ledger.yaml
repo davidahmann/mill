@@ -1,0 +1,54 @@
+schemaVersion: "1"
+records:
+  - id: MREV-ARCH-DEV-REVIEW-2026-09-16
+    change: Architecture and development review follow-through
+    eligibility:
+      status: eligible
+    route:
+      kind: manual
+      reason: >-
+        This owner-approved maintainer increment ran in the current Mill
+        checkout rather than through a separately compiled Mill task packet.
+    outcome: in_progress
+    effort:
+      preparationMinutes: null
+      reviewMinutes: null
+      repairMinutes: null
+    elapsedMinutes: null
+    repairs: 0
+  - id: MREV-REPLAY-A-2026-09-16
+    change: Synthetic provider-owner migration replay A
+    eligibility:
+      status: eligible
+    route:
+      kind: mill
+    outcome: not_accepted
+    effort:
+      preparationMinutes: null
+      reviewMinutes: null
+      repairMinutes: null
+    elapsedMinutes: null
+    repairs: 0
+    providerUsage:
+      inputTokens: 322231
+      outputTokens: 4152
+      cost: null
+      currency: null
+  - id: MREV-REPLAY-B-2026-09-16
+    change: Synthetic provider-owner migration replay B with selected playbook
+    eligibility:
+      status: eligible
+    route:
+      kind: mill
+    outcome: not_accepted
+    effort:
+      preparationMinutes: null
+      reviewMinutes: null
+      repairMinutes: null
+    elapsedMinutes: null
+    repairs: 0
+    providerUsage:
+      inputTokens: 269177
+      outputTokens: 3127
+      cost: null
+      currency: null

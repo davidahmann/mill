@@ -1110,7 +1110,12 @@ async function prepareDependencySnapshotWithSignal(input: {
         "DEPENDENCY_PREPARATION_FAILED",
         "The exact dependency snapshot could not be prepared.",
         ExitCode.unavailable,
-        { exitCode: result.exitCode, stderr: result.stderr.slice(0, 2_000) },
+        {
+          exitCode: result.exitCode,
+          stderrDigest: `sha256:${createHash("sha256")
+            .update(result.stderr, "utf8")
+            .digest("hex")}`,
+        },
       );
     }
     let modules = await lstat(path.join(temporary, "node_modules")).catch(

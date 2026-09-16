@@ -57,6 +57,7 @@ if (
   );
 }
 const expectedTag = `v${metadata.package.version}`;
+const observedAt = new Date().toISOString();
 let releaseUrl;
 try {
   releaseUrl = new URL(release.url);
@@ -76,6 +77,14 @@ if (
     `/releases/tag/${encodeURIComponent(expectedTag)}`,
   ) ||
   !Array.isArray(release.assets) ||
+  typeof release.isDraft !== "boolean" ||
+  typeof release.isPrerelease !== "boolean" ||
+  release.isPrerelease === true ||
+  !Number.isSafeInteger(release.databaseId) ||
+  release.databaseId <= 0 ||
+  (release.isDraft === false &&
+    (typeof release.publishedAt !== "string" ||
+      Number.isNaN(Date.parse(release.publishedAt)))) ||
   !release.assets.some(
     (asset) => asset.name === path.basename(downloadedArtifactPath),
   )
@@ -105,6 +114,10 @@ await Promise.all([
         url: release.url,
         tag: expectedTag,
         artifactDigest: downloadedDigest,
+        state: release.isDraft ? "draft" : "published",
+        releaseId: String(release.databaseId),
+        publishedAt: release.isDraft ? null : release.publishedAt,
+        observedAt,
       },
       undefined,
       2,

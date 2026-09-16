@@ -18,11 +18,13 @@ import {
 import { MillError, ExitCode } from "../src/errors.js";
 import { runCli } from "../src/cli-program.js";
 import {
+  actionableFeedback,
   finalizeDraftPr,
   observeDraftPr,
   openDraftPr,
   planDraftPr,
   reconcileDraftPr,
+  reviewsPassed,
 } from "../src/runtime/delivery.js";
 import type {
   GitHubAdapter,
@@ -434,6 +436,7 @@ async function seedLegacyPostMergeDelivery(
     }
     const delivery = JSON.parse(run.deliveryJson) as Record<string, unknown>;
     delete delivery.postMergeRequiredChecks;
+    delete delivery.postMergePolicySource;
     delete delivery.legacyPostMergePolicyConfigDigest;
     store.setDelivery(
       runId,
@@ -1567,6 +1570,28 @@ describe("exact-candidate GitHub draft delivery", () => {
     }
   });
 
+  it("binds an empty effective post-merge list only for a no-check local policy", async () => {
+    const { fixture, runId } = await reviewedFixture({ requiredChecks: [] });
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
+    try {
+      const planned = await planDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(planned.delivery).toMatchObject({
+        requiredChecks: [],
+        postMergeRequiredChecks: [],
+        postMergePolicySource: "implicit_default",
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("binds a subset-safe post-merge policy for a legacy merged delivery", async () => {
     const { fixture, runId, candidateTree } = await reviewedFixture({
       requiredChecks: ["validate", "dependency-review", "codeql"],
@@ -1797,6 +1822,65 @@ describe("exact-candidate GitHub draft delivery", () => {
         }),
       ).rejects.toMatchObject({ code: "RUN_NOT_REVIEWED" });
       expect(adapter.inspectCalls).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("cancels an ordinary human-decision checkpoint without erasing its draft receipt", async () => {
+    const { fixture, runId } = await reviewedFixture();
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [completedCheck("success")];
+      const ready = await observeDraftPr({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      });
+      expect(ready.run.status).toBe("awaiting_human");
+      const pullRequestUrl = adapter.pullRequest?.url;
+      expect(pullRequestUrl).toBeTypeOf("string");
+
+      await expect(
+        cancelRun({ root: fixture.root, runId }),
+      ).resolves.toMatchObject({
+        status: "cancelled",
+        cancelRequested: true,
+      });
+      await expect(
+        cancelRun({ root: fixture.root, runId }),
+      ).resolves.toMatchObject({
+        status: "cancelled",
+        cancelRequested: true,
+      });
+      const store = await StateStore.open(
+        (await loadRuntimeInputs(fixture.root, fixture.taskPath)).config
+          .repositoryId,
+        await commonGitDirectory(fixture.root),
+      );
+      try {
+        expect(store.getRun(runId).deliveryJson).toContain(pullRequestUrl);
+      } finally {
+        store.close();
+      }
+
+      const qualification = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      if (qualification.approvalDigest === null)
+        throw new Error("fresh baseline qualification missing");
+      await expect(
+        startLocalRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          approvalDigest: qualification.approvalDigest,
+        }),
+      ).resolves.toMatchObject({ run: { status: "committed" } });
     } finally {
       await fixture.cleanup();
     }
@@ -2454,7 +2538,7 @@ describe("exact-candidate GitHub draft delivery", () => {
       adapter.reviews.push({
         id: "23",
         actorLogin: "codex-review",
-        state: "COMMENTED",
+        state: "APPROVED",
         commitId: reviewed.run.candidateCommit,
         body: "",
         url: "https://github.com/example/app/pull/41#pullrequestreview-23",
@@ -2470,6 +2554,61 @@ describe("exact-candidate GitHub draft delivery", () => {
       await fixture.cleanup();
     }
   }, 10_000);
+
+  it("requires an explicit approval and retains unclassified top-level feedback", () => {
+    const candidateCommit = "a".repeat(40);
+    const observation = {
+      reviews: [
+        {
+          id: "top-level",
+          actorLogin: "codex-review",
+          state: "COMMENTED",
+          commitId: candidateCommit,
+          body: "This can select the wrong owner.",
+          url: "https://github.com/example/app/pull/41#pullrequestreview-1",
+        },
+      ] as GitHubReview[],
+      feedback: [
+        {
+          id: "review-top-level",
+          actorLogin: "codex-review",
+          priority: "unclassified" as const,
+          body: "This can select the wrong owner.",
+          path: null,
+          line: null,
+          url: "https://github.com/example/app/pull/41#pullrequestreview-1",
+          commitId: candidateCommit,
+        },
+      ],
+    } as Pick<GitHubObservation, "reviews" | "feedback"> as GitHubObservation;
+    const policy = {
+      mode: "github_required" as const,
+      requiredReviewerLogins: ["codex-review"],
+    };
+
+    expect(reviewsPassed(observation, policy, candidateCommit)).toBe(false);
+    expect(actionableFeedback(observation, policy, candidateCommit)).toEqual(
+      observation.feedback,
+    );
+    const firstReview = observation.reviews.at(0);
+    if (firstReview === undefined) throw new Error("missing fixture review");
+    expect(
+      reviewsPassed(
+        {
+          ...observation,
+          reviews: [
+            {
+              ...firstReview,
+              state: "APPROVED",
+              body: "",
+            },
+          ],
+        },
+        policy,
+        candidateCommit,
+      ),
+    ).toBe(true);
+  });
 
   it("fails closed on PR drift and post-merge evidence until every identity settles", async () => {
     const { fixture, runId, candidateCommit, candidateTree } =

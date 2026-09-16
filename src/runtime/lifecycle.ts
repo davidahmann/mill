@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -55,6 +56,7 @@ import {
   type PublicRunRecord,
   type RunRecord,
 } from "./state.js";
+import { CURRENT_STATE_SCHEMA_VERSION } from "./state-migrations.js";
 import { createWorkerInvocation } from "./worker.js";
 import { dependencySnapshotDirectory } from "./dependencies.js";
 import { verifyDeclaredCommands, type ValidationEvidence } from "./verifier.js";
@@ -67,6 +69,7 @@ import { MILL_VERSION } from "../version.js";
 import { validationRepairFindings } from "./repair.js";
 import { summarizeUsage } from "./usage.js";
 import { continuationPacket } from "./continuation.js";
+import { developmentEvidenceSummary } from "./development-evidence.js";
 import { projectRunOutcome, type RunOutcome } from "./outcome.js";
 import { projectRunTimeline, type RunTimeline } from "./timeline.js";
 import {
@@ -883,6 +886,7 @@ export async function verifyRun(input: {
     const evidence = await verifyDeclaredCommands({
       root: candidate.worktree,
       ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
+      artifactDirectory: path.join(store.directory, "artifacts", run.id),
       candidateCommit: candidate.commit,
       config: inputs.config,
       task: inputs.task,
@@ -1394,8 +1398,11 @@ export async function runStatus(input: {
 }> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
-  const store = await StateStore.open(config.repositoryId, commonDirectory);
-  let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined) return {};
   try {
     const run =
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
@@ -1411,16 +1418,8 @@ export async function runStatus(input: {
       !isTerminalRun(run.status) &&
       (run.status === "running" || active !== undefined)
     ) {
-      try {
-        lease = await acquireWriterLease(store);
-        controllerAbsent = true;
-      } catch (error) {
-        if (!(
-          error instanceof MillError && error.code === "WRITER_ALREADY_ACTIVE"
-        )) {
-          throw error;
-        }
-      }
+      controllerAbsent =
+        active !== undefined && processIdentityStatus(active) === "mismatch";
     }
     let activeWorker = active !== undefined;
     if (controllerAbsent) {
@@ -1434,6 +1433,10 @@ export async function runStatus(input: {
       } else if (run.status === "running") {
         interrupted = true;
       }
+    } else if (active !== undefined && !isTerminalRun(run.status)) {
+      // A read-only observer cannot establish which controller owns a live
+      // process. Require attended reconciliation before a later mutating call.
+      reconciliationRequired = true;
     }
     const publicRun = publicRunRecord(run);
     const usage = summarizeUsage(store.events(run.id));
@@ -1455,11 +1458,7 @@ export async function runStatus(input: {
       }),
     };
   } finally {
-    try {
-      await lease?.release();
-    } finally {
-      store.close();
-    }
+    store.close();
   }
 }
 
@@ -1469,7 +1468,11 @@ export async function runTimeline(input: {
 }): Promise<RunTimeline | undefined> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
-  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined) return undefined;
   try {
     const snapshot = store.runEventSnapshot(input.runId);
     if (snapshot.run === undefined) return undefined;
@@ -1488,7 +1491,11 @@ export async function runOutcome(input: {
 }): Promise<RunOutcome | undefined> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
-  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined) return undefined;
   try {
     const snapshot = store.runEventSnapshot(input.runId);
     if (snapshot.run === undefined) return undefined;
@@ -1512,7 +1519,11 @@ export async function runInventory(input: {
 }): Promise<PublicRunRecord[]> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
-  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined) return [];
   try {
     return store.runs().map(publicRunRecord);
   } finally {
@@ -1523,7 +1534,42 @@ export async function runInventory(input: {
 export async function runStats(input: { root: string }): Promise<StateStats> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
-  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined) {
+    return {
+      schemaVersion: CURRENT_STATE_SCHEMA_VERSION,
+      migrations: [],
+      runs: {
+        total: 0,
+        byStatus: Object.fromEntries(
+          [
+            "approved",
+            "ready",
+            "running",
+            "committed",
+            "verified",
+            "reviewed",
+            "proposing",
+            "effect_unknown",
+            "awaiting_ci",
+            "awaiting_human",
+            "merged",
+            "post_merge_verified",
+            "closed",
+            "blocked",
+            "cancelled",
+            "failed",
+            "stale",
+          ].map((status) => [status, 0]),
+        ) as StateStats["runs"]["byStatus"],
+        builderAttempts: 0,
+        repairs: 0,
+      },
+    };
+  }
   try {
     return store.stats();
   } finally {
@@ -1532,7 +1578,7 @@ export async function runStats(input: { root: string }): Promise<StateStats> {
 }
 
 export interface RunReport {
-  schemaVersion: "1";
+  schemaVersion: "2";
   redacted: true;
   runs: {
     total: number;
@@ -1543,12 +1589,7 @@ export interface RunReport {
   };
   elapsed: { totalMilliseconds: number; averageMilliseconds: number | null };
   usage: ReturnType<typeof summarizeUsage>;
-  selfHosting: {
-    declared: boolean;
-    eligibleRuns: number;
-    completedRuns: number;
-    completionRate: number | null;
-  };
+  developmentEvidence: Awaited<ReturnType<typeof developmentEvidenceSummary>>;
 }
 
 function hasSuccessfulValidation(run: RunRecord): boolean | undefined {
@@ -1564,7 +1605,32 @@ function hasSuccessfulValidation(run: RunRecord): boolean | undefined {
 export async function runReport(input: { root: string }): Promise<RunReport> {
   const config = await loadMillConfig(input.root);
   const commonDirectory = await commonGitDirectory(input.root);
-  const store = await StateStore.open(config.repositoryId, commonDirectory);
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  const developmentEvidence = await developmentEvidenceSummary({
+    root: input.root,
+    ...(config.reporting?.ledgerPath === undefined
+      ? {}
+      : { ledgerPath: config.reporting.ledgerPath }),
+  });
+  if (store === undefined) {
+    return {
+      schemaVersion: "2",
+      redacted: true,
+      runs: {
+        total: 0,
+        byStatus: (await runStats(input)).runs.byStatus,
+        verification: { passed: 0, failed: 0, notRecorded: 0 },
+        repairs: 0,
+        builderAttempts: 0,
+      },
+      elapsed: { totalMilliseconds: 0, averageMilliseconds: null },
+      usage: summarizeUsage([]),
+      developmentEvidence,
+    };
+  }
   try {
     const stats = store.stats();
     const runs = store.runs();
@@ -1575,13 +1641,8 @@ export async function runReport(input: { root: string }): Promise<RunReport> {
         total + (Number.isSafeInteger(duration) && duration >= 0 ? duration : 0)
       );
     }, 0);
-    const declared = config.reporting?.selfHosted === true;
-    const eligibleRuns = declared ? runs.length : 0;
-    const completedRuns = declared
-      ? runs.filter((run) => run.status === "closed").length
-      : 0;
     return {
-      schemaVersion: "1",
+      schemaVersion: "2",
       redacted: true,
       runs: {
         total: stats.runs.total,
@@ -1601,14 +1662,83 @@ export async function runReport(input: { root: string }): Promise<RunReport> {
           runs.length === 0 ? null : Math.round(elapsed / runs.length),
       },
       usage: summarizeUsage(runs.flatMap((run) => store.events(run.id))),
-      selfHosting: {
-        declared,
-        eligibleRuns,
-        completedRuns,
-        completionRate:
-          eligibleRuns === 0 ? null : completedRuns / eligibleRuns,
-      },
+      developmentEvidence,
     };
+  } finally {
+    store.close();
+  }
+}
+
+export interface RetainedArtifactReport {
+  candidateCommit: string;
+  artifacts: readonly {
+    commandId: string;
+    path: string;
+    sha256: string;
+    bytes: number;
+    available: boolean;
+  }[];
+}
+
+/** Lists candidate-bound verifier artifacts without exposing their host paths or bytes. */
+export async function retainedVerifierArtifacts(input: {
+  root: string;
+  runId: string;
+}): Promise<RetainedArtifactReport | undefined> {
+  const config = await loadMillConfig(input.root);
+  const commonDirectory = await commonGitDirectory(input.root);
+  const store = await StateStore.openReadOnly(
+    config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined) return undefined;
+  try {
+    const run = store.getRun(input.runId);
+    if (run.validationJson === undefined) return undefined;
+    const validation = validationEvidenceSchema.parse(
+      JSON.parse(run.validationJson),
+    );
+    const artifacts = await Promise.all(
+      validation.commands.flatMap((command) =>
+        (command.artifacts ?? []).map(async (artifact) => {
+          const commandDirectory = createHash("sha256")
+            .update(command.commandId, "utf8")
+            .digest("hex");
+          const file = path.join(
+            store.directory,
+            "artifacts",
+            run.id,
+            commandDirectory,
+            artifact.path,
+          );
+          try {
+            const information = await lstat(file);
+            if (!information.isFile() || information.isSymbolicLink()) {
+              return {
+                ...artifact,
+                commandId: command.commandId,
+                available: false,
+              };
+            }
+            const bytes = await readFile(file);
+            const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+            return {
+              ...artifact,
+              commandId: command.commandId,
+              available:
+                bytes.length === artifact.bytes && digest === artifact.sha256,
+            };
+          } catch {
+            return {
+              ...artifact,
+              commandId: command.commandId,
+              available: false,
+            };
+          }
+        }),
+      ),
+    );
+    return { candidateCommit: validation.candidateCommit, artifacts };
   } finally {
     store.close();
   }

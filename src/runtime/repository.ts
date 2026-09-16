@@ -156,7 +156,9 @@ async function git(
         exitCode: result.exitCode,
         timedOut: result.timedOut,
         outputExceeded: result.outputExceeded,
-        stderr: result.stderr.slice(0, 2_000),
+        stderrDigest: `sha256:${createHash("sha256")
+          .update(result.stderr, "utf8")
+          .digest("hex")}`,
       },
     );
   }

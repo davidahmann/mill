@@ -44,6 +44,11 @@ export interface CommandEvidence {
   exitCode: number | null;
   durationMs: number;
   outputDigest: string;
+  artifacts?: readonly {
+    path: string;
+    sha256: string;
+    bytes: number;
+  }[];
   reason?: string;
 }
 
@@ -73,6 +78,125 @@ function stoppedCommands(
     outputDigest: digestOutput("", ""),
     reason,
   }));
+}
+
+function artifactDirectoryName(commandId: string): string {
+  return createHash("sha256").update(commandId, "utf8").digest("hex");
+}
+
+async function collectRetainedArtifacts(input: {
+  commandId: string;
+  command: NonNullable<MillConfig["commands"][string]>;
+  outputRoot: string;
+  destinationRoot: string | undefined;
+}): Promise<{
+  artifacts: { path: string; sha256: string; bytes: number }[];
+  missingRequired: boolean;
+}> {
+  const retained = input.command.retainedArtifacts;
+  if (retained === undefined) return { artifacts: [], missingRequired: false };
+  if (input.destinationRoot === undefined) {
+    throw new MillError(
+      "VERIFIER_ARTIFACT_STORE_REQUIRED",
+      "Retained verifier artifacts require a lifecycle-owned storage directory.",
+      ExitCode.configuration,
+      { commandId: input.commandId },
+    );
+  }
+  if (retained.paths.length > retained.maxFiles) {
+    throw new MillError(
+      "VERIFIER_ARTIFACT_COUNT_EXCEEDED",
+      "The declared verifier artifact paths exceed the approved file limit.",
+      ExitCode.configuration,
+      { commandId: input.commandId },
+    );
+  }
+  const destination = path.join(
+    input.destinationRoot,
+    artifactDirectoryName(input.commandId),
+  );
+  await mkdir(destination, { recursive: true, mode: 0o700 });
+  await chmod(destination, 0o700);
+  const artifacts: { path: string; sha256: string; bytes: number }[] = [];
+  let totalBytes = 0;
+  let missingRequired = false;
+  for (const artifactPath of retained.paths) {
+    const source = path.resolve(input.outputRoot, artifactPath);
+    if (!isWithin(input.outputRoot, source)) {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_PATH_INVALID",
+        "A verifier artifact path escaped its dedicated output directory.",
+        ExitCode.configuration,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    let before;
+    try {
+      before = await lstat(source);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        missingRequired ||= retained.required;
+        continue;
+      }
+      throw error;
+    }
+    if (!before.isFile() || before.isSymbolicLink()) {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_TYPE_INVALID",
+        "A retained verifier artifact must be a regular non-symlink file.",
+        ExitCode.data,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    if (before.size > retained.maxFileBytes) {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_FILE_LIMIT_EXCEEDED",
+        "A retained verifier artifact exceeded its approved file-size limit.",
+        ExitCode.data,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    if (totalBytes + before.size > retained.maxTotalBytes) {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_TOTAL_LIMIT_EXCEEDED",
+        "Retained verifier artifacts exceeded their approved aggregate limit.",
+        ExitCode.data,
+        { commandId: input.commandId },
+      );
+    }
+    const bytes = await readFile(source);
+    const after = await lstat(source);
+    if (
+      !after.isFile() ||
+      after.isSymbolicLink() ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs ||
+      after.ctimeMs !== before.ctimeMs
+    ) {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_CHANGED_DURING_COLLECTION",
+        "A verifier artifact changed while Mill was collecting it.",
+        ExitCode.data,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    const destinationPath = path.join(destination, artifactPath);
+    await mkdir(path.dirname(destinationPath), {
+      recursive: true,
+      mode: 0o700,
+    });
+    await writeFile(destinationPath, bytes, { flag: "wx", mode: 0o600 });
+    const sha256 = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    artifacts.push({ path: artifactPath, sha256, bytes: bytes.length });
+    totalBytes += bytes.length;
+  }
+  return { artifacts, missingRequired };
 }
 
 function validationEvidence(input: {
@@ -225,7 +349,7 @@ async function removeVerifierContainer(
       {
         containerName,
         exitCode: result.exitCode,
-        stderr: result.stderr.slice(0, 2_000),
+        stderrDigest: digestOutput("", result.stderr),
       },
     );
   }
@@ -305,8 +429,10 @@ async function removeWorkspaceSkeleton(skeleton: string): Promise<void> {
 async function workspaceMountPlan(
   root: string,
   declaredMountPaths: readonly string[],
+  workspacePaths: readonly string[] = [],
 ): Promise<{
   mounts: string[];
+  workspaceDirectories: readonly string[];
   dispose(): Promise<void>;
 }> {
   const mountPaths = [...new Set(declaredMountPaths)].sort();
@@ -361,10 +487,143 @@ async function workspaceMountPlan(
       "--mount",
       `type=bind,source=${skeleton},target=/workspace,readonly`,
     ];
+    const workspaceDirectories: string[] = [];
+    const workspaceParents = new Set(
+      workspacePaths.map((workspacePath) => workspacePath.slice(0, -2)),
+    );
+    const addWorkspaceParent = async (parent: string): Promise<void> => {
+      const sourceParent = path.join(root, parent);
+      const parentInfo = await lstat(sourceParent);
+      if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink()) {
+        throw new MillError(
+          "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+          "A declared pnpm workspace parent must be a regular directory.",
+          ExitCode.configuration,
+          { path: parent },
+        );
+      }
+      const targetParent = path.join(skeleton, parent);
+      await mkdir(targetParent, { mode: 0o700 });
+      const childHandle = await opendir(sourceParent);
+      const children = [];
+      for await (const child of childHandle) children.push(child);
+      if (children.length > 256) {
+        throw new MillError(
+          "VERIFIER_WORKSPACE_ENTRY_LIMIT_EXCEEDED",
+          "A declared pnpm workspace parent has too many direct entries.",
+          ExitCode.configuration,
+          { path: parent },
+        );
+      }
+      for (const child of children.sort((left, right) =>
+        left.name.localeCompare(right.name),
+      )) {
+        const relative = `${parent}/${child.name}`;
+        if (child.name.includes(",")) {
+          throw new MillError(
+            "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+            "A pnpm workspace entry contains a comma and cannot be bound safely.",
+            ExitCode.configuration,
+            { path: relative },
+          );
+        }
+        const sourceWorkspace = path.join(sourceParent, child.name);
+        const workspaceInfo = await lstat(sourceWorkspace);
+        if (!workspaceInfo.isDirectory() || workspaceInfo.isSymbolicLink()) {
+          throw new MillError(
+            "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+            "A declared pnpm workspace entry must be a regular directory.",
+            ExitCode.configuration,
+            { path: relative },
+          );
+        }
+        try {
+          await lstat(path.join(sourceWorkspace, "node_modules"));
+          throw new MillError(
+            "VERIFIER_WORKSPACE_NODE_MODULES_OCCUPIED",
+            "A candidate pnpm workspace must not contain node_modules before verification.",
+            ExitCode.configuration,
+            { path: relative },
+          );
+        } catch (error) {
+          if (
+            error instanceof MillError ||
+            !(
+              error instanceof Error &&
+              "code" in error &&
+              error.code === "ENOENT"
+            )
+          ) {
+            throw error;
+          }
+        }
+        const targetWorkspace = path.join(targetParent, child.name);
+        await mkdir(targetWorkspace, { mode: 0o700 });
+        await mkdir(path.join(targetWorkspace, "node_modules"), {
+          mode: 0o700,
+        });
+        const workspaceHandle = await opendir(sourceWorkspace);
+        const workspaceEntries = [];
+        for await (const entry of workspaceHandle) workspaceEntries.push(entry);
+        if (workspaceEntries.length > 256) {
+          throw new MillError(
+            "VERIFIER_WORKSPACE_ENTRY_LIMIT_EXCEEDED",
+            "A pnpm workspace has too many direct entries.",
+            ExitCode.configuration,
+            { path: relative },
+          );
+        }
+        for (const entry of workspaceEntries.sort((left, right) =>
+          left.name.localeCompare(right.name),
+        )) {
+          const entryPath = `${relative}/${entry.name}`;
+          if (entry.name === "node_modules" || entry.name.includes(",")) {
+            throw new MillError(
+              "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+              "A pnpm workspace has an unsupported verifier mount entry.",
+              ExitCode.configuration,
+              { path: entryPath },
+            );
+          }
+          const sourceEntry = path.join(sourceWorkspace, entry.name);
+          const entryInfo = await lstat(sourceEntry);
+          if (entryInfo.isSymbolicLink()) {
+            throw new MillError(
+              "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+              "A pnpm workspace symbolic link cannot cross the verifier mount boundary.",
+              ExitCode.configuration,
+              { path: entryPath },
+            );
+          }
+          const targetEntry = path.join(targetWorkspace, entry.name);
+          if (entryInfo.isDirectory()) {
+            await mkdir(targetEntry, { mode: 0o700 });
+          } else if (entryInfo.isFile()) {
+            await writeFile(targetEntry, "", { flag: "wx", mode: 0o600 });
+          } else {
+            throw new MillError(
+              "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
+              "A pnpm workspace entry has an unsupported filesystem type.",
+              ExitCode.configuration,
+              { path: entryPath },
+            );
+          }
+          mounts.push(
+            "--mount",
+            `type=bind,source=${path.join(source.source, parent, child.name, entry.name)},target=/workspace/${entryPath},readonly`,
+          );
+        }
+        workspaceDirectories.push(relative);
+      }
+    };
     for (const entry of entries.sort((left, right) =>
       left.name.localeCompare(right.name),
     )) {
       if (mountPaths.includes(entry.name)) continue;
+      if (workspaceParents.has(entry.name)) {
+        await addWorkspaceParent(entry.name);
+        continue;
+      }
       if (entry.name.includes(",")) {
         throw new MillError(
           "VERIFIER_WORKSPACE_ENTRY_UNSUPPORTED",
@@ -402,6 +661,7 @@ async function workspaceMountPlan(
     }
     return {
       mounts,
+      workspaceDirectories,
       async dispose(): Promise<void> {
         try {
           await removeWorkspaceSkeleton(skeleton);
@@ -423,6 +683,7 @@ async function workspaceMountPlan(
 export async function verifyDeclaredCommands(input: {
   root: string;
   dependencyRoot?: string;
+  artifactDirectory?: string;
   candidateCommit: string;
   config: MillConfig;
   task: TaskPacket;
@@ -487,12 +748,20 @@ export async function verifyDeclaredCommands(input: {
     },
   );
   const evidence: CommandEvidence[] = [];
+  if (input.artifactDirectory !== undefined) {
+    await mkdir(input.artifactDirectory, { recursive: true, mode: 0o700 });
+    await chmod(input.artifactDirectory, 0o700);
+  }
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
   const canonicalRoot = await realpath(input.root);
   const dependencyMounts: string[] = [];
   let dependencyMount:
     Awaited<ReturnType<typeof verifierMountSource>> | undefined;
+  let dependencyRoot: string | undefined;
+  const workspaceDependencyMounts: Awaited<
+    ReturnType<typeof verifierMountSource>
+  >[] = [];
   if (input.config.verifier.dependencies !== undefined) {
     if (input.dependencyRoot === undefined) {
       throw new MillError(
@@ -502,6 +771,7 @@ export async function verifyDeclaredCommands(input: {
       );
     }
     const canonicalDependencyRoot = await realpath(input.dependencyRoot);
+    dependencyRoot = canonicalDependencyRoot;
     const lockPaths = await dependencyLockPaths({
       root: canonicalRoot,
       config: input.config,
@@ -561,17 +831,62 @@ export async function verifyDeclaredCommands(input: {
   }
   let workspace: Awaited<ReturnType<typeof workspaceMountPlan>> | undefined;
   try {
-    workspace = await workspaceMountPlan(canonicalRoot, [
-      ...(input.config.verifier.dependencies === undefined
-        ? []
-        : [input.config.verifier.dependencies.targetPath]),
-      ...input.task.commandIds.flatMap(
-        (commandId) =>
-          input.config.commands[commandId]?.writablePaths?.map(
-            (configuredPath) => configuredPath.replace(/\/\*\*$/u, ""),
-          ) ?? [],
-      ),
-    ]);
+    workspace = await workspaceMountPlan(
+      canonicalRoot,
+      [
+        ...(input.config.verifier.dependencies === undefined
+          ? []
+          : [input.config.verifier.dependencies.targetPath]),
+        ...input.task.commandIds.flatMap(
+          (commandId) =>
+            input.config.commands[commandId]?.writablePaths?.map(
+              (configuredPath) => configuredPath.replace(/\/\*\*$/u, ""),
+            ) ?? [],
+        ),
+      ],
+      input.config.verifier.dependencies?.manager === "pnpm"
+        ? input.config.verifier.dependencies.workspacePaths
+        : [],
+    );
+    if (
+      input.config.verifier.dependencies?.manager === "pnpm" &&
+      dependencyRoot !== undefined
+    ) {
+      for (const workspaceDirectory of workspace.workspaceDirectories) {
+        const candidate = path.join(
+          dependencyRoot,
+          workspaceDirectory,
+          "node_modules",
+        );
+        let information;
+        try {
+          information = await lstat(candidate);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          ) {
+            continue;
+          }
+          throw error;
+        }
+        if (!information.isDirectory() || information.isSymbolicLink()) {
+          throw new MillError(
+            "VERIFIER_DEPENDENCIES_UNAVAILABLE",
+            "A pnpm workspace dependency directory is not a qualified regular directory.",
+            ExitCode.unavailable,
+            { path: `${workspaceDirectory}/node_modules` },
+          );
+        }
+        const mount = await verifierMountSource(candidate);
+        workspaceDependencyMounts.push(mount);
+        dependencyMounts.push(
+          "--mount",
+          `type=bind,source=${mount.source},target=/workspace/${workspaceDirectory}/node_modules,readonly`,
+        );
+      }
+    }
     for (let index = 0; index < input.task.commandIds.length; index += 1) {
       const commandId = input.task.commandIds[index];
       if (commandId === undefined) continue;
@@ -665,7 +980,14 @@ export async function verifyDeclaredCommands(input: {
           `type=tmpfs,target=/workspace/${writablePath},tmpfs-size=268435456,tmpfs-mode=1777`,
         );
       }
+      const artifactOutput =
+        command.retainedArtifacts === undefined
+          ? undefined
+          : await mkdtemp(path.join(tmpdir(), "mill-verifier-artifacts-"));
+      if (artifactOutput !== undefined) await chmod(artifactOutput, 0o700);
       let result: ProcessResult;
+      let retainedArtifacts:
+        Awaited<ReturnType<typeof collectRetainedArtifacts>> | undefined;
       try {
         result = await runProcess({
           executable: docker,
@@ -704,6 +1026,12 @@ export async function verifyDeclaredCommands(input: {
             ...workspace.mounts,
             ...dependencyMounts,
             ...writableMounts,
+            ...(artifactOutput === undefined
+              ? []
+              : [
+                  "--mount",
+                  `type=bind,source=${artifactOutput},target=/mill-artifacts`,
+                ]),
             "--workdir",
             containerCwd,
             "--user",
@@ -716,6 +1044,9 @@ export async function verifyDeclaredCommands(input: {
             "NEXT_TELEMETRY_DISABLED=1",
             "--env",
             "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
+            ...(artifactOutput === undefined
+              ? []
+              : ["--env", "MILL_ARTIFACTS_DIR=/mill-artifacts"]),
             "--entrypoint",
             commandExecutable,
             input.config.verifier.image,
@@ -737,14 +1068,29 @@ export async function verifyDeclaredCommands(input: {
             ? {}
             : { cancellationRequested: input.cancellationRequested }),
         });
+        if (artifactOutput !== undefined) {
+          retainedArtifacts = await collectRetainedArtifacts({
+            commandId,
+            command,
+            outputRoot: artifactOutput,
+            destinationRoot: input.artifactDirectory,
+          });
+        }
       } finally {
-        await removeVerifierContainer(docker, input.root, containerName);
+        try {
+          await removeVerifierContainer(docker, input.root, containerName);
+        } finally {
+          if (artifactOutput !== undefined) {
+            await rm(artifactOutput, { recursive: true, force: true });
+          }
+        }
       }
       const passed =
         result.exitCode === 0 &&
         !result.timedOut &&
         !result.outputExceeded &&
-        !result.cancelled;
+        !result.cancelled &&
+        retainedArtifacts?.missingRequired !== true;
       evidence.push({
         commandId,
         required: command.required,
@@ -752,6 +1098,9 @@ export async function verifyDeclaredCommands(input: {
         exitCode: result.exitCode,
         durationMs: result.durationMs,
         outputDigest: digestOutput(result.stdout, result.stderr),
+        ...(retainedArtifacts === undefined
+          ? {}
+          : { artifacts: retainedArtifacts.artifacts }),
         ...(passed
           ? {}
           : {
@@ -761,7 +1110,9 @@ export async function verifyDeclaredCommands(input: {
                   ? "DEADLINE_EXCEEDED"
                   : result.outputExceeded
                     ? "OUTPUT_BUDGET_EXCEEDED"
-                    : "NONZERO_EXIT",
+                    : retainedArtifacts?.missingRequired === true
+                      ? "RETAINED_ARTIFACT_MISSING"
+                      : "NONZERO_EXIT",
             }),
       });
     }
@@ -781,7 +1132,13 @@ export async function verifyDeclaredCommands(input: {
     try {
       await workspace?.dispose();
     } finally {
-      await dependencyMount?.dispose();
+      try {
+        await Promise.all(
+          workspaceDependencyMounts.map((mount) => mount.dispose()),
+        );
+      } finally {
+        await dependencyMount?.dispose();
+      }
     }
   }
 }

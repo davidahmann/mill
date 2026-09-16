@@ -36,12 +36,39 @@ scratch limits. It is not a new supported downstream stack. Cleanup retains
 generated output roots so they can be mounted scratch directories; Vitest's
 native config loader and cache/report locations avoid writing into dependencies.
 
-The source-only generic pnpm workspace path is more restrictive. It requires a
-root version pin, lockfile version 9, declared shallow workspace directories,
-and direct workspace manifests. It rejects `.npmrc`, pnpm hook files, lifecycle
-scripts, and `onlyBuiltDependencies`. It has deterministic fake-OCI tests. This
-host had no Docker daemon during the implementation, so an actual OCI run still
-needs qualification before any support claim.
+The constrained pnpm workspace path has one exercised OCI canary. It pins Node
+24, pnpm 10.23.0, lockfile version 9, a shallow `packages/*` workspace, direct
+workspace manifests, and a verifier image whose Corepack cache already contains
+that pnpm version. The canary runs a service and CLI, a local client, SQLite
+scratch state, an offline read-only verifier, and a retained scenario report. It
+also proves cleanup after an expected failure, deadline expiry, and
+cancellation. It rejects `.npmrc`, pnpm hook files, lifecycle scripts,
+native-build allowlists, and arbitrary workspace layouts. This is evidence for
+that pinned fixture only; it does not support arbitrary pnpm repositories,
+native dependencies, or customer workloads.
+
+## Retained verifier artifacts
+
+A command may opt in to retain a small set of verifier-generated regular files.
+Declare the paths and limits in `retainedArtifacts`; the verifier collects them
+before it removes the container, validates their type, path, count, and bytes,
+then binds each digest to the candidate, command, and verifier image. The
+candidate cannot choose new paths while it runs.
+
+```yaml
+retainedArtifacts:
+  paths: [reports/scenario.json]
+  required: true
+  maxFiles: 1
+  maxFileBytes: 4096
+  maxTotalBytes: 4096
+```
+
+Use `millctl --json artifacts --run <run-id>` to inspect descriptors. It returns
+the declared relative path, digest, and byte count, never file bytes or the
+private state-store path. A missing required report fails verification. Artifact
+descriptors establish provenance; their application-specific interpretation
+remains with the repository that produced them.
 
 The optional command field `executableFixtureScratch: true` is permitted only
 for OCI `test` and `package` commands. It provides fixed `/mill-fixtures`

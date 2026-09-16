@@ -108,7 +108,64 @@
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
     },
+    "qualification": {
+      "type": "object",
+      "properties": {
+        "supportTuple": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+            "status": {
+              "type": "string",
+              "enum": ["experimental", "qualified", "expired"]
+            },
+            "testedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "expiresAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          },
+          "required": ["id", "status", "testedAt", "expiresAt", "digest"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["supportTuple"],
+      "additionalProperties": false
+    },
     "sbomDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "workflowRuns": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "url": { "type": "string", "format": "uri" },
+            "headCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+          },
+          "required": ["id", "url", "headCommit"],
+          "additionalProperties": false
+        },
+        "publish": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "url": { "type": "string", "format": "uri" },
+            "headCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+          },
+          "required": ["id", "url", "headCommit"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["candidate", "publish"],
+      "additionalProperties": false
+    },
     "registry": {
       "anyOf": [
         {
@@ -137,6 +194,23 @@
             "artifactDigest": {
               "type": "string",
               "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "state": { "type": "string", "enum": ["draft", "published"] },
+            "releaseId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "publishedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                { "type": "null" }
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             }
           },
           "required": ["url", "tag", "artifactDigest"],

@@ -1075,7 +1075,7 @@ describe("compact schemas", () => {
     );
     const scopedToken = {
       ...localReview,
-      reporting: { selfHosted: true },
+      reporting: { ledgerPath: "quality/development-evidence-ledger.yaml" },
       propose: {
         ...localReview.propose,
         deliveryCredential: {

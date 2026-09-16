@@ -16,9 +16,9 @@ candidate release preparation.
    name only `MILL_GITHUB_TOKEN`; the token bytes remain outside configuration,
    state, prompts, logs, and support output.
 3. Add `millctl report` alongside `stats`. It must report redacted lifecycle,
-   verification, elapsed-time, and recorded-usage aggregates. A self-hosting
-   rate is enabled only by repository-local configuration and counts managed
-   runs, not customer or engineering value.
+   verification, elapsed-time, and recorded-usage aggregates. The declared
+   development-evidence ledger distinguishes eligible changes, route, and
+   incomplete measurements; it is not a productivity claim.
 4. Keep one repair generation as the default. Add one fixture-only task shape
    with exactly two repair generations and prove validation and review run after
    every repaired candidate.

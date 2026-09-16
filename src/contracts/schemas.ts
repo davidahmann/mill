@@ -477,6 +477,23 @@ const pnpmDependencySchema = z.strictObject({
   workspacePaths: z.array(shallowWorkspacePathSchema).min(1),
 });
 
+const retainedVerifierArtifactsSchema = z.strictObject({
+  paths: uniqueNonemptyStringArraySchema
+    .max(32)
+    .refine(
+      (paths) =>
+        paths.every(
+          (artifactPath) =>
+            repositoryFilePathSchema.safeParse(artifactPath).success,
+        ),
+      "expected canonical relative artifact file paths",
+    ),
+  required: z.boolean().default(true),
+  maxFiles: z.number().int().min(1).max(32).default(16),
+  maxFileBytes: z.number().int().min(1).max(10_000_000).default(1_000_000),
+  maxTotalBytes: z.number().int().min(1).max(50_000_000).default(5_000_000),
+});
+
 export const millConfigSchema = z
   .strictObject({
     schemaVersion: z.literal("1"),
@@ -484,7 +501,9 @@ export const millConfigSchema = z
     trustCeiling: z.enum(["inspect", "build", "propose"]),
     sensitivePaths: z.array(repositoryPathPatternSchema).default([]),
     reporting: z
-      .strictObject({ selfHosted: z.boolean().default(false) })
+      .strictObject({
+        ledgerPath: repositoryFilePathSchema.optional(),
+      })
       .optional(),
     verifier: z
       .strictObject({
@@ -538,6 +557,7 @@ export const millConfigSchema = z
           execution: z.enum(["oci", "host"]).default("oci"),
           writablePaths: z.array(repositoryMountDirectorySchema).optional(),
           executableFixtureScratch: z.literal(true).optional(),
+          retainedArtifacts: retainedVerifierArtifactsSchema.optional(),
         })
         .meta({
           allOf: [
@@ -569,6 +589,27 @@ export const millConfigSchema = z
           path: ["commands", commandId, "executableFixtureScratch"],
           message:
             "Executable fixture scratch requires an OCI test/package command",
+        });
+      }
+      if (
+        command.retainedArtifacts !== undefined &&
+        command.execution !== "oci"
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["commands", commandId, "retainedArtifacts"],
+          message: "Retained verifier artifacts require an OCI command",
+        });
+      }
+      if (
+        command.retainedArtifacts !== undefined &&
+        command.retainedArtifacts.maxTotalBytes <
+          command.retainedArtifacts.maxFileBytes
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["commands", commandId, "retainedArtifacts", "maxTotalBytes"],
+          message: "Retained artifact total limit must cover one allowed file",
         });
       }
     }
@@ -1196,6 +1237,15 @@ export const validationEvidenceSchema = z.strictObject({
       exitCode: z.number().int().nullable(),
       durationMs: z.number().int().min(0),
       outputDigest: digestSchema,
+      artifacts: z
+        .array(
+          z.strictObject({
+            path: repositoryFilePathSchema,
+            sha256: digestSchema,
+            bytes: z.number().int().min(0),
+          }),
+        )
+        .optional(),
       reason: z
         .enum([
           "HOST_EXECUTION_NOT_QUALIFIED",
@@ -1203,6 +1253,7 @@ export const validationEvidenceSchema = z.strictObject({
           "DEADLINE_EXCEEDED",
           "OUTPUT_BUDGET_EXCEEDED",
           "NONZERO_EXIT",
+          "RETAINED_ARTIFACT_MISSING",
         ])
         .optional(),
     }),
@@ -1265,93 +1316,132 @@ export const mergeApprovalPlanSchema = z.strictObject({
   expiresAt: z.iso.datetime(),
 });
 
-export const deliveryRecordSchema = z.strictObject({
-  schemaVersion: z.literal("1"),
-  runId: z.uuid(),
-  deliveryKey: digestSchema,
-  proposalDigest: digestSchema,
-  approvalExpiresAt: z.iso.datetime(),
-  state: z.enum([
-    "planned",
-    "proposing",
-    "effect_unknown",
-    "awaiting_ci",
-    "awaiting_human",
-    "merged",
-    "post_merge_verified",
-    "closed",
-    "cancelled",
-    "blocked",
-  ]),
-  target: z.strictObject({
-    forge: z.literal("github"),
-    host: z.literal("github.com"),
-    owner: z.string().min(1),
-    repository: z.string().min(1),
-    repositoryNodeId: z.string().min(1),
-    cloneUrl: z.url(),
-    remoteName: z.string().min(1),
-    baseBranch: z.string().min(1),
-    actorLogin: z.string().min(1),
-    actorId: z.number().int().positive(),
-  }),
-  branchName: z.string().min(1),
-  candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
-  candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
-  requiredChecks: z.array(z.string().min(1)),
-  checkProducers: z.record(z.string().min(1), checkProducerSchema).optional(),
-  postMergeRequiredChecks: z.array(z.string().min(1)).min(1).optional(),
-  postMergePolicySource: z
-    .enum(["configured", "implicit_default", "legacy_migrated"])
-    .optional(),
-  legacyPostMergePolicyConfigDigest: digestSchema.optional(),
-  reviewPolicy: githubReviewPolicySchema,
-  allowedMergerLogins: z.array(z.string().min(1)).min(1),
-  allowedMergeMethods: z
-    .array(z.enum(["merge", "linear_tree_preserving"]))
-    .min(1),
-  effects: z.array(remoteEffectSchema),
-  mergeApproval: z
-    .strictObject({
-      plan: mergeApprovalPlanSchema,
-      digest: digestSchema,
-      state: z.enum([
-        "planned",
-        "ready_started",
-        "ready_verified",
-        "merge_started",
-        "effect_unknown",
-        "merged",
-      ]),
-      approvalSource: z.literal("attended_operator").optional(),
-    })
-    .optional(),
-  remoteHeadCommit: z
-    .string()
-    .regex(/^[a-f0-9]{40}$/u)
-    .nullable(),
-  pullRequest: z
-    .strictObject({
-      number: z.number().int().positive(),
-      nodeId: z.string().min(1),
-      url: z.url(),
-    })
-    .nullable(),
-  observation: z.record(z.string(), z.unknown()).nullable(),
-  merge: z
-    .strictObject({
-      commit: z.string().regex(/^[a-f0-9]{40}$/u),
-      tree: z.string().regex(/^[a-f0-9]{40}$/u),
-      method: z.enum(["merge", "linear_tree_preserving"]),
-      mergedByLogin: z.string().min(1),
-      mergedAt: z.iso.datetime(),
-      defaultBranchHead: z.string().regex(/^[a-f0-9]{40}$/u),
-    })
-    .nullable(),
-  lastErrorCode: z.string().min(1).nullable(),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-});
+export const deliveryRecordSchema = z
+  .strictObject({
+    schemaVersion: z.literal("1"),
+    runId: z.uuid(),
+    deliveryKey: digestSchema,
+    proposalDigest: digestSchema,
+    approvalExpiresAt: z.iso.datetime(),
+    state: z.enum([
+      "planned",
+      "proposing",
+      "effect_unknown",
+      "awaiting_ci",
+      "awaiting_human",
+      "merged",
+      "post_merge_verified",
+      "closed",
+      "cancelled",
+      "blocked",
+    ]),
+    target: z.strictObject({
+      forge: z.literal("github"),
+      host: z.literal("github.com"),
+      owner: z.string().min(1),
+      repository: z.string().min(1),
+      repositoryNodeId: z.string().min(1),
+      cloneUrl: z.url(),
+      remoteName: z.string().min(1),
+      baseBranch: z.string().min(1),
+      actorLogin: z.string().min(1),
+      actorId: z.number().int().positive(),
+    }),
+    branchName: z.string().min(1),
+    candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
+    requiredChecks: z.array(z.string().min(1)),
+    checkProducers: z.record(z.string().min(1), checkProducerSchema).optional(),
+    postMergeRequiredChecks: z.array(z.string().min(1)).optional(),
+    postMergePolicySource: z
+      .enum(["configured", "implicit_default", "legacy_migrated"])
+      .optional(),
+    legacyPostMergePolicyConfigDigest: digestSchema.optional(),
+    reviewPolicy: githubReviewPolicySchema,
+    allowedMergerLogins: z.array(z.string().min(1)).min(1),
+    allowedMergeMethods: z
+      .array(z.enum(["merge", "linear_tree_preserving"]))
+      .min(1),
+    effects: z.array(remoteEffectSchema),
+    mergeApproval: z
+      .strictObject({
+        plan: mergeApprovalPlanSchema,
+        digest: digestSchema,
+        state: z.enum([
+          "planned",
+          "ready_started",
+          "ready_verified",
+          "merge_started",
+          "effect_unknown",
+          "merged",
+        ]),
+        approvalSource: z.literal("attended_operator").optional(),
+      })
+      .optional(),
+    remoteHeadCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .nullable(),
+    pullRequest: z
+      .strictObject({
+        number: z.number().int().positive(),
+        nodeId: z.string().min(1),
+        url: z.url(),
+      })
+      .nullable(),
+    observation: z.record(z.string(), z.unknown()).nullable(),
+    merge: z
+      .strictObject({
+        commit: z.string().regex(/^[a-f0-9]{40}$/u),
+        tree: z.string().regex(/^[a-f0-9]{40}$/u),
+        method: z.enum(["merge", "linear_tree_preserving"]),
+        mergedByLogin: z.string().min(1),
+        mergedAt: z.iso.datetime(),
+        defaultBranchHead: z.string().regex(/^[a-f0-9]{40}$/u),
+      })
+      .nullable(),
+    lastErrorCode: z.string().min(1).nullable(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.postMergeRequiredChecks?.length === 0 &&
+      value.requiredChecks.length > 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["postMergeRequiredChecks"],
+        message:
+          "an empty post-merge check list is valid only when the pull-request check list is empty",
+      });
+    }
+    if (
+      value.postMergeRequiredChecks !== undefined &&
+      !value.postMergeRequiredChecks.every((check) =>
+        value.requiredChecks.includes(check),
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["postMergeRequiredChecks"],
+        message:
+          "post-merge required checks must be a subset of pull-request required checks",
+      });
+    }
+    if (
+      (value.postMergePolicySource === "configured" ||
+        value.postMergePolicySource === "implicit_default") &&
+      value.postMergeRequiredChecks === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["postMergeRequiredChecks"],
+        message:
+          "new delivery records must bind their effective post-merge checks",
+      });
+    }
+  });
 
 export const millLockSchema = z.strictObject({
   schemaVersion: z.literal("1"),
@@ -1653,7 +1743,32 @@ export const releaseEvidenceSchema = z.strictObject({
   builders: z.array(releaseArtifactSchema).length(2),
   selectedArtifact: releaseArtifactSchema,
   qualificationDigest: digestSchema,
+  qualification: z
+    .strictObject({
+      supportTuple: z.strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+        status: z.enum(["experimental", "qualified", "expired"]),
+        testedAt: z.iso.datetime(),
+        expiresAt: z.iso.datetime(),
+        digest: digestSchema,
+      }),
+    })
+    .optional(),
   sbomDigest: digestSchema,
+  workflowRuns: z
+    .strictObject({
+      candidate: z.strictObject({
+        id: z.string().regex(/^[1-9][0-9]*$/u),
+        url: z.url(),
+        headCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+      }),
+      publish: z.strictObject({
+        id: z.string().regex(/^[1-9][0-9]*$/u),
+        url: z.url(),
+        headCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+      }),
+    })
+    .optional(),
   registry: z
     .strictObject({
       tarball: z.url(),
@@ -1666,6 +1781,13 @@ export const releaseEvidenceSchema = z.strictObject({
       url: z.url(),
       tag: z.string().min(1),
       artifactDigest: digestSchema,
+      state: z.enum(["draft", "published"]).optional(),
+      releaseId: z
+        .string()
+        .regex(/^[1-9][0-9]*$/u)
+        .optional(),
+      publishedAt: z.iso.datetime().nullable().optional(),
+      observedAt: z.iso.datetime().optional(),
     })
     .nullable(),
   generatedAt: z.iso.datetime(),

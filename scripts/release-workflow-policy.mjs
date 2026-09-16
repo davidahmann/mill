@@ -103,9 +103,21 @@ export function releasePublicationFailures(jobs) {
   const create = steps.find(
     (step) => step?.name === "Create draft GitHub Release with exact artifacts",
   );
-  const finalize = steps.find(
-    (step) => step?.name === "Read back GitHub Release and finalize evidence",
+  const draftReadbackIndex = steps.findIndex(
+    (step) => step?.name === "Read back draft GitHub Release evidence",
   );
+  const publishReleaseIndex = steps.findIndex(
+    (step) =>
+      step?.name === "Publish GitHub Release after draft evidence readback",
+  );
+  const finalReadbackIndex = steps.findIndex(
+    (step) =>
+      step?.name ===
+      "Read back published GitHub Release and attach final evidence",
+  );
+  const draftReadback = steps[draftReadbackIndex];
+  const publishRelease = steps[publishReleaseIndex];
+  const finalReadback = steps[finalReadbackIndex];
   const failures = [];
   if (
     typeof publish?.run !== "string" ||
@@ -139,26 +151,51 @@ export function releasePublicationFailures(jobs) {
       "publish: GitHub release must be a plainly labelled normal public-alpha release",
     );
   }
-  const finalEvidenceUpload =
-    'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"';
+  for (const requiredAsset of [
+    '"$RUNNER_TEMP/qualified/qualification.json"',
+    '"$RUNNER_TEMP/qualified/artifact-metadata.json"',
+    '"$RUNNER_TEMP/qualified/audit.json"',
+    '"$RUNNER_TEMP/qualified/identity.json"',
+    '"$RUNNER_TEMP/qualified/release-canary.json"',
+    '"$RUNNER_TEMP/trusted/trusted-verifier.json"',
+    '"$RUNNER_TEMP/trusted/trusted-canary.json"',
+  ]) {
+    if (
+      typeof create?.run !== "string" ||
+      !create.run.includes(requiredAsset)
+    ) {
+      failures.push(
+        "publish: draft release must retain the qualified candidate and independent verifier records",
+      );
+      break;
+    }
+  }
+  const draftEvidenceUpload =
+    'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-draft.json"';
   const finalRelease = 'gh release edit "$RELEASE_TAG" --draft=false';
   if (
-    typeof finalize?.run !== "string" ||
-    !finalize.run.includes(finalRelease) ||
-    finalize.run.includes("--prerelease")
+    typeof publishRelease?.run !== "string" ||
+    !publishRelease.run.includes(finalRelease) ||
+    publishRelease.run.includes("--prerelease")
   ) {
     failures.push(
       "publish: final GitHub release must remain a normal public-alpha release",
     );
   }
   if (
-    typeof finalize?.run !== "string" ||
-    !finalize.run.includes(finalEvidenceUpload) ||
-    finalize.run.indexOf(finalEvidenceUpload) >
-      finalize.run.indexOf(finalRelease)
+    typeof draftReadback?.run !== "string" ||
+    !draftReadback.run.includes(draftEvidenceUpload) ||
+    typeof publishRelease?.run !== "string" ||
+    typeof finalReadback?.run !== "string" ||
+    !finalReadback.run.includes(
+      'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"',
+    ) ||
+    draftReadbackIndex < 0 ||
+    publishReleaseIndex <= draftReadbackIndex ||
+    finalReadbackIndex <= publishReleaseIndex
   ) {
     failures.push(
-      "publish: final release evidence must be attached before publication",
+      "publish: draft and published release evidence must be retained in their observed order",
     );
   }
   return failures;

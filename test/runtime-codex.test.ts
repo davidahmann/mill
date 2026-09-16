@@ -176,7 +176,19 @@ describe("Codex adapter boundaries", () => {
           deadlineMs: Date.now() + 5_000,
           maxOutputBytes: 1024,
         }),
-      ).rejects.toMatchObject({ code: "CODEX_EXECUTION_FAILED" });
+      ).rejects.toMatchObject({
+        code: "CODEX_EXECUTION_FAILED",
+        details: { exitCode: 7 },
+      });
+      await runCodexBuilder({
+        root: fixture.root,
+        task: inputs.task,
+        manifest: frozen.manifest,
+        deadlineMs: Date.now() + 5_000,
+        maxOutputBytes: 1024,
+      }).catch((error: unknown) => {
+        expect(JSON.stringify(error)).not.toContain("provider unavailable");
+      });
     } finally {
       await Promise.all([fixture.cleanup(), tools.cleanup()]);
     }
@@ -277,6 +289,15 @@ describe("Codex adapter boundaries", () => {
         maxOutputBytes: 128,
         ...(signal === undefined ? {} : { signal }),
       });
+    const assertNoPrivateMarker = async (
+      invocation: Promise<unknown>,
+      code: string,
+    ) => {
+      await invocation.catch((error: unknown) => {
+        expect(error).toMatchObject({ code });
+        expect(JSON.stringify(error)).not.toContain("MREV_PRIVATE_MARKER");
+      });
+    };
     try {
       process.env.MILL_CODEX_PATH = path.join(tools.path, "missing-codex");
       await expect(call(Date.now() + 5_000)).rejects.toMatchObject({
@@ -285,29 +306,41 @@ describe("Codex adapter boundaries", () => {
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        "setInterval(()=>{},1000);",
+        'process.stderr.write("MREV_PRIVATE_MARKER");setInterval(()=>{},1000);',
       );
-      await expect(call(Date.now() + 100)).rejects.toMatchObject({
-        code: "CODEX_DEADLINE_EXCEEDED",
-      });
+      await assertNoPrivateMarker(
+        call(Date.now() + 100),
+        "CODEX_DEADLINE_EXCEEDED",
+      );
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        'process.stdout.write("x".repeat(10000));setInterval(()=>{},1000);',
+        'process.stderr.write("MREV_PRIVATE_MARKER");process.stdout.write("x".repeat(10000));setInterval(()=>{},1000);',
       );
-      await expect(call(Date.now() + 5_000)).rejects.toMatchObject({
-        code: "CODEX_OUTPUT_BUDGET_EXCEEDED",
-      });
+      await assertNoPrivateMarker(
+        call(Date.now() + 5_000),
+        "CODEX_OUTPUT_BUDGET_EXCEEDED",
+      );
 
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        "setInterval(()=>{},1000);",
+        'process.stderr.write("MREV_PRIVATE_MARKER");setInterval(()=>{},1000);',
       );
       const controller = new AbortController();
       setTimeout(() => controller.abort(), 100).unref();
-      await expect(
+      await assertNoPrivateMarker(
         call(Date.now() + 5_000, controller.signal),
-      ).rejects.toMatchObject({ code: "CODEX_CANCELLED" });
+        "CODEX_CANCELLED",
+      );
+
+      process.env.MILL_CODEX_PATH = await executableScript(
+        tools.path,
+        'process.stdout.write("MREV_PRIVATE_MARKER");console.log(JSON.stringify({type:"turn.completed"}));',
+      );
+      await assertNoPrivateMarker(
+        call(Date.now() + 5_000),
+        "MALFORMED_WORKER_EVENT",
+      );
     } finally {
       await Promise.all([fixture.cleanup(), tools.cleanup()]);
     }

@@ -818,11 +818,7 @@ class GhGitHubAdapter implements GitHubAdapter {
     );
     const reviewFeedback = reviews.flatMap((review): GitHubFeedback[] => {
       const reviewPriority = priority(review.body);
-      if (
-        review.body.trim().length === 0 ||
-        review.commitId === null ||
-        reviewPriority === "unclassified"
-      ) {
+      if (review.body.trim().length === 0 || review.commitId === null) {
         return [];
       }
       return [

@@ -125,12 +125,7 @@ describe("runtime CLI contracts", () => {
           ok: true,
           data: {
             schemaVersion: 4,
-            migrations: [
-              { version: 1, name: "initial-durable-state" },
-              { version: 2, name: "worker-and-delivery-recovery-columns" },
-              { version: 3, name: "numbered-migration-ledger" },
-              { version: 4, name: "fixture-only-second-repair-capacity" },
-            ],
+            migrations: [],
             runs: { total: 0, builderAttempts: 0, repairs: 0 },
           },
         },
@@ -144,7 +139,7 @@ describe("runtime CLI contracts", () => {
           command: "report",
           ok: true,
           data: {
-            schemaVersion: "1",
+            schemaVersion: "2",
             redacted: true,
             runs: {
               total: 0,
@@ -153,11 +148,14 @@ describe("runtime CLI contracts", () => {
               builderAttempts: 0,
             },
             elapsed: { totalMilliseconds: 0, averageMilliseconds: null },
-            selfHosting: {
-              declared: false,
-              eligibleRuns: 0,
-              completedRuns: 0,
-              completionRate: null,
+            developmentEvidence: {
+              ledgerPath: null,
+              records: 0,
+              eligibleChanges: 0,
+              eligibleMillRoute: 0,
+              eligibleManualRoute: 0,
+              eligibleCompleted: 0,
+              eligibleAccepted: 0,
             },
           },
         },

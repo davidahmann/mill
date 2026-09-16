@@ -1,0 +1,61 @@
+schemaVersion: "2"
+task_id: mill-release-v0.7.0
+status: approved
+owner: davidahmann
+base_commit: 5b5803e353c67bad8a547fe4bd7d81d3db634734
+execution_mode: approved_native_maintainer
+authority: product/release-v0.7.0.md
+impact_manifest: product/impacts/RELEASE_V0_7_0.yaml
+objective: >-
+  Ship the exact v0.7.0 public-alpha artifact, release documentation, and
+  permanent ordered release evidence through the protected OIDC workflow.
+allowed_paths:
+  - package.json
+  - package-lock.json
+  - src/version.ts
+  - CHANGELOG.md
+  - README.md
+  - AGENTS.md
+  - docs/**
+  - product/**
+  - quality/**
+  - .github/**
+  - scripts/**
+  - schemas/**
+  - test/**
+authority_preparation_paths:
+  - product/**
+  - quality/**
+  - docs/releases/**
+acceptance_items:
+  - R070-01 package and CLI identify v0.7.0
+  - R070-02 documentation states shipped, exercised, qualified, and limited
+    behavior accurately
+  - R070-03 release evidence reconstructs ordered draft and published provider
+    observations from permanent assets
+  - R070-04 native check, OCI canary, exact-candidate audit, full review, and
+    required source checks pass
+  - R070-05 the annotated tag, qualified artifact, npm latest, and normal GitHub
+    Release bind one v0.7.0 identity
+validation_commands:
+  - npm run check
+  - node scripts/qualify-pnpm-oci.mjs
+  - node dist/cli.js --json --cwd . audit
+  - MILL_RELEASE_TAG=v0.7.0 node scripts/verify-release-tag.mjs
+required_reviews:
+  - required PR checks and GitHub review feedback on the complete committed MREV
+    and release-preparation diff
+constraints:
+  - single attended maintainer writer
+  - exact v0.7.0 npm-environment tag admission only; no wildcard or bypass
+  - preserve all historical tags, npm versions, releases, and evidence
+stop_conditions:
+  - ambiguous tag, tree, artifact, candidate-run, provenance, support tuple, or
+    provider effect
+  - unavailable independent verification or recurring P0/P1 release finding
+closure:
+  status: pending_provider_closure
+  provider_closure: >-
+    The protected workflow must retain ordered draft and final evidence after
+    provider readback. No post-release source update may alter the tagged
+    candidate or duplicate those provider facts.

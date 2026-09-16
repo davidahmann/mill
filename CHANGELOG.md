@@ -4,6 +4,33 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-16
+
+### Added
+
+- Add a read-only `init propose` cross-check that reports coherent draft inputs
+  without compiling mismatched or unapproved authority into a task.
+- Add explicit, bounded verifier artifact retention and a redacted development
+  evidence ledger for measured route and effort facts.
+- Add a reproducible pnpm workspace OCI canary and two disposable historical
+  maintenance replays with frozen application checks and explicit limits.
+
+### Fixed
+
+- Keep unclassified required GitHub feedback visible, require an explicit
+  `APPROVED` review state, and permit safe cancellation from ordinary
+  `awaiting_human` state while preserving delivery receipts.
+- Make diagnostic state opens non-mutating and harden forward migration, backup,
+  restore, foreign-key, and historical-state recovery behavior.
+- Remove raw worker stderr from routine public error envelopes.
+
+### Changed
+
+- Retain draft and published GitHub Release evidence in order, with source,
+  workflow, package, qualification, registry, and observed-release bindings.
+- Rewrite first-path, reporting, development, and operator guidance around the
+  supported attended flow and its limits.
+
 ## [0.6.0] - 2026-09-15
 
 ### Added

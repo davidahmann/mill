@@ -88,7 +88,7 @@ describe("release verifier preparation policy", () => {
           entry.name ===
           (phase === "draft"
             ? "Create draft GitHub Release with exact artifacts"
-            : "Read back GitHub Release and finalize evidence"),
+            : "Publish GitHub Release after draft evidence readback"),
       );
       if (!step?.run) throw new Error("missing release publication fixture");
       step.run = `${step.run}\n# --prerelease`;
@@ -103,7 +103,8 @@ describe("release verifier preparation policy", () => {
     const workflow = await fixture();
     const finalize = workflow.jobs.publish?.steps.find(
       (entry) =>
-        entry.name === "Read back GitHub Release and finalize evidence",
+        entry.name ===
+        "Read back published GitHub Release and attach final evidence",
     );
     if (!finalize?.run) throw new Error("missing release finalization fixture");
     finalize.run = finalize.run.replace(
@@ -111,7 +112,23 @@ describe("release verifier preparation policy", () => {
       "true",
     );
     await expect(check(workflow)).rejects.toThrow(
-      "final release evidence must be attached before publication",
+      "draft and published release evidence must be retained",
+    );
+  });
+
+  it("rejects a draft release that omits a qualification record", async () => {
+    const workflow = await fixture();
+    const create = workflow.jobs.publish?.steps.find(
+      (entry) =>
+        entry.name === "Create draft GitHub Release with exact artifacts",
+    );
+    if (!create?.run) throw new Error("missing release draft fixture");
+    create.run = create.run.replace(
+      '"$RUNNER_TEMP/qualified/qualification.json"',
+      "",
+    );
+    await expect(check(workflow)).rejects.toThrow(
+      "draft release must retain the qualified candidate and independent verifier records",
     );
   });
   it.each(["alpha", "missing-readback"])(
