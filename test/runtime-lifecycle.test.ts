@@ -94,6 +94,10 @@ describe("local delivery lifecycle", () => {
         taskPath: fixture.taskPath,
         approvalDigest: await qualifiedApproval(fixture),
       });
+      const candidateCommit = started.run.candidateCommit;
+      if (candidateCommit === undefined) {
+        throw new Error("started fixture run has no candidate commit");
+      }
       const contents = '{"scenario":"passed"}\n';
       const digest = `sha256:${createHash("sha256").update(contents).digest("hex")}`;
       const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
@@ -105,6 +109,7 @@ describe("local delivery lifecycle", () => {
         store.directory,
         "artifacts",
         started.run.id,
+        candidateCommit,
         createHash("sha256").update("test").digest("hex"),
         "reports",
         "scenario.json",
@@ -116,7 +121,7 @@ describe("local delivery lifecycle", () => {
           started.run.id,
           JSON.stringify({
             schemaVersion: "1",
-            candidateCommit: started.run.candidateCommit,
+            candidateCommit,
             verifierImage:
               inputs.config.verifier?.image ??
               "node@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e",

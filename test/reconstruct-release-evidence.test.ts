@@ -237,6 +237,23 @@ describe("permanent release evidence reconstruction", () => {
       expect(run(assets).status).toBe(1);
       await writeFile(path.join(assets, "release-evidence-draft.json"), draft);
 
+      const parsedFinal = JSON.parse(final) as unknown as {
+        githubRelease: { releaseId: string };
+      };
+      const mismatchedRelease = {
+        ...parsedFinal,
+        githubRelease: {
+          ...parsedFinal.githubRelease,
+          releaseId: "unexpected-release",
+        },
+      };
+      await writeFile(
+        path.join(assets, "release-evidence-final.json"),
+        JSON.stringify(mismatchedRelease),
+      );
+      expect(run(assets).status).toBe(1);
+      await writeFile(path.join(assets, "release-evidence-final.json"), final);
+
       const mismatched = {
         ...qualification,
         supportTuple: { ...supportTuple, status: "expired" },

@@ -106,6 +106,27 @@ if (
     "release evidence does not preserve ordered draft and published observations",
   );
 }
+for (const evidence of [parsedDraft, parsedFinal]) {
+  const receipt = evidence.githubRelease;
+  if (
+    receipt === null ||
+    receipt.tag !== expectedPackage.tag ||
+    receipt.artifactDigest !== metadata.selectedArtifact.sha256 ||
+    new URL(receipt.url).pathname !==
+      `/davidahmann/mill/releases/tag/${expectedPackage.tag}`
+  ) {
+    throw new Error(
+      "release evidence does not bind the provider release receipt",
+    );
+  }
+}
+if (
+  parsedDraft.githubRelease.releaseId !== parsedFinal.githubRelease.releaseId
+) {
+  throw new Error(
+    "release evidence does not preserve one GitHub Release identity",
+  );
+}
 process.stdout.write(
   `${JSON.stringify(
     {

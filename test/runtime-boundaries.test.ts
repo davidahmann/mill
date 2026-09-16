@@ -964,10 +964,14 @@ playbooks:
         },
       },
     };
-    const writeDocker = async (body: string) => {
+    const writeDocker = async (
+      artifactStatus: "regular" | "missing" | "invalid",
+      contents = "",
+      commandExitCode = 0,
+    ) => {
       await writeFile(
         docker,
-        `#!${process.execPath}\nconst {mkdirSync,symlinkSync,writeFileSync}=require("node:fs");const path=require("node:path");const args=process.argv.slice(2);if(args[0]==="image"||args[0]==="rm")process.exit(0);const mount=args.find((value)=>value.includes("target=/mill-artifacts"));if(!mount)process.exit(2);const source=/source=([^,]+)/u.exec(mount)?.[1];if(!source)process.exit(3);${body}`,
+        `#!${process.execPath}\nconst args=process.argv.slice(2);const status=${JSON.stringify(artifactStatus)};const contents=${JSON.stringify(contents)};const exitCode=${commandExitCode};if(args[0]==="image"||args[0]==="rm")process.exit(0);if(args[0]!=="run")process.exit(2);const marker=args.find((value)=>value.startsWith("MILL_ARTIFACT_PROTOCOL="))?.slice("MILL_ARTIFACT_PROTOCOL=".length);if(marker===undefined)process.exit(3);const record=status==="regular"?\`regular:\${Buffer.byteLength(contents)}\\n\${Buffer.from(contents).toString("base64")}\\n\`:\`\${status}\\n\`;process.stdout.write(\`\\n\${marker}:begin\\n\${record}\${marker}:end:\${exitCode}\\n\`);process.exit(0);`,
         { mode: 0o755 },
       );
       await chmod(docker, 0o755);
@@ -984,9 +988,7 @@ playbooks:
         maxOutputBytes: 1024 * 1024,
       });
     try {
-      await writeDocker(
-        'mkdirSync(path.join(source,"reports"),{recursive:true});writeFileSync(path.join(source,"reports/check.json"),"{\\"passed\\":true}\\n");process.exit(0);',
-      );
+      await writeDocker("regular", '{"passed":true}\n');
       const evidence = await call();
       const digest = `sha256:${createHash("sha256")
         .update('{"passed":true}\n')
@@ -1013,9 +1015,7 @@ playbooks:
         ),
       ).resolves.toBe('{"passed":true}\n');
 
-      await writeDocker(
-        'mkdirSync(path.join(source,"reports"),{recursive:true});writeFileSync(path.join(source,"reports/check.json"),"{\\"passed\\":false}\\n");process.exit(1);',
-      );
+      await writeDocker("regular", '{"passed":false}\n', 1);
       selectedArtifactDirectory = path.join(tools.path, "failed");
       await expect(call()).resolves.toMatchObject({
         passed: false,
@@ -1027,15 +1027,18 @@ playbooks:
         ],
       });
 
-      await writeDocker("process.exit(0);");
+      await writeDocker("missing");
       await expect(call()).resolves.toMatchObject({
         passed: false,
         commands: [{ reason: "RETAINED_ARTIFACT_MISSING", artifacts: [] }],
       });
 
-      await writeDocker(
-        'mkdirSync(path.join(source,"reports"),{recursive:true});symlinkSync("/etc/passwd",path.join(source,"reports/check.json"));process.exit(0);',
-      );
+      await writeDocker("invalid");
+      await expect(call()).rejects.toMatchObject({
+        code: "VERIFIER_ARTIFACT_TYPE_INVALID",
+      });
+
+      await writeDocker("invalid");
       await expect(call()).rejects.toMatchObject({
         code: "VERIFIER_ARTIFACT_TYPE_INVALID",
       });

@@ -189,6 +189,17 @@ describe("generic pnpm dependency preparation", () => {
           config: value.config,
         }),
       ).resolves.toBe(prepared.directory);
+      await mkdir(
+        path.join(prepared.directory, "packages", "example", "node_modules"),
+        { recursive: true },
+      );
+      await expect(
+        dependencySnapshotDirectory({
+          root: value.repository.path,
+          stateDirectory: value.state.path,
+          config: value.config,
+        }),
+      ).rejects.toMatchObject({ code: "VERIFIER_DEPENDENCIES_UNAVAILABLE" });
       const calls = (await readFile(value.log, "utf8"))
         .trim()
         .split("\n")

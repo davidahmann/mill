@@ -84,6 +84,151 @@ function artifactDirectoryName(commandId: string): string {
   return createHash("sha256").update(commandId, "utf8").digest("hex");
 }
 
+function artifactTransportBudget(
+  retained: NonNullable<MillConfig["commands"][string]["retainedArtifacts"]>,
+): number {
+  const encodedPayload = Math.ceil(retained.maxTotalBytes / 3) * 4;
+  const framing = retained.paths.reduce(
+    (total, artifactPath) =>
+      total + Buffer.byteLength(artifactPath, "utf8") + 64,
+    256,
+  );
+  return encodedPayload + framing;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\\"'\\\"'")}'`;
+}
+
+function retainedArtifactProtocolScript(input: {
+  paths: readonly string[];
+  maxFileBytes: number;
+}): string {
+  const paths = input.paths.map(shellQuote).join(" ");
+  return [
+    "set +e",
+    '"$@"',
+    "mill_status=$?",
+    'printf "\\n%s:begin\\n" "$MILL_ARTIFACT_PROTOCOL"',
+    `for mill_artifact_path in ${paths}; do`,
+    '  mill_artifact_full="/mill-artifacts/$mill_artifact_path"',
+    '  mill_artifact_parent=$(dirname "$mill_artifact_full")',
+    "  mill_artifact_invalid=0",
+    '  while [ "$mill_artifact_parent" != "/mill-artifacts" ]; do',
+    '    if [ -L "$mill_artifact_parent" ]; then mill_artifact_invalid=1; break; fi',
+    '    mill_artifact_parent=$(dirname "$mill_artifact_parent")',
+    "  done",
+    '  if [ "$mill_artifact_invalid" = 1 ] || [ -L "$mill_artifact_full" ]; then',
+    '    printf "invalid\\n"',
+    '  elif [ ! -f "$mill_artifact_full" ]; then',
+    '    printf "missing\\n"',
+    "  else",
+    '    mill_artifact_bytes=$(wc -c < "$mill_artifact_full" | tr -d " ")',
+    '    case "$mill_artifact_bytes" in',
+    "      ''|*[!0-9]*) printf \"invalid\\n\" ;;",
+    `      *) if [ "$mill_artifact_bytes" -gt ${input.maxFileBytes} ]; then printf "too_large\\n"; else printf "regular:%s\\n" "$mill_artifact_bytes"; base64 -w 0 "$mill_artifact_full"; printf "\\n"; fi ;;`,
+    "    esac",
+    "  fi",
+    "done",
+    'printf "%s:end:%s\\n" "$MILL_ARTIFACT_PROTOCOL" "$mill_status"',
+    "exit 0",
+  ].join("\n");
+}
+
+async function decodeRetainedArtifactProtocol(input: {
+  stdout: string;
+  marker: string;
+  commandId: string;
+  command: NonNullable<MillConfig["commands"][string]>;
+  outputRoot: string;
+}): Promise<{ stdout: string; exitCode: number }> {
+  const retained = input.command.retainedArtifacts;
+  if (retained === undefined) {
+    throw new Error(
+      "artifact protocol requires retained-artifact configuration",
+    );
+  }
+  const begin = `\n${input.marker}:begin\n`;
+  const beginAt = input.stdout.lastIndexOf(begin);
+  if (beginAt < 0) {
+    throw new MillError(
+      "VERIFIER_ARTIFACT_COLLECTION_FAILED",
+      "The verifier did not return its bounded artifact protocol.",
+      ExitCode.temporary,
+      { commandId: input.commandId },
+    );
+  }
+  let offset = beginAt + begin.length;
+  const protocolFailure = (): MillError =>
+    new MillError(
+      "VERIFIER_ARTIFACT_COLLECTION_FAILED",
+      "The verifier returned a malformed bounded artifact protocol.",
+      ExitCode.temporary,
+      { commandId: input.commandId },
+    );
+  for (const artifactPath of retained.paths) {
+    const lineEnd = input.stdout.indexOf("\n", offset);
+    if (lineEnd < 0) throw protocolFailure();
+    const status = input.stdout.slice(offset, lineEnd);
+    offset = lineEnd + 1;
+    if (status === "missing") continue;
+    if (status === "invalid") {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_TYPE_INVALID",
+        "A retained verifier artifact cannot traverse a symbolic link or use a non-regular file.",
+        ExitCode.data,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    if (status === "too_large") {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_FILE_LIMIT_EXCEEDED",
+        "A retained verifier artifact exceeded its approved file-size limit.",
+        ExitCode.data,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    const matched = /^regular:([0-9]+)$/u.exec(status);
+    if (matched?.[1] === undefined) throw protocolFailure();
+    const bytes = Number(matched[1]);
+    if (!Number.isSafeInteger(bytes) || bytes > retained.maxFileBytes) {
+      throw protocolFailure();
+    }
+    const encodedBytes = Math.ceil(bytes / 3) * 4;
+    const encoded = input.stdout.slice(offset, offset + encodedBytes);
+    if (
+      encoded.length !== encodedBytes ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
+        encoded,
+      ) ||
+      input.stdout.at(offset + encodedBytes) !== "\n"
+    ) {
+      throw protocolFailure();
+    }
+    offset += encodedBytes + 1;
+    const contents = Buffer.from(encoded, "base64");
+    if (contents.length !== bytes) throw protocolFailure();
+    const destination = path.resolve(input.outputRoot, artifactPath);
+    if (!isWithin(input.outputRoot, destination)) {
+      throw new MillError(
+        "VERIFIER_ARTIFACT_PATH_INVALID",
+        "A verifier artifact path escaped its dedicated output directory.",
+        ExitCode.configuration,
+        { commandId: input.commandId, path: artifactPath },
+      );
+    }
+    await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+    await writeFile(destination, contents, { flag: "wx", mode: 0o600 });
+  }
+  const end = `${input.marker}:end:`;
+  if (!input.stdout.startsWith(end, offset)) throw protocolFailure();
+  const exitCode = Number(input.stdout.slice(offset + end.length).trim());
+  if (!Number.isSafeInteger(exitCode) || exitCode < 0 || exitCode > 255) {
+    throw protocolFailure();
+  }
+  return { stdout: input.stdout.slice(0, beginAt), exitCode };
+}
+
 async function collectRetainedArtifacts(input: {
   commandId: string;
   command: NonNullable<MillConfig["commands"][string]>;
@@ -129,6 +274,30 @@ async function collectRetainedArtifacts(input: {
         ExitCode.configuration,
         { commandId: input.commandId, path: artifactPath },
       );
+    }
+    let ancestor = input.outputRoot;
+    for (const segment of artifactPath.split("/")) {
+      ancestor = path.join(ancestor, segment);
+      let ancestorInfo;
+      try {
+        ancestorInfo = await lstat(ancestor);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          break;
+        throw error;
+      }
+      if (ancestorInfo.isSymbolicLink()) {
+        throw new MillError(
+          "VERIFIER_ARTIFACT_TYPE_INVALID",
+          "A retained verifier artifact cannot traverse a symbolic link.",
+          ExitCode.data,
+          { commandId: input.commandId, path: artifactPath },
+        );
+      }
     }
     let before;
     try {
@@ -985,6 +1154,8 @@ export async function verifyDeclaredCommands(input: {
           ? undefined
           : await mkdtemp(path.join(tmpdir(), "mill-verifier-artifacts-"));
       if (artifactOutput !== undefined) await chmod(artifactOutput, 0o700);
+      const artifactProtocol =
+        command.retainedArtifacts === undefined ? undefined : randomUUID();
       let result: ProcessResult;
       let retainedArtifacts:
         Awaited<ReturnType<typeof collectRetainedArtifacts>> | undefined;
@@ -1029,8 +1200,8 @@ export async function verifyDeclaredCommands(input: {
             ...(artifactOutput === undefined
               ? []
               : [
-                  "--mount",
-                  `type=bind,source=${artifactOutput},target=/mill-artifacts`,
+                  "--tmpfs",
+                  `/mill-artifacts:rw,size=${command.retainedArtifacts?.maxTotalBytes ?? 0},mode=1777`,
                 ]),
             "--workdir",
             containerCwd,
@@ -1046,11 +1217,27 @@ export async function verifyDeclaredCommands(input: {
             "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
             ...(artifactOutput === undefined
               ? []
-              : ["--env", "MILL_ARTIFACTS_DIR=/mill-artifacts"]),
+              : [
+                  "--env",
+                  "MILL_ARTIFACTS_DIR=/mill-artifacts",
+                  "--env",
+                  `MILL_ARTIFACT_PROTOCOL=${artifactProtocol}`,
+                ]),
             "--entrypoint",
-            commandExecutable,
+            artifactOutput === undefined ? commandExecutable : "/bin/sh",
             input.config.verifier.image,
-            ...command.argv.slice(1),
+            ...(artifactOutput === undefined
+              ? command.argv.slice(1)
+              : [
+                  "-ec",
+                  retainedArtifactProtocolScript({
+                    paths: command.retainedArtifacts?.paths ?? [],
+                    maxFileBytes: command.retainedArtifacts?.maxFileBytes ?? 0,
+                  }),
+                  "mill-artifact-protocol",
+                  commandExecutable,
+                  ...command.argv.slice(1),
+                ]),
           ],
           cwd: input.root,
           env: {
@@ -1060,7 +1247,11 @@ export async function verifyDeclaredCommands(input: {
             LC_ALL: "C",
           },
           deadlineMs: commandDeadline,
-          maxOutputBytes: input.maxOutputBytes,
+          maxOutputBytes:
+            input.maxOutputBytes +
+            (command.retainedArtifacts === undefined
+              ? 0
+              : artifactTransportBudget(command.retainedArtifacts)),
           ...(input.signal === undefined ? {} : { signal: input.signal }),
           ...(input.onSpawn === undefined ? {} : { onSpawn: input.onSpawn }),
           ...(input.onExit === undefined ? {} : { onExit: input.onExit }),
@@ -1069,6 +1260,29 @@ export async function verifyDeclaredCommands(input: {
             : { cancellationRequested: input.cancellationRequested }),
         });
         if (artifactOutput !== undefined) {
+          if (
+            !result.timedOut &&
+            !result.cancelled &&
+            !result.outputExceeded &&
+            artifactProtocol !== undefined
+          ) {
+            const decoded = await decodeRetainedArtifactProtocol({
+              stdout: result.stdout,
+              marker: artifactProtocol,
+              commandId,
+              command,
+              outputRoot: artifactOutput,
+            });
+            result = {
+              ...result,
+              stdout: decoded.stdout,
+              exitCode: decoded.exitCode,
+              outputExceeded:
+                Buffer.byteLength(decoded.stdout, "utf8") +
+                  Buffer.byteLength(result.stderr, "utf8") >
+                input.maxOutputBytes,
+            };
+          }
           retainedArtifacts = await collectRetainedArtifacts({
             commandId,
             command,

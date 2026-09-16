@@ -808,6 +808,11 @@ export async function qualifyBaseline(input: {
       const evidence = await verifyDeclaredCommands({
         root: destination,
         ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
+        artifactDirectory: path.join(
+          store.directory,
+          "baseline-artifacts",
+          qualified.baseCommit,
+        ),
         candidateCommit: qualified.baseCommit,
         config: inputs.config,
         task:
@@ -886,7 +891,12 @@ export async function verifyRun(input: {
     const evidence = await verifyDeclaredCommands({
       root: candidate.worktree,
       ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
-      artifactDirectory: path.join(store.directory, "artifacts", run.id),
+      artifactDirectory: path.join(
+        store.directory,
+        "artifacts",
+        run.id,
+        candidate.commit,
+      ),
       candidateCommit: candidate.commit,
       config: inputs.config,
       task: inputs.task,
@@ -1708,6 +1718,7 @@ export async function retainedVerifierArtifacts(input: {
             store.directory,
             "artifacts",
             run.id,
+            validation.candidateCommit,
             commandDirectory,
             artifact.path,
           );

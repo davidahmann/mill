@@ -45,6 +45,7 @@ interface DependencyIdentity {
 
 interface DependencyMarker extends DependencyIdentity {
   treeDigest: string;
+  workspaceTreeDigests?: Record<string, string>;
 }
 
 export interface DependencyPreparationResult {
@@ -510,8 +511,12 @@ async function regularFileDigest(file: string): Promise<string> {
   }
 }
 
-async function dependencyTreeDigest(directory: string): Promise<string> {
+async function dependencyTreeDigest(
+  directory: string,
+  containmentRoot = directory,
+): Promise<string> {
   const canonicalRoot = await realpath(directory);
+  const canonicalContainmentRoot = await realpath(containmentRoot);
   const aggregate = createHash("sha256");
   let entriesVisited = 0;
   const record = (value: readonly (string | number)[]): void => {
@@ -568,8 +573,8 @@ async function dependencyTreeDigest(directory: string): Promise<string> {
         );
         if (
           path.isAbsolute(target) ||
-          !isWithin(canonicalRoot, resolvedTarget) ||
-          !isWithin(canonicalRoot, await realpath(childAbsolute))
+          !isWithin(canonicalContainmentRoot, resolvedTarget) ||
+          !isWithin(canonicalContainmentRoot, await realpath(childAbsolute))
         ) {
           throw new MillError(
             "DEPENDENCY_TREE_INVALID",
@@ -600,6 +605,37 @@ async function dependencyTreeDigest(directory: string): Promise<string> {
   };
   await walk("");
   return `sha256:${aggregate.digest("hex")}`;
+}
+
+async function optionalDependencyTreeDigest(
+  directory: string,
+  containmentRoot = directory,
+): Promise<string> {
+  try {
+    return await dependencyTreeDigest(directory, containmentRoot);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return "absent";
+    throw error;
+  }
+}
+
+async function pnpmWorkspaceTreeDigests(
+  directory: string,
+  dependencies: Extract<DependencyConfig, { manager: "pnpm" }>,
+): Promise<Record<string, string>> {
+  const digests: Record<string, string> = {};
+  for (const manifest of await pnpmWorkspaceManifestPaths(
+    directory,
+    dependencies,
+  )) {
+    const workspacePath = path.dirname(manifest);
+    digests[workspacePath] = await optionalDependencyTreeDigest(
+      path.join(directory, workspacePath, "node_modules"),
+      directory,
+    );
+  }
+  return digests;
 }
 
 async function markerMatches(
@@ -649,11 +685,37 @@ async function markerMatches(
             targetPath: parsed.targetPath,
             locks: parsed.locks,
           };
-    return (
-      JSON.stringify(claimedIdentity) === JSON.stringify(expected) &&
-      parsed.treeDigest ===
-        (await dependencyTreeDigest(path.join(directory, "node_modules")))
+    if (
+      JSON.stringify(claimedIdentity) !== JSON.stringify(expected) ||
+      parsed.treeDigest !==
+        (await dependencyTreeDigest(
+          path.join(directory, "node_modules"),
+          directory,
+        ))
+    )
+      return false;
+    if (expected.manager !== "pnpm") return true;
+    const workspaceTreeDigests = record(parsed.workspaceTreeDigests);
+    if (workspaceTreeDigests === undefined) return false;
+    const workspaceManifests = await pnpmWorkspaceManifestPaths(
+      directory,
+      expected as unknown as Extract<DependencyConfig, { manager: "pnpm" }>,
     );
+    for (const workspacePath of workspaceManifests.map((manifest) =>
+      path.dirname(manifest),
+    )) {
+      const expectedDigest = workspaceTreeDigests[workspacePath];
+      if (
+        typeof expectedDigest !== "string" ||
+        expectedDigest !==
+          (await optionalDependencyTreeDigest(
+            path.join(directory, workspacePath, "node_modules"),
+            directory,
+          ))
+      )
+        return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -1152,7 +1214,16 @@ async function prepareDependencySnapshotWithSignal(input: {
       ...identity.marker,
       treeDigest: await dependencyTreeDigest(
         path.join(temporary, "node_modules"),
+        temporary,
       ),
+      ...(dependencies.manager === "pnpm"
+        ? {
+            workspaceTreeDigests: await pnpmWorkspaceTreeDigests(
+              temporary,
+              dependencies,
+            ),
+          }
+        : {}),
     };
     await writeFile(
       path.join(temporary, "marker.json"),
