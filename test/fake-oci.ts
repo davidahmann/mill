@@ -16,7 +16,7 @@ const args=process.argv.slice(2);
 if(args[0]==="info"){const marker=${JSON.stringify(`${executable}.daemon-id`)};console.log(JSON.stringify(fs.existsSync(marker)?fs.readFileSync(marker,"utf8"):"fake-daemon"));process.exit(0)}
 const filename=${JSON.stringify(`${executable}.containers.json`)};
 let containers=fs.existsSync(filename)?JSON.parse(fs.readFileSync(filename,"utf8")):[];
-const save=()=>fs.writeFileSync(filename,JSON.stringify(containers));
+const save=()=>{const temporary=filename+"."+process.pid+".tmp";fs.writeFileSync(temporary,JSON.stringify(containers));fs.renameSync(temporary,filename)};
 if(args[0]==="container"&&args[1]==="inspect"){
   const found=containers.find(value=>value.name==="/"+args.at(-1)||value.id===args.at(-1));
   if(found){console.log(JSON.stringify(found));process.exit(0)}

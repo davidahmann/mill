@@ -1364,6 +1364,20 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       },
     );
   run
+    .hook("preSubcommand", (parent, child) => {
+      if (child.name() !== "next") return;
+      // Commander parses shared flags on the parent, including after `next`.
+      // Forward only explicit CLI values before the child's required checks.
+      for (const name of ["approve", "attended"]) {
+        if (parent.getOptionValueSource(name) === "cli") {
+          child.setOptionValueWithSource(
+            name,
+            parent.getOptionValue(name),
+            "cli",
+          );
+        }
+      }
+    })
     .command("next")
     .description(
       "run the one ready approved outcome through the existing lifecycle",
@@ -1374,6 +1388,18 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     )
     .requiredOption("--attended", "acknowledge attended trusted-host execution")
     .action(async (options: { approve: string }) => {
+      const inherited = run.opts<{
+        task?: string;
+        isolation: BuilderIsolationRequest;
+      }>();
+      requireBuilderIsolation(inherited.isolation);
+      if (inherited.task !== undefined) {
+        throw new MillError(
+          "USAGE_ERROR",
+          "run next selects its task from the approved outcome; --task is only supported by run.",
+          ExitCode.usage,
+        );
+      }
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
       await enforceExactVersion(root);

@@ -1224,21 +1224,25 @@ playbooks:
       const controller = new AbortController();
       const cancellation = call(Date.now() + 5_000, controller.signal);
       let containerCreated = false;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        const containers = JSON.parse(
-          await readFile(
-            path.join(tools.path, "docker.containers.json"),
-            "utf8",
-          ).catch(() => "[]"),
-        ) as unknown[];
-        if (containers.length > 0) {
-          containerCreated = true;
-          break;
+      let cancelled: Awaited<ReturnType<typeof call>>;
+      try {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const containers = JSON.parse(
+            await readFile(
+              path.join(tools.path, "docker.containers.json"),
+              "utf8",
+            ).catch(() => "[]"),
+          ) as unknown[];
+          if (containers.length > 0) {
+            containerCreated = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
         }
-        await new Promise((resolve) => setTimeout(resolve, 10));
+      } finally {
+        controller.abort();
+        cancelled = await cancellation;
       }
-      controller.abort();
-      const cancelled = await cancellation;
       expect(containerCreated).toBe(true);
       expect(cancelled.commands[0]).toMatchObject({
         status: "failed",

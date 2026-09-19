@@ -4,6 +4,24 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-09-19
+
+### Fixed
+
+- Pass explicit approval and attendance flags to `run next` through the CLI
+  parser while retaining required approvals and isolation checks.
+- Capture release recovery logs with old and new GitHub CLI versions. Preserve
+  exact bytes privately and suppress captured output in read-error diagnostics.
+- Write fake OCI state atomically and complete cancellation cleanup even when a
+  test assertion fails.
+
+### Added
+
+- A protected recovery workflow that can finish GitHub publication after a
+  proven successful npm publish. It verifies the original qualified artifact and
+  cannot publish npm again or overwrite an existing GitHub Release.
+- A longer bounded npm metadata read window for delayed registry propagation.
+
 ## [0.7.1] - 2026-09-19
 
 ### Fixed

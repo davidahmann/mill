@@ -71,3 +71,24 @@ Record the recovery workflow's separate source identity. The first recovery
 route requires the GitHub tag's release to be absent; an existing or ambiguous
 release blocks it. Never repeat publication, replace artifacts, move the tag,
 invent a successful original run, or bypass the protected environment reviewer.
+
+## Installed-command and runner compatibility follow-through
+
+Recovery run `35469076917` stopped during its first read-only provider check.
+The runner's newer GitHub CLI rejected escape-bearing job logs that the local
+CLI had accepted. No GitHub Release was created. Capture those bytes privately
+with a supported CLI option and keep failures from printing captured output.
+
+The downstream installed-package probe also found that the public `run next`
+parser assigned approval flags to its parent command, leaving its required child
+options unset. Repair this documented path with positive and negative CLI tests.
+Preserve required approval, attendance and isolation boundaries.
+
+The owner's instruction to fix discovered gaps and publish the corrected latest
+version covers a new immutable `v0.7.2`, its exact protected-environment tag
+admission, and the downstream pin to that verified version. Complete the
+existing 0.7.1 release record first, preserving its original publication and
+failed recovery run. Then qualify and publish 0.7.2 through the normal flow.
+Neither version may be republished or retagged. The maintainer task's final
+closure target is 0.7.2; the earlier 0.7.1 evidence remains part of the delivery
+history.

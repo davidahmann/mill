@@ -18,6 +18,7 @@ material_changes:
   - Preserve legitimate planning states while rejecting unusable or false
     completion.
   - Repair confirmed recovery gaps and release readback/reconstruction identity.
+  - Correct public coordinator option routing without weakening task authority.
 affected_surfaces:
   - planning, expert admission, semantic verification, closure and runtime
     recovery

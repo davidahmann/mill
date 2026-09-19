@@ -158,14 +158,14 @@ existing repository.
 
 ```sh
 npm view @davidahmann/mill dist-tags --json
-npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.7.1
+npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.7.2
 npx --no-install millctl --version
 ```
 
-The example selects this source candidate's version, `0.7.1`. Use it after the
+The example selects this source candidate's version, `0.7.2`. Use it after the
 linked release's final evidence confirms publication; an unpublished source
 candidate is not an installable release. See the
-[v0.7.1 scope](docs/releases/v0.7.1.md) and
+[v0.7.2 scope](docs/releases/v0.7.2.md) and
 [planning evidence rules](docs/planning.md#what-passing-evidence-means).
 
 To develop Mill itself from a clean source checkout:

@@ -561,105 +561,159 @@ describe("bounded finalization after immutable npm publication", () => {
     }
   });
 
-  it("retains only necessary provider observations and keeps raw job logs private", async () => {
-    const temporary = await temporaryDirectory(
-      "mill-release-recovery-observe-",
-    );
-    try {
-      const f = fixture();
-      const root = `repos/${repository}/`;
-      const privateValue = "PRIVATE_UNNEEDED_PROVIDER_FIELD";
-      const responses: Record<string, unknown> = {
-        [`${root}actions/workflows/release.yml`]: {
-          ...f.input.workflow,
-          url: privateValue,
-        },
-        [`${root}actions/workflows/release.yml/runs?event=workflow_dispatch&branch=${tag}&per_page=100`]:
-          f.input.runsPages.map((page) => ({
-            ...page,
-            workflow_runs: page.workflow_runs.map((run) => ({
-              ...run,
-              actor: { email: privateValue },
-              head_commit: { message: privateValue },
+  it.each([
+    { escapeSupport: false, failure: false },
+    { escapeSupport: true, failure: false },
+    { escapeSupport: true, failure: true },
+  ])(
+    "captures private job logs with CLI behavior $escapeSupport/$failure",
+    async ({ escapeSupport, failure }) => {
+      const temporary = await temporaryDirectory(
+        "mill-release-recovery-observe-",
+      );
+      try {
+        const f = fixture();
+        const root = `repos/${repository}/`;
+        const privateValue = "PRIVATE_UNNEEDED_PROVIDER_FIELD";
+        const responses: Record<string, unknown> = {
+          [`${root}actions/workflows/release.yml`]: {
+            ...f.input.workflow,
+            url: privateValue,
+          },
+          [`${root}actions/workflows/release.yml/runs?event=workflow_dispatch&branch=${tag}&per_page=100`]:
+            f.input.runsPages.map((page) => ({
+              ...page,
+              workflow_runs: page.workflow_runs.map((run) => ({
+                ...run,
+                actor: { email: privateValue },
+                head_commit: { message: privateValue },
+              })),
             })),
-          })),
-        [`${root}releases?per_page=100`]: [
-          [
-            {
-              id: 1,
-              tag_name: "v0.7.0",
-              draft: false,
-              body: privateValue,
-              author: { email: privateValue },
-            },
+          [`${root}releases?per_page=100`]: [
+            [
+              {
+                id: 1,
+                tag_name: "v0.7.0",
+                draft: false,
+                body: privateValue,
+                author: { email: privateValue },
+              },
+            ],
           ],
-        ],
-        [`${root}actions/jobs/430/logs`]: `${f.log}\n${privateValue}\n`,
-      };
-      for (const [id, pages] of Object.entries(f.input.jobsByRun))
-        responses[`${root}actions/runs/${id}/attempts/1/jobs?per_page=100`] =
-          pages.map((page) => ({
-            ...page,
-            jobs: page.jobs.map((job) => ({
-              ...job,
-              runner_name: privateValue,
-            })),
-          }));
-      const responsesFile = path.join(temporary.path, "api.json");
-      await writeFile(responsesFile, JSON.stringify(responses));
-      await writeFile(
-        path.join(temporary.path, "gh"),
-        `#!/usr/bin/env node
+          [`${root}actions/jobs/430/logs`]: `${f.log}\n\u001b[36;1m${privateValue}\u001b[0m\n`,
+        };
+        for (const [id, pages] of Object.entries(f.input.jobsByRun))
+          responses[`${root}actions/runs/${id}/attempts/1/jobs?per_page=100`] =
+            pages.map((page) => ({
+              ...page,
+              jobs: page.jobs.map((job) => ({
+                ...job,
+                runner_name: privateValue,
+              })),
+            }));
+        const responsesFile = path.join(temporary.path, "api.json");
+        await writeFile(responsesFile, JSON.stringify(responses));
+        await writeFile(
+          path.join(temporary.path, "gh"),
+          `#!/usr/bin/env node
 const fs=require("node:fs");
+const args=process.argv.slice(2);
+const supported=process.env.TEST_ESCAPE_SUPPORT==="true";
+if(args.join(" ")==="api --help") {
+  process.stdout.write(supported?"--allow-escape-sequences Allow escape sequences":"Usage: gh api");
+  process.exit(0);
+}
+const escapeOptIn=args.includes("--allow-escape-sequences");
+const logs=args.at(-1).endsWith("/logs");
+if(escapeOptIn&&(!supported||!logs))process.exit(8);
+if(logs&&supported&&!escapeOptIn) {
+  process.stderr.write("the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway");
+  process.exit(1);
+}
 const values=JSON.parse(fs.readFileSync(process.env.TEST_API_FILE,"utf8"));
 const value=values[process.argv.at(-1)];
 if(value===undefined)process.exit(9);
+if(logs&&process.env.TEST_LOG_FAILURE==="true") {
+  process.stdout.write(value);
+  process.stderr.write(value);
+  process.exit(1);
+}
 process.stdout.write(typeof value==="string"?value:JSON.stringify(value));
 `,
-        { mode: 0o755 },
-      );
-      const result = invoke(["observe", tag, "42", "43", temporary.path], {
-        PATH: `${temporary.path}${path.delimiter}${process.env.PATH ?? ""}`,
-        TEST_API_FILE: responsesFile,
-      });
-      expect(result.status, result.stderr).toBe(0);
-      for (const name of [
-        "recovery-observations.json",
-        "candidate-run.json",
-        "candidate-jobs.json",
-        "publish-run.json",
-      ])
+          { mode: 0o755 },
+        );
+        const result = invoke(["observe", tag, "42", "43", temporary.path], {
+          PATH: `${temporary.path}${path.delimiter}${process.env.PATH ?? ""}`,
+          TEST_API_FILE: responsesFile,
+          TEST_ESCAPE_SUPPORT: String(escapeSupport),
+          TEST_LOG_FAILURE: String(failure),
+        });
+        expect(result.stdout).not.toContain(privateValue);
+        expect(result.stderr).not.toContain(privateValue);
+        expect(result.stdout).not.toContain("\u001b");
+        expect(result.stderr).not.toContain("\u001b");
+        if (failure) {
+          expect(result.status).toBe(1);
+          expect(result.stderr).toContain("GitHub read failed");
+          await expect(
+            readFile(path.join(temporary.path, "recovery-observations.json")),
+          ).rejects.toThrow();
+          return;
+        }
+        expect(result.status, result.stderr).toBe(0);
+        for (const name of [
+          "recovery-observations.json",
+          "candidate-run.json",
+          "candidate-jobs.json",
+          "publish-run.json",
+        ])
+          expect(
+            await readFile(path.join(temporary.path, name), "utf8"),
+          ).not.toContain(privateValue);
         expect(
-          await readFile(path.join(temporary.path, name), "utf8"),
+          await readFile(path.join(temporary.path, "publish-job.log"), "utf8"),
+        ).toBe(responses[`${root}actions/jobs/430/logs`]);
+        await writeFile(
+          path.join(temporary.path, "identity.json"),
+          JSON.stringify(f.identity),
+        );
+        await writeFile(
+          path.join(temporary.path, "metadata.json"),
+          JSON.stringify(f.metadata),
+        );
+        const validated = invoke([
+          "validate",
+          temporary.path,
+          path.join(temporary.path, "identity.json"),
+          path.join(temporary.path, "metadata.json"),
+        ]);
+        expect(validated.status, validated.stderr).toBe(0);
+        const receipt: unknown = JSON.parse(
+          await readFile(
+            path.join(temporary.path, "recovery-source.json"),
+            "utf8",
+          ),
+        );
+        expect(receipt).toMatchObject({
+          originalPublish: {
+            candidateBinding: {
+              logsDigest: digest(
+                String(responses[`${root}actions/jobs/430/logs`]),
+              ),
+            },
+          },
+        });
+        expect(
+          await readFile(
+            path.join(temporary.path, "recovery-source.json"),
+            "utf8",
+          ),
         ).not.toContain(privateValue);
-      expect(
-        await readFile(path.join(temporary.path, "publish-job.log"), "utf8"),
-      ).toContain(privateValue);
-      await writeFile(
-        path.join(temporary.path, "identity.json"),
-        JSON.stringify(f.identity),
-      );
-      await writeFile(
-        path.join(temporary.path, "metadata.json"),
-        JSON.stringify(f.metadata),
-      );
-      const validated = invoke([
-        "validate",
-        temporary.path,
-        path.join(temporary.path, "identity.json"),
-        path.join(temporary.path, "metadata.json"),
-      ]);
-      expect(validated.status, validated.stderr).toBe(0);
-      expect(
-        await readFile(
-          path.join(temporary.path, "recovery-source.json"),
-          "utf8",
-        ),
-      ).not.toContain(privateValue);
-    } finally {
-      await temporary.cleanup();
-    }
-  });
+      } finally {
+        await temporary.cleanup();
+      }
+    },
+  );
 
   it("rejects changed final source, artifact and original workflow identities", async () => {
     const temporary = await temporaryDirectory(

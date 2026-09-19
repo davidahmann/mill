@@ -292,20 +292,33 @@ function history(input) {
   };
 }
 
+function captureGh(args) {
+  try {
+    return execFileSync("gh", args, {
+      timeout: 120_000,
+      maxBuffer: 8 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch {
+    // Child errors contain captured output, which may include private log data.
+    throw new Error("GitHub read failed; recovery stopped before finalization");
+  }
+}
+
 function api(endpoint, paginated = false) {
   const args = [
     "api",
     ...(paginated ? ["--paginate", "--slurp"] : []),
     `repos/${repository}/${endpoint}`,
   ];
-  return JSON.parse(
-    execFileSync("gh", args, {
-      encoding: "utf8",
-      timeout: 120_000,
-      maxBuffer: 8 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    }),
-  );
+  const bytes = captureGh(args);
+  try {
+    return JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error(
+      "GitHub returned invalid JSON; recovery stopped before finalization",
+    );
+  }
 }
 
 // Only provider facts consumed by this gate become permanent public evidence.
@@ -357,6 +370,7 @@ const observationPages = (pages, key, select) =>
 
 function candidateBinding(log, candidateId, tag, job) {
   const lines = log
+    .toString("utf8")
     .split(/\r?\n/u)
     .map((line) => line.replace(/^\d{4}-\d{2}-\d{2}T\S+ /u, ""));
   const groups = [];
@@ -460,16 +474,16 @@ if (mode === "observe") {
     observedAt: new Date().toISOString(),
   };
   const accepted = history(input);
-  const log = execFileSync(
-    "gh",
-    ["api", `repos/${repository}/actions/jobs/${accepted.job.id}/logs`],
-    {
-      encoding: "utf8",
-      timeout: 120_000,
-      maxBuffer: 8 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  // New gh versions guard ANSI output even when stdout is captured. Opt in only
+  // for this private log read, and retain exact bytes without rendering them.
+  const apiHelp = captureGh(["api", "--help"]).toString("utf8");
+  const log = captureGh([
+    "api",
+    ...(apiHelp.includes("--allow-escape-sequences")
+      ? ["--allow-escape-sequences"]
+      : []),
+    `repos/${repository}/actions/jobs/${accepted.job.id}/logs`,
+  ]);
   candidateBinding(log, candidateId, tag, accepted.job);
   await writeFile(path.join(directory, "publish-job.log"), log, {
     flag: "wx",
@@ -491,7 +505,7 @@ if (mode === "observe") {
   );
   const accepted = history(input);
   const binding = candidateBinding(
-    await readFile(path.join(directory, "publish-job.log"), "utf8"),
+    await readFile(path.join(directory, "publish-job.log")),
     input.candidateId,
     input.tag,
     accepted.job,
