@@ -1,0 +1,286 @@
+name: Release recovery
+run-name: Recover ${{ inputs.tag }} after npm publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated stable tag already published to npm
+        required: true
+        type: string
+      candidate_run_id:
+        description: Successful candidate run consumed by original publication
+        required: true
+        type: string
+      publish_run_id:
+        description: Failed release run with one successful immutable npm step
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    name: finalize-existing-npm-release
+    if:
+      github.ref == 'refs/heads/main' && github.repository == 'davidahmann/mill'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: npm
+    permissions:
+      actions: read
+      contents: write
+    defaults:
+      run:
+        working-directory: release-source
+        shell: bash
+    env:
+      GH_REPO: ${{ github.repository }}
+      MILL_NPM_METADATA_ATTEMPTS: "20"
+      MILL_NPM_METADATA_DELAY_MS: "30000"
+    steps:
+      - name: Checkout approved recovery controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify main controller identity
+        working-directory: controller
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Checkout immutable release source separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify annotated tag and release notes
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'
+          normalized_ref=$(git check-ref-format --normalize "refs/tags/$RELEASE_TAG")
+          test "$normalized_ref" = "refs/tags/$RELEASE_TAG"
+          test "$(git cat-file -t "$normalized_ref")" = tag
+          test "$(git rev-parse "${normalized_ref}^{commit}")" = "$(git rev-parse HEAD^{commit})"
+          notes_file="docs/releases/${RELEASE_TAG}.md"
+          test -d docs && test ! -L docs && test -d docs/releases && test ! -L docs/releases
+          test -f "$notes_file" && test ! -L "$notes_file" && test -s "$notes_file"
+      - name: Set up Node and npm registry
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: release-source/.node-version
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: release-source/package-lock.json
+      - name: Observe original publication and require absent GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
+        run: |
+          node "$GITHUB_WORKSPACE/controller/scripts/release-recovery.mjs" observe \
+            "$RELEASE_TAG" "$CANDIDATE_RUN_ID" "$PUBLISH_RUN_ID" "$RUNNER_TEMP"
+      - name: Install tagged tools without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Build tagged release tools
+        run: npm run build
+      - name: Verify tagged identity without replacing recovery identity
+        env:
+          MILL_RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          tag_commit=$(git rev-parse HEAD^{commit})
+          published_commit=$(node -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.env.RUNNER_TEMP+"/publish-run.json","utf8")).head_sha)')
+          test "$tag_commit" = "$published_commit"
+          GITHUB_SHA="$tag_commit" node scripts/verify-release-tag.mjs > "$RUNNER_TEMP/identity.json"
+      - name: Download the qualified candidate run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: genesis-candidate-${{ inputs.tag }}
+          path: ${{ runner.temp }}/qualified
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+      - name: Download independent verifier receipt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: independent-policy-${{ inputs.tag }}
+          path: ${{ runner.temp }}/trusted
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+      - name:
+          Bind original candidate, publication and separate recovery controller
+        run: |
+          node scripts/verify-independent-release.mjs \
+            "$RUNNER_TEMP/qualified" "$RUNNER_TEMP/trusted/trusted-verifier.json" \
+            "$RUNNER_TEMP/candidate-run.json" "$RUNNER_TEMP/candidate-jobs.json" "$RUNNER_TEMP/identity.json"
+          node "$GITHUB_WORKSPACE/controller/scripts/release-recovery.mjs" validate \
+            "$RUNNER_TEMP" "$RUNNER_TEMP/identity.json" "$RUNNER_TEMP/qualified/artifact-metadata.json"
+      - name: Verify preserved public-alpha qualification
+        run: |
+          qualification_input=.mill-release-qualification.json
+          test ! -e "$qualification_input"
+          node -e 'require("node:fs").copyFileSync(process.argv[1],process.argv[2],require("node:fs").constants.COPYFILE_EXCL)' \
+            "$RUNNER_TEMP/qualified/qualification.json" "$qualification_input"
+          trap 'rm -f "$qualification_input"' EXIT
+          node dist/cli.js --json --cwd . qualify public-alpha \
+            --file "$qualification_input"
+          rm -f "$qualification_input"
+          trap - EXIT
+      - name: Bind qualification and prepublication release evidence
+        run: |
+          node scripts/assemble-release-evidence.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+          "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+          "$RUNNER_TEMP/identity.json" \
+          "$RUNNER_TEMP/qualified/release-evidence-prepublication.json" \
+          - - "$RUNNER_TEMP/workflow-runs.json"
+      - name: Prepare the pinned verifier before GitHub finalization
+        id: prepare-release-verifier
+        run: |
+          verifier_image=$(node -e 'const fs=require("node:fs"),y=require("yaml");const image=y.parse(fs.readFileSync("recipes/node-typescript-next-web/recipe.yaml","utf8")).verifierImage;if(typeof image!=="string"||!/@sha256:[a-f0-9]{64}$/.test(image))throw new Error("Digest-pinned verifier required");process.stdout.write(image)')
+          docker pull "$verifier_image"
+          docker image inspect "$verifier_image" >/dev/null
+      - name: Read back npm and verify signatures
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          node scripts/retry-npm-metadata.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/registry-dist.json" \
+            "$RUNNER_TEMP/npm-observation-initial.json"
+          mkdir -p "$RUNNER_TEMP/registry-install"
+          cd "$RUNNER_TEMP/registry-install"
+          npm init --yes >/dev/null
+          node "$GITHUB_WORKSPACE/release-source/scripts/retry-npm-install.mjs" \
+            "$RUNNER_TEMP/registry-install" "@davidahmann/mill@$version"
+          node "$GITHUB_WORKSPACE/release-source/scripts/retry-npm-signatures.mjs" "$RUNNER_TEMP/registry-install"
+      - name: Requalify the registry-downloaded package
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p "$RUNNER_TEMP/registry-download"
+          npm pack "@davidahmann/mill@$version" --pack-destination "$RUNNER_TEMP/registry-download" >/dev/null
+          registry_artifact=$(find "$RUNNER_TEMP/registry-download" -maxdepth 1 -type f -name '*.tgz')
+          node "$GITHUB_WORKSPACE/controller/scripts/release-recovery.mjs" registry "$RUNNER_TEMP/qualified/artifact-metadata.json" "$RUNNER_TEMP/registry-download"
+          cd "$RUNNER_TEMP"
+          node "$GITHUB_WORKSPACE/release-source/scripts/qualify-release-artifact.mjs" "$registry_artifact" --full-canary
+      - name: Create draft GitHub Release with exact artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          checksum=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.sha256')
+          notes_file="docs/releases/${RELEASE_TAG}.md"
+          test -f "$notes_file"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases-before-create.json"
+          node "$GITHUB_WORKSPACE/controller/scripts/release-recovery.mjs" absent "$RUNNER_TEMP/releases-before-create.json" "$RELEASE_TAG"
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Mill $RELEASE_TAG (Public alpha)" \
+            --notes-file "$notes_file" \
+            "$artifact" "$checksum" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/qualified/release-evidence-prepublication.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/audit.json" \
+            "$RUNNER_TEMP/qualified/identity.json" \
+            "$RUNNER_TEMP/qualified/release-canary.json" \
+            "$RUNNER_TEMP/trusted/trusted-verifier.json" \
+            "$RUNNER_TEMP/trusted/trusted-canary.json"
+      - name: Read back draft GitHub Release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          filename=$(basename "$artifact")
+          mkdir -p "$RUNNER_TEMP/github-download"
+          gh release view "$RELEASE_TAG" --json url,tagName,isDraft,isPrerelease,publishedAt,databaseId,assets > "$RUNNER_TEMP/github-release.json"
+          node -e 'const fs=require("node:fs");const file=process.argv[1];const release=JSON.parse(fs.readFileSync(file,"utf8"));release.url=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/releases/tag/${encodeURIComponent(process.env.RELEASE_TAG)}`;fs.writeFileSync(file,`${JSON.stringify(release)}\n`,{flag:"w",mode:0o600})' "$RUNNER_TEMP/github-release.json"
+          gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/github-download"
+          node scripts/capture-release-readback.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/registry-dist.json" \
+            "$RUNNER_TEMP/github-release.json" \
+            "$RUNNER_TEMP/github-download/$filename" \
+            "$RUNNER_TEMP/registry-readback.json" \
+            "$RUNNER_TEMP/github-readback.json"
+          node scripts/assemble-release-evidence.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/identity.json" \
+            "$RUNNER_TEMP/release-evidence-draft.json" \
+            "$RUNNER_TEMP/registry-readback.json" \
+            "$RUNNER_TEMP/github-readback.json" \
+            "$RUNNER_TEMP/workflow-runs.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-draft.json"
+      - name: Publish GitHub Release after draft evidence readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Read back published GitHub Release and attach final evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          artifact=$(find "$RUNNER_TEMP/qualified" -maxdepth 1 -type f -name '*.tgz')
+          filename=$(basename "$artifact")
+          rm -rf "$RUNNER_TEMP/github-download"
+          mkdir -p "$RUNNER_TEMP/github-download"
+          node scripts/retry-npm-metadata.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/registry-dist-final.json" \
+            "$RUNNER_TEMP/npm-observation-final.json"
+          gh release view "$RELEASE_TAG" --json url,tagName,isDraft,isPrerelease,publishedAt,databaseId,assets > "$RUNNER_TEMP/github-release-published.json"
+          node -e 'const fs=require("node:fs");const file=process.argv[1];const release=JSON.parse(fs.readFileSync(file,"utf8"));release.url=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/releases/tag/${encodeURIComponent(process.env.RELEASE_TAG)}`;fs.writeFileSync(file,`${JSON.stringify(release)}\n`,{flag:"w",mode:0o600})' "$RUNNER_TEMP/github-release-published.json"
+          gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/github-download"
+          node scripts/capture-release-readback.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/registry-dist-final.json" \
+            "$RUNNER_TEMP/github-release-published.json" \
+            "$RUNNER_TEMP/github-download/$filename" \
+            "$RUNNER_TEMP/registry-readback-published.json" \
+            "$RUNNER_TEMP/github-readback-published.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/github-latest.json"
+          node scripts/capture-release-channels.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/npm-observation-final.json" \
+            "$RUNNER_TEMP/github-latest.json" \
+            "$RUNNER_TEMP/github-readback-published.json" \
+            "$RUNNER_TEMP/release-channels.json"
+          node scripts/assemble-release-evidence.mjs \
+            "$RUNNER_TEMP/qualified/artifact-metadata.json" \
+            "$RUNNER_TEMP/qualified/qualification.json" \
+            "$RUNNER_TEMP/qualified/sbom.cdx.json" \
+            "$RUNNER_TEMP/identity.json" \
+            "$RUNNER_TEMP/release-evidence-final.json" \
+            "$RUNNER_TEMP/registry-readback-published.json" \
+            "$RUNNER_TEMP/github-readback-published.json" \
+            "$RUNNER_TEMP/workflow-runs.json" \
+            "$RUNNER_TEMP/release-channels.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-final.json"
+          node "$GITHUB_WORKSPACE/controller/scripts/release-recovery.mjs" finalize \
+            "$RUNNER_TEMP" "$RUNNER_TEMP/release-evidence-final.json" "$RUNNER_TEMP/qualified/qualification.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-recovery.json" "$RUNNER_TEMP/recovery-observations.json"
+          mkdir "$RUNNER_TEMP/recovery-readback"
+          gh release download "$RELEASE_TAG" --pattern release-recovery.json --pattern release-evidence-final.json --pattern recovery-observations.json --dir "$RUNNER_TEMP/recovery-readback"
+          cmp "$RUNNER_TEMP/release-recovery.json" "$RUNNER_TEMP/recovery-readback/release-recovery.json"
+          cmp "$RUNNER_TEMP/release-evidence-final.json" "$RUNNER_TEMP/recovery-readback/release-evidence-final.json"
+          cmp "$RUNNER_TEMP/recovery-observations.json" "$RUNNER_TEMP/recovery-readback/recovery-observations.json"

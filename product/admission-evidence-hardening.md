@@ -52,3 +52,22 @@ No new support tuple, customer operation, downstream product implementation,
 daemon, parallel runtime writer, deployment, credential sharing or review bypass
 is authorized. Product readiness remains conditional on external evidence and
 owner decisions; software tests cannot close those gates.
+
+## Observed publication recovery
+
+On 2026-09-19, candidate run `35466952501` passed all four release gates for tag
+`v0.7.1`, commit `50873b47574e9a46ca009c514186532332f385eb`. Publish run
+`35467443471` completed the immutable npm publication, then exhausted its twelve
+metadata reads before npm exposed the version. Subsequent registry readback
+confirmed the exact artifact integrity, provenance and `latest` pointer. No
+GitHub Release was created by that run.
+
+The owner's end-to-end repair and release instruction includes completing this
+known publication and fixing the observed recovery gap. Extend the bounded read
+window and add a protected, finalization-only workflow. It must prove the
+original successful publish step and qualified artifact, verify the existing
+registry version, and preserve the original publish run in release evidence.
+Record the recovery workflow's separate source identity. The first recovery
+route requires the GitHub tag's release to be absent; an existing or ambiguous
+release blocks it. Never repeat publication, replace artifacts, move the tag,
+invent a successful original run, or bypass the protected environment reviewer.

@@ -217,11 +217,15 @@ It does not rebuild or repack the local candidate. Bounded read-only retries
 wait for npm's exact version, integrity, provenance metadata and `latest` tag,
 then package installation and signature verification. A conflicting immutable
 version or integrity fails immediately; publication itself is never retried. The
-job downloads and requalifies the registry artifact, creates a plainly labelled
-draft public-alpha release with the same tarball/checksum/SBOM/evidence, and
-verifies the downloaded GitHub asset. It uploads draft evidence before
-publishing the normal GitHub Release with `--latest`. Fresh npm and GitHub
-Latest readbacks then supply the final evidence, which is uploaded last.
+metadata reader allows twenty attempts thirty seconds apart, with a separate
+sixty-second limit per request. The v0.7.1 publication exposed a propagation
+delay beyond the previous twelve-attempt, ten-second interval. The wider budget
+changes only reads; it grants no retry of publication. The job downloads and
+requalifies the registry artifact, creates a plainly labelled draft public-alpha
+release with the same tarball/checksum/SBOM/evidence, and verifies the
+downloaded GitHub asset. It uploads draft evidence before publishing the normal
+GitHub Release with `--latest`. Fresh npm and GitHub Latest readbacks then
+supply the final evidence, which is uploaded last.
 
 ### 5. Close the release
 
@@ -299,6 +303,29 @@ architecture follow-through canary evidence.
 
 ## Withdrawal
 
+### Recover publication before GitHub Release creation
+
+If npm publication succeeded but metadata readback exhausted its budget, do not
+rerun the publish job. The protected `release-recovery.yml` workflow can finish
+the narrower case where the original publish step succeeded, the candidate and
+trusted-verifier artifacts remain available, and no GitHub Release exists for
+the tag. Dispatch the reviewed recovery workflow from `main` with the exact tag,
+candidate run ID and original publish run ID.
+
+Recovery verifies those identities and the existing npm version, signatures and
+provenance, then runs the registry artifact's full canary before creating a
+draft. Final evidence retains the original publish run. A separate recovery
+record identifies the recovery workflow and its source commit; a green recovery
+does not rewrite the original failed run. Any existing release, ambiguous
+creation result, missing artifact or identity conflict blocks this route.
+
+The v0.7.1 incident used candidate `35466952501` and original publish
+`35467443471`. Its successful immutable publish step preceded metadata
+propagation; no release had been created. Its tag and npm bytes remain
+unchanged.
+
+### Other interrupted or unsafe releases
+
 First classify an interrupted publication from provider readback; do not rerun
 the publish workflow. If npm and registry qualification succeeded but GitHub
 finalization is incomplete, inventory all release records for the tag by numeric
@@ -316,7 +343,12 @@ If prepublication qualification fails, do not publish. Delete an unpushed local
 tag, fix through a new reviewed PR, and restart with a new exact candidate. If a
 remote tag exists, retain it as evidence and use a new version.
 
-If publication succeeded but readback or postpublication qualification fails:
+If provider readback is unavailable, stop further effects and reconcile it. A
+verified existing publication with no GitHub Release may use the recovery route
+above. A timeout alone is not proof that the package is unsafe.
+
+If readback proves an artifact or identity mismatch, or the published artifact
+fails qualification:
 
 1. stop the workflow before making a public support claim;
 2. deprecate the exact npm version with a concise safety message;
