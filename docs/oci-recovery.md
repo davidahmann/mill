@@ -44,6 +44,11 @@ only ownership record. Interrupted greenfield staging is not an automatically
 resumable product repository; investigate the retained state before disposing of
 the staging directory and lock.
 
+The pnpm and packed-release qualification scripts also retain failed fixtures
+instead of deleting their parent directories. Their failure output identifies
+the private paths for recovery. Investigate any live containers or pending
+intents before removing those paths; successful qualification still cleans up.
+
 ## Deadline boundary
 
 Command deadlines and cancellation require a live Mill controller. If the

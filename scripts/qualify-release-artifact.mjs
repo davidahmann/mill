@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { format } from "prettier";
+import { cleanupCanaryDirectories } from "./canary-cleanup.mjs";
 
 const [artifactArgument, ...flags] = process.argv.slice(2);
 if (artifactArgument === undefined) {
@@ -341,6 +342,7 @@ async function runNativeRepositoryCheck(root, verifierImage) {
 }
 
 const temporary = await mkdtemp(path.join(tmpdir(), "mill-release-artifact-"));
+let completed = false;
 try {
   await write(
     temporary,
@@ -521,6 +523,7 @@ try {
   process.stdout.write(
     `release artifact qualification passed (${fullCanary ? "full" : "offline"}): ${manifest.name}@${manifest.version}\n`,
   );
+  completed = true;
 } finally {
-  await rm(temporary, { force: true, recursive: true });
+  await cleanupCanaryDirectories([temporary], completed);
 }

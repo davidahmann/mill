@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { promisify } from "node:util";
+import { cleanupCanaryDirectories } from "./canary-cleanup.mjs";
 
 const execute = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "..");
@@ -17,6 +18,7 @@ const workspace = await mkdtemp(path.join(tmpdir(), "mill-pnpm-oci-"));
 const state = await mkdtemp(path.join(tmpdir(), "mill-pnpm-oci-state-"));
 const registryContainer = `mill-pnpm-oci-registry-${randomUUID()}`;
 let registryStarted = false;
+let completed = false;
 
 async function availableLoopbackPort() {
   return new Promise((resolve, reject) => {
@@ -440,14 +442,20 @@ try {
       2,
     )}\n`,
   );
+  completed = true;
 } finally {
-  if (registryStarted) {
-    await execute("docker", ["rm", "--force", registryContainer], {
-      cwd: root,
-    }).catch(() => undefined);
+  let registryRemoved = !registryStarted;
+  try {
+    if (registryStarted) {
+      await execute("docker", ["rm", "--force", registryContainer], {
+        cwd: root,
+      });
+      registryRemoved = true;
+    }
+  } finally {
+    await cleanupCanaryDirectories(
+      [workspace, state],
+      completed && registryRemoved,
+    );
   }
-  await Promise.all([
-    rm(workspace, { recursive: true, force: true }),
-    rm(state, { recursive: true, force: true }),
-  ]);
 }
