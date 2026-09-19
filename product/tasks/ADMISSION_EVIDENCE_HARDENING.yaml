@@ -7,8 +7,8 @@ execution_mode: approved_native_maintainer
 authority: product/admission-evidence-hardening.md
 impact_manifest: product/impacts/ADMISSION_EVIDENCE_HARDENING.yaml
 objective:
-  Repair scoped admission and evidence gaps, qualify v0.7.1 and update the
-  downstream pin.
+  Repair scoped admission and evidence gaps, preserve v0.7.1 publication,
+  qualify corrected v0.7.2 and update the downstream pin.
 allowed_paths:
   - src/**
   - test/**
@@ -36,8 +36,10 @@ acceptance_items:
   - AH-04 consistent durable release reconstruction
   - AH-05 bounded registry reads and final channel identity
   - AH-06 independent validation, review, CI and main readback
-  - AH-07 qualified exact v0.7.1 latest publication
+  - AH-07 qualified exact v0.7.1 recovery and corrected v0.7.2 latest
+    publication
   - AH-08 deliberate downstream upgrade and preserved external gates
+  - AH-09 public coordinator CLI retains approval and isolation boundaries
 validation_commands:
   - npm run check
   - node dist/cli.js --json --cwd . audit
@@ -54,9 +56,9 @@ stop_conditions:
 closure:
   status: pending_provider_closure
   provider_closure:
-    Required PR/main checks and permanent v0.7.1 release evidence govern
+    Required PR/main checks and permanent v0.7.2 release evidence govern
     completion.
-  release_evidence: https://github.com/davidahmann/mill/releases/download/v0.7.1/release-evidence-final.json
+  release_evidence: https://github.com/davidahmann/mill/releases/download/v0.7.2/release-evidence-final.json
   note:
     This source-time status does not override later provider evidence. Do not
     rewrite the tagged record or create a docs-only PR to repeat publication.

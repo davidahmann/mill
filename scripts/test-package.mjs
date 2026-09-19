@@ -136,6 +136,57 @@ try {
     );
   }
 
+  // This real nested CLI call must reach admission, not lose its flags to `run`.
+  // A proposed outcome blocks before state creation, dependencies or model spend.
+  const routingFixture = path.join(temporary, "command-routing");
+  await mkdir(path.join(routingFixture, "product"), { recursive: true });
+  const routingApproval = `sha256:${"0".repeat(64)}`;
+  await writeFile(
+    path.join(routingFixture, "product", "plan.yaml"),
+    JSON.stringify({
+      schemaVersion: "1",
+      productContractDigest: routingApproval,
+      outcomes: [
+        {
+          id: "OUT-NOT-APPROVED",
+          title: "Unapproved outcome",
+          acceptance: ["Owner approval is required"],
+          dependsOn: [],
+          status: "proposed",
+        },
+      ],
+    }),
+  );
+  for (const [flags, expectedCode, expectedExit] of [
+    [["--approve", routingApproval, "--attended"], "NO_READY_OUTCOME", 78],
+    [["--attended"], "USAGE_ERROR", 64],
+    [["--approve", routingApproval], "USAGE_ERROR", 64],
+    [
+      ["--approve", routingApproval, "--attended", "--isolation", "isolated"],
+      "BUILDER_ISOLATION_UNQUALIFIED",
+      78,
+    ],
+  ]) {
+    const routed = spawnSync(
+      bin,
+      ["--json", "--cwd", routingFixture, "run", "next", ...flags],
+      {
+        cwd: temporary,
+        encoding: "utf8",
+        timeout: 10_000,
+      },
+    );
+    const envelope = JSON.parse(routed.stdout);
+    if (
+      routed.status !== expectedExit ||
+      envelope.reasons?.[0]?.code !== expectedCode
+    ) {
+      throw new Error(
+        `packed nested run authority routing failed: ${routed.stdout}${routed.stderr}`,
+      );
+    }
+  }
+
   const packageJson = JSON.parse(
     await readFile(
       path.join(
