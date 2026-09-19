@@ -133,7 +133,7 @@ describe("founder workflow", { concurrent: false }, () => {
         },
       ]);
       await expect(nextReadyOutcome(temporary.path)).rejects.toMatchObject({
-        code: "AMBIGUOUS_READY_OUTCOME",
+        code: "OUTCOME_DEPENDENCY_INVALID",
       });
       await writeFile(
         path.join(temporary.path, "product", "plan.yaml"),

@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -975,6 +976,7 @@ playbooks:
         { mode: 0o755 },
       );
       await chmod(docker, 0o755);
+      await trackFakeDocker(docker);
       process.env.MILL_DOCKER_PATH = docker;
     };
     const call = () =>
@@ -1132,6 +1134,7 @@ playbooks:
         mode: 0o755,
       });
       await chmod(docker, 0o755);
+      await trackFakeDocker(docker);
       process.env.MILL_DOCKER_PATH = docker;
       await expect(call(inputs.config)).rejects.toMatchObject({
         code: "VERIFIER_IMAGE_UNAVAILABLE",
@@ -1175,6 +1178,7 @@ playbooks:
         { mode: 0o755 },
       );
       await chmod(docker, 0o755);
+      await trackFakeDocker(docker);
       process.env.MILL_DOCKER_PATH = docker;
     };
     const call = (deadlineMs: number, signal?: AbortSignal) =>
@@ -1218,8 +1222,24 @@ playbooks:
 
       await writeDocker("setInterval(()=>{},1000);");
       const controller = new AbortController();
-      setTimeout(() => controller.abort(), 100).unref();
-      const cancelled = await call(Date.now() + 5_000, controller.signal);
+      const cancellation = call(Date.now() + 5_000, controller.signal);
+      let containerCreated = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const containers = JSON.parse(
+          await readFile(
+            path.join(tools.path, "docker.containers.json"),
+            "utf8",
+          ).catch(() => "[]"),
+        ) as unknown[];
+        if (containers.length > 0) {
+          containerCreated = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      controller.abort();
+      const cancelled = await cancellation;
+      expect(containerCreated).toBe(true);
       expect(cancelled.commands[0]).toMatchObject({
         status: "failed",
         reason: "CANCELLED",
@@ -1289,6 +1309,7 @@ if(args[0]==="run"){
       { mode: 0o755 },
     );
     await chmod(docker, 0o755);
+    await trackFakeDocker(docker);
     process.env.MILL_DOCKER_PATH = docker;
     try {
       const evidence = await verifyDeclaredCommands({
@@ -1339,6 +1360,7 @@ if(args[0]==="run"){
       { mode: 0o755 },
     );
     await chmod(docker, 0o755);
+    await trackFakeDocker(docker);
     process.env.MILL_DOCKER_PATH = docker;
     try {
       await verifyDeclaredCommands({
@@ -1354,7 +1376,7 @@ if(args[0]==="run"){
         })
         .catch((error: unknown) => {
           expect(error).toMatchObject({
-            code: "VERIFIER_CONTAINER_CLEANUP_FAILED",
+            code: "OCI_RECONCILIATION_REQUIRED",
           });
           expect(JSON.stringify(error)).not.toContain(
             "MREV_PRIVATE_CLEANUP_MARKER",

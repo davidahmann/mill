@@ -11,6 +11,7 @@ import {
 import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { ExitCode, MillError } from "../errors.js";
 import { safeReadText } from "../security/safe-path.js";
+import { outcomeAcceptanceIssue } from "./outcomes.js";
 
 export type ImpactManifest = z.infer<typeof impactManifestSchema>;
 export type ContinuityProductContract = z.infer<typeof productContractSchema>;
@@ -124,7 +125,6 @@ export function assessImpactManifest(input: {
   const acceptanceIds = new Set(
     input.product.acceptance.map((item) => item.id),
   );
-  const outcomeIds = new Set(input.product.outcomes.map((item) => item.id));
   const invariantIds = new Set(input.product.invariants.map((item) => item.id));
   const decisions = new Map(
     input.product.decisions.map((decision) => [decision.id, decision]),
@@ -147,9 +147,12 @@ export function assessImpactManifest(input: {
   if (input.scenarios.productContractDigest !== productDigest) {
     blockers.push("scenario set is bound to another product contract");
   }
-  if (!outcomeIds.has(input.manifest.outcomeId)) {
-    blockers.push(`outcome is unresolved: ${input.manifest.outcomeId}`);
-  }
+  const outcomeIssue = outcomeAcceptanceIssue(
+    input.product,
+    input.manifest.outcomeId,
+    input.manifest.acceptanceIds,
+  );
+  if (outcomeIssue !== undefined) blockers.push(outcomeIssue);
   for (const [label, values] of [
     ["acceptance", input.manifest.acceptanceIds],
     ["affected invariant", input.manifest.affectedInvariantIds],
@@ -557,11 +560,11 @@ export function buildSemanticEvidence(input: {
       evidence.every((item) => item.status !== "blocked");
     const commandRef = scenario?.executionRef;
     const commandPassed =
+      scenario?.oracleOwner === "repository" &&
       commandRef !== undefined &&
       input.manifest.commandIds.includes(commandRef) &&
       commands.get(commandRef) === "passed";
     const humanPassed =
-      commandRef === undefined &&
       scenario !== undefined &&
       scenario.oracleOwner !== "repository" &&
       evidence.length > 0 &&
@@ -591,9 +594,9 @@ export function buildSemanticEvidence(input: {
   const preservation = items.filter(
     (item) => item.coverage === "preservation" || item.coverage === "both",
   );
-  const newBehaviorPassed =
-    newBehavior.length > 0 &&
-    newBehavior.every((item) => item.status !== "blocked");
+  const newBehaviorPassed = newBehavior.every(
+    (item) => item.status !== "blocked",
+  );
   const preservationPassed =
     preservation.length === 0 ||
     preservation.every((item) => item.status !== "blocked");
@@ -602,6 +605,6 @@ export function buildSemanticEvidence(input: {
     items,
     newBehaviorPassed,
     preservationPassed,
-    passed: newBehaviorPassed && preservationPassed,
+    passed: items.length > 0 && newBehaviorPassed && preservationPassed,
   };
 }

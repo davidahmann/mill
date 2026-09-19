@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-release-v0.7.0
-status: approved
+status: closed
 owner: davidahmann
 base_commit: 5b5803e353c67bad8a547fe4bd7d81d3db634734
 execution_mode: approved_native_maintainer
@@ -54,8 +54,8 @@ stop_conditions:
     provider effect
   - unavailable independent verification or recurring P0/P1 release finding
 closure:
-  status: pending_provider_closure
+  status: closed
   provider_closure: >-
-    The protected workflow must retain ordered draft and final evidence after
-    provider readback. No post-release source update may alter the tagged
-    candidate or duplicate those provider facts.
+    Ordered draft and final evidence are retained on the public v0.7.0 release,
+    read back on 2026-09-19. They remain canonical; this status correction does
+    not alter the tagged source or its publication evidence.

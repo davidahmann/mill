@@ -51,6 +51,7 @@ import { textDigest } from "../runtime/inputs.js";
 import { prepareDependencySnapshot } from "../runtime/dependencies.js";
 import { repositoryStateDirectory } from "../runtime/state.js";
 import { verifyDeclaredCommands } from "../runtime/verifier.js";
+import { hasPendingOciResources } from "../runtime/oci-resources.js";
 import { scanRepository, type RepositoryScan } from "./scan.js";
 
 export type RepositoryIntegrationPlan = z.infer<
@@ -467,6 +468,7 @@ function dynamicFiles(input: {
         : recipeOracles.get(scenario.recipeOracle);
     if (
       recipeOracle === undefined ||
+      scenario.oracleOwner !== "repository" ||
       scenario.executionRef === undefined ||
       recipeOracle.commandId !== scenario.executionRef ||
       !supportedCommands.has(scenario.executionRef)
@@ -1784,6 +1786,7 @@ async function applyGreenfieldIntegrationWithSignal(
   let preparedDirectory: string | undefined;
   let preparedReused = false;
   let targetPublished = false;
+  let preserveRecoveryState = false;
   try {
     statePreviouslyExisted = await lstat(stateDirectory)
       .then(() => true)
@@ -1853,6 +1856,7 @@ async function applyGreenfieldIntegrationWithSignal(
       },
     });
     const evidence = await verifyDeclaredCommands({
+      stateDirectory,
       root: staging,
       dependencyRoot: prepared.directory,
       candidateCommit: "0".repeat(40),
@@ -1896,6 +1900,8 @@ async function applyGreenfieldIntegrationWithSignal(
       baseline: "unverified",
     };
   } catch (error) {
+    preserveRecoveryState = await hasPendingOciResources(stateDirectory);
+    if (preserveRecoveryState) throw error;
     if (staging !== undefined)
       await rm(staging, { recursive: true, force: true });
     if (targetPublished) {
@@ -1908,7 +1914,8 @@ async function applyGreenfieldIntegrationWithSignal(
     }
     throw error;
   } finally {
-    await rm(lockDirectory, { recursive: true, force: true });
+    if (!preserveRecoveryState)
+      await rm(lockDirectory, { recursive: true, force: true });
   }
 }
 

@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 
@@ -138,6 +139,7 @@ if(!blockDependencyPreparation)process.exit(0);
     { mode: 0o755 },
   );
   await chmod(executable, 0o755);
+  await trackFakeDocker(executable);
   return { executable, log };
 }
 
@@ -412,6 +414,36 @@ describe("qualified repository integration", { concurrent: false }, () => {
     ) as { name?: string };
     expect(fallbackPackage.name).toBe("mill-web-product");
   });
+
+  it.each(["human", "external"] as const)(
+    "rejects a recipe command as the oracle for a %s-owned scenario",
+    async (oracleOwner) => {
+      const workspace = await temporaryDirectory("mill-recipe-oracle-");
+      try {
+        const authority = await authorityFixture(workspace.path);
+        const proposalPath = path.join(
+          workspace.path,
+          authority.options.proposalPath,
+        );
+        const proposal = specificationProposalSchema.parse(
+          JSON.parse(await readFile(proposalPath, "utf8")),
+        );
+        const scenario = proposal.scenarioSet.scenarios[0];
+        if (scenario === undefined) throw new Error("missing scenario");
+        scenario.oracleOwner = oracleOwner;
+        await writeFile(proposalPath, `${JSON.stringify(proposal)}\n`);
+        await expect(
+          planGreenfieldIntegration({
+            ...authority.options,
+            productApprovalDigest: canonicalDigest(proposal as JsonValue),
+            targetDirectory: "new-app",
+          }),
+        ).rejects.toMatchObject({ code: "RECIPE_SCENARIO_UNSUPPORTED" });
+      } finally {
+        await workspace.cleanup();
+      }
+    },
+  );
 
   it("fails closed on ambiguous identity, approval, and target authority", async () => {
     const workspace = await temporaryDirectory("mill-greenfield-authority-");
@@ -991,6 +1023,72 @@ describe("qualified repository integration", { concurrent: false }, () => {
       await Promise.all([
         workspace.cleanup(),
         alternateWorkspace.cleanup(),
+        tools.cleanup(),
+        state.cleanup(),
+      ]);
+    }
+  });
+
+  it("preserves greenfield staging and ownership evidence when daemon cleanup is uncertain", async () => {
+    const workspace = await temporaryDirectory("mill-greenfield-oci-failure-");
+    const tools = await temporaryDirectory("mill-greenfield-oci-tools-");
+    const state = await temporaryDirectory("mill-greenfield-oci-state-");
+    try {
+      const authority = await authorityFixture(workspace.path);
+      const plan = await planGreenfieldIntegration({
+        ...authority.options,
+        targetDirectory: "blocked-app",
+      });
+      const docker = await fakeDocker(tools.path);
+      const implementation = `${docker.executable}.implementation.cjs`;
+      await writeFile(
+        implementation,
+        (await readFile(implementation, "utf8")).replace(
+          "const args=process.argv.slice(2);",
+          'const args=process.argv.slice(2);if(args[0]==="rm")process.exit(9);',
+        ),
+      );
+      process.env.MILL_DOCKER_PATH = docker.executable;
+      process.env.MILL_STATE_HOME = state.path;
+      await expect(
+        applyGreenfieldIntegration({
+          ...authority.options,
+          targetDirectory: "blocked-app",
+          planApprovalDigest: plan.approvalDigest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "OCI_RECONCILIATION_REQUIRED" });
+      expect(await exists(path.join(workspace.path, "blocked-app"))).toBe(
+        false,
+      );
+      const entries = await readdir(workspace.path);
+      expect(
+        entries.some(
+          (entry) => entry.startsWith(".mill-new-") && entry.endsWith(".lock"),
+        ),
+      ).toBe(true);
+      expect(
+        entries.some(
+          (entry) => entry.startsWith(".mill-new-") && !entry.endsWith(".lock"),
+        ),
+      ).toBe(true);
+      const directory = repositoryStateDirectory(
+        authority.options.repositoryId,
+        path.join(await realpath(workspace.path), "blocked-app", ".git"),
+      );
+      expect(
+        (await readdir(path.join(directory, "oci-resources"))).filter((entry) =>
+          entry.endsWith(".json"),
+        ),
+      ).toHaveLength(1);
+      expect(
+        (await readdir(path.join(directory, "dependencies"))).some((entry) =>
+          entry.startsWith(".prepare-"),
+        ),
+      ).toBe(true);
+    } finally {
+      await Promise.all([
+        workspace.cleanup(),
         tools.cleanup(),
         state.cleanup(),
       ]);

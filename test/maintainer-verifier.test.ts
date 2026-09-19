@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
@@ -189,6 +190,7 @@ describe("maintainer native environment", () => {
         { mode: 0o755 },
       );
       process.env.MILL_DOCKER_PATH = executable;
+      await trackFakeDocker(executable);
       const { config, task } = await loadRuntimeInputs(
         fixture.root,
         fixture.taskPath,

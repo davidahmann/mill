@@ -4,6 +4,24 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-19
+
+### Fixed
+
+- Apply declared outcome scope consistently to expert tasks, compiled tasks,
+  founder execution and closure. Bind the first task for an approved outcome
+  without pretending to supersede a packet, and reject ready outcomes without
+  valid task bindings.
+- Require exact attestations for human and external scenarios even when their
+  supporting commands pass. Allow preservation-only work without claiming new
+  behavior.
+- Retain OCI resource ownership across controller interruption and block unsafe
+  cleanup or retries until ambiguous launches are reconciled.
+- Bind reconstructed release evidence to the actual qualification, tagged
+  source, tarball and verified registry identity. Retry bounded metadata reads
+  after npm publication and retain final npm Latest and GitHub Latest
+  observations.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added

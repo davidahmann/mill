@@ -11,7 +11,14 @@ const outcome = (
   id: string,
   dependsOn: string[] = [],
   status: "ready" | "closed" | "approved" = "approved",
-) => ({ id, title: id, acceptance: ["works"], dependsOn, status });
+) => ({
+  id,
+  title: id,
+  acceptance: ["works"],
+  dependsOn,
+  status,
+  ...(status === "ready" ? { taskRef: `product/tasks/${id}.yaml` } : {}),
+});
 const plan = (outcomes: OutcomePlan["outcomes"]): OutcomePlan => ({
   schemaVersion: "1",
   productContractDigest: `sha256:${"a".repeat(64)}`,
@@ -19,6 +26,16 @@ const plan = (outcomes: OutcomePlan["outcomes"]): OutcomePlan => ({
 });
 
 describe("dependency admission", () => {
+  it("requires task bindings only for ready work, preserving unbound approved and closed history", () => {
+    expect(() =>
+      assertOutcomeDependencies(plan([{ ...outcome("one"), status: "ready" }])),
+    ).toThrow(expect.objectContaining({ code: "OUTCOME_DEPENDENCY_INVALID" }));
+    expect(() =>
+      assertOutcomeDependencies(
+        plan([outcome("old", [], "closed"), outcome("next")]),
+      ),
+    ).not.toThrow();
+  });
   it("accepts closed predecessors and independent proposed work", () => {
     expect(() =>
       assertOutcomeDependencies(

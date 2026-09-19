@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  assertReleaseChannels,
+  assertReleaseIdentity,
+} from "./release-evidence-identity.mjs";
 
 const [
   metadataPath,
@@ -12,6 +16,7 @@ const [
   registryPath,
   githubPath,
   workflowRunsPath,
+  channelsPath,
 ] = process.argv.slice(2);
 if (
   metadataPath === undefined ||
@@ -21,7 +26,7 @@ if (
   outputPath === undefined
 ) {
   throw new Error(
-    "usage: assemble-release-evidence.mjs <artifact-metadata.json> <qualification.json> <sbom.json> <identity.json> <output.json> [registry.json] [github.json] [workflow-runs.json]",
+    "usage: assemble-release-evidence.mjs <artifact-metadata.json> <qualification.json> <sbom.json> <identity.json> <output.json> [registry.json] [github.json] [workflow-runs.json] [channels.json]",
   );
 }
 const root = path.resolve(import.meta.dirname, "..");
@@ -45,50 +50,9 @@ const githubRelease =
     : await readJson(githubPath);
 const workflowRuns =
   workflowRunsPath === undefined ? undefined : await readJson(workflowRunsPath);
-if (
-  !Array.isArray(metadata.builders) ||
-  metadata.builders.length !== 2 ||
-  metadata.builders[0]?.builder === metadata.builders[1]?.builder ||
-  metadata.builders[0]?.contentsDigest !== metadata.builders[1]?.contentsDigest
-) {
-  throw new Error(
-    "release metadata does not contain two distinct equal-content builders",
-  );
-}
-const selectedBuilder = metadata.builders.find(
-  (builder) => builder.builder === metadata.selectedArtifact?.builder,
-);
-if (
-  selectedBuilder === undefined ||
-  selectedBuilder.filename !== metadata.selectedArtifact.filename ||
-  selectedBuilder.sha256 !== metadata.selectedArtifact.sha256 ||
-  selectedBuilder.npmIntegrity !== metadata.selectedArtifact.npmIntegrity ||
-  selectedBuilder.contentsDigest !== metadata.selectedArtifact.contentsDigest
-) {
-  throw new Error("selected release artifact is not one exact builder output");
-}
-if (
-  metadata.package.name !== qualification.package.name ||
-  metadata.package.version !== qualification.package.version ||
-  metadata.selectedArtifact.sha256 !== qualification.package.artifactDigest ||
-  metadata.selectedArtifact.npmIntegrity !==
-    qualification.package.npmIntegrity ||
-  identity.packageName !== metadata.package.name ||
-  identity.version !== metadata.package.version ||
-  identity.tag !== `v${metadata.package.version}`
-) {
-  throw new Error(
-    "release source, artifact, and qualification identities do not match",
-  );
-}
-if (
-  qualification.auditCandidate?.commit !== identity.tagCommit ||
-  qualification.auditCandidate?.tree !== identity.mainTree
-) {
-  throw new Error(
-    "qualification audit is not bound to the tagged main candidate",
-  );
-}
+const channels =
+  channelsPath === undefined ? undefined : await readJson(channelsPath);
+assertReleaseIdentity(metadata, qualification, identity);
 const evidence = mill.contractSchemas.releaseEvidence.parse({
   schemaVersion: "1",
   state:
@@ -124,8 +88,10 @@ const evidence = mill.contractSchemas.releaseEvidence.parse({
   ...(workflowRuns === undefined ? {} : { workflowRuns }),
   registry,
   githubRelease,
+  ...(channels === undefined ? {} : { channels }),
   generatedAt: new Date().toISOString(),
 });
+assertReleaseChannels(evidence);
 if (
   evidence.source.reviewedCandidateTree !== evidence.source.resultingMainTree ||
   evidence.source.tagCommit !== evidence.source.resultingMainCommit

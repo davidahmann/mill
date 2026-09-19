@@ -148,7 +148,7 @@ describe("release verifier preparation policy", () => {
       if (mutation === "alpha") {
         publish.run = publish.run.replace("--tag latest", "--tag alpha");
       } else if (mutation === "missing-readback") {
-        readback.run = readback.run.replace("tags.latest!==version", "false");
+        readback.run = readback.run.replace("retry-npm-metadata.mjs", "retry");
       } else {
         readback.run = readback.run.replace("retry-npm-install.mjs", "retry");
       }
@@ -161,6 +161,50 @@ describe("release verifier preparation policy", () => {
       );
     },
   );
+  it.each([
+    "stale-npm",
+    "missing-latest",
+    "unbound-channels",
+    "conditional",
+    "ignored",
+  ])("rejects %s final channel observations", async (mutation) => {
+    const workflow = await fixture();
+    const finalize = workflow.jobs.publish?.steps.find(
+      (entry) =>
+        entry.name ===
+        "Read back published GitHub Release and attach final evidence",
+    );
+    if (!finalize?.run) throw new Error("missing final readback fixture");
+    if (mutation === "stale-npm")
+      finalize.run = finalize.run.replace("retry-npm-metadata.mjs", "retry");
+    if (mutation === "missing-latest")
+      finalize.run = finalize.run.replace(
+        "releases/latest",
+        "releases/tags/current",
+      );
+    if (mutation === "unbound-channels")
+      finalize.run = finalize.run.replace(
+        '"$RUNNER_TEMP/release-channels.json"',
+        '"$RUNNER_TEMP/unused-channels.json"',
+      );
+    if (mutation === "conditional") finalize.if = "false";
+    if (mutation === "ignored") finalize["continue-on-error"] = true;
+    await expect(check(workflow)).rejects.toThrow(
+      "final evidence must bind fresh npm latest and GitHub Latest readbacks",
+    );
+  });
+  it("requires explicit GitHub Latest promotion", async () => {
+    const workflow = await fixture();
+    const publish = workflow.jobs.publish?.steps.find(
+      (entry) =>
+        entry.name === "Publish GitHub Release after draft evidence readback",
+    );
+    if (!publish?.run) throw new Error("missing final publication fixture");
+    publish.run = publish.run.replace(" --latest", "");
+    await expect(check(workflow)).rejects.toThrow(
+      "final GitHub release must remain a normal public-alpha release",
+    );
+  });
   it.each(["qualify", "independent-policy", "publish"])(
     "rejects %s without explicit verifier preparation",
     async (jobId) => {

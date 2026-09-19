@@ -30,6 +30,12 @@ import {
   type ImpactManifest,
 } from "../planning/impact.js";
 import { dependencyLockPaths } from "./dependencies.js";
+import {
+  acquireOciResourceLease,
+  hasPendingOciResources,
+  type OciResourceLease,
+} from "./oci-resources.js";
+import { repositoryStateDirectory } from "./state.js";
 import type { MillConfig, TaskPacket } from "./inputs.js";
 import {
   runProcess,
@@ -491,46 +497,6 @@ async function verifyImageAvailable(
   }
 }
 
-async function removeVerifierContainer(
-  docker: string,
-  root: string,
-  containerName: string,
-): Promise<void> {
-  const result = await runProcess({
-    executable: docker,
-    args: ["rm", "--force", "--volumes", containerName],
-    cwd: root,
-    env: {
-      HOME: process.env.HOME,
-      PATH: "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin",
-      LANG: "C",
-      LC_ALL: "C",
-    },
-    deadlineMs: Date.now() + 15_000,
-    maxOutputBytes: 256 * 1024,
-  });
-  if (
-    result.exitCode !== 0 ||
-    result.timedOut ||
-    result.outputExceeded ||
-    result.cancelled
-  ) {
-    if (result.exitCode !== 0 && /no such container/iu.test(result.stderr)) {
-      return;
-    }
-    throw new MillError(
-      "VERIFIER_CONTAINER_CLEANUP_FAILED",
-      "Mill could not prove that its OCI verifier container was stopped and removed.",
-      ExitCode.temporary,
-      {
-        containerName,
-        exitCode: result.exitCode,
-        stderrDigest: digestOutput("", result.stderr),
-      },
-    );
-  }
-}
-
 async function verifierMountSource(root: string): Promise<{
   source: string;
   dispose(): Promise<void>;
@@ -856,8 +822,9 @@ async function workspaceMountPlan(
   }
 }
 
-export async function verifyDeclaredCommands(input: {
+interface VerificationInput {
   root: string;
+  stateDirectory?: string;
   dependencyRoot?: string;
   artifactDirectory?: string;
   candidateCommit: string;
@@ -873,7 +840,30 @@ export async function verifyDeclaredCommands(input: {
   onSpawn?: (process: ActiveProcess) => void;
   onExit?: (process?: ActiveProcess) => void;
   cancellationRequested?: () => boolean;
-}): Promise<ValidationEvidence> {
+}
+
+export async function verifyDeclaredCommands(
+  input: VerificationInput,
+): Promise<ValidationEvidence> {
+  const stateDirectory =
+    input.stateDirectory ??
+    repositoryStateDirectory(input.config.repositoryId, input.root);
+  const resources = await acquireOciResourceLease({
+    stateDirectory,
+    root: input.root,
+    reconcile: true,
+  });
+  try {
+    return await verifyDeclaredCommandsWithLease(input, resources);
+  } finally {
+    await resources.release();
+  }
+}
+
+async function verifyDeclaredCommandsWithLease(
+  input: VerificationInput,
+  resources: OciResourceLease,
+): Promise<ValidationEvidence> {
   if (input.config.verifier === undefined) {
     throw new MillError(
       "VERIFIER_NOT_CONFIGURED",
@@ -1138,7 +1128,6 @@ export async function verifyDeclaredCommands(input: {
         input.deadlineMs,
         Date.now() + command.timeoutSeconds * 1000,
       );
-      const containerName = `mill-${randomUUID()}`;
       const writableMounts: string[] = [];
       for (const configuredPath of command.writablePaths ?? []) {
         const writablePath = configuredPath.replace(/\/\*\*$/u, "");
@@ -1167,6 +1156,7 @@ export async function verifyDeclaredCommands(input: {
       let result: ProcessResult;
       let retainedArtifacts:
         Awaited<ReturnType<typeof collectRetainedArtifacts>> | undefined;
+      const resource = await resources.create("verifier");
       try {
         result = await runProcess({
           executable: docker,
@@ -1175,9 +1165,8 @@ export async function verifyDeclaredCommands(input: {
             "--pull",
             "never",
             "--name",
-            containerName,
-            "--label",
-            "dev.mill.owner=verifier",
+            resource.name,
+            ...resource.labels,
             "--network",
             "none",
             "--read-only",
@@ -1257,6 +1246,7 @@ export async function verifyDeclaredCommands(input: {
             LC_ALL: "C",
           },
           deadlineMs: commandDeadline,
+          onBeforeSpawn: resource.onBeforeSpawn,
           maxOutputBytes:
             input.maxOutputBytes +
             (retainedArtifactsConfig === undefined
@@ -1302,7 +1292,7 @@ export async function verifyDeclaredCommands(input: {
         }
       } finally {
         try {
-          await removeVerifierContainer(docker, input.root, containerName);
+          await resources.remove(resource);
         } finally {
           if (artifactOutput !== undefined) {
             await rm(artifactOutput, { recursive: true, force: true });
@@ -1353,16 +1343,17 @@ export async function verifyDeclaredCommands(input: {
       ...(input.scenarios === undefined ? {} : { scenarios: input.scenarios }),
     });
   } finally {
-    try {
-      await workspace?.dispose();
-    } finally {
+    if (!(await hasPendingOciResources(resources.stateDirectory)))
       try {
-        await Promise.all(
-          workspaceDependencyMounts.map((mount) => mount.dispose()),
-        );
+        await workspace?.dispose();
       } finally {
-        await dependencyMount?.dispose();
+        try {
+          await Promise.all(
+            workspaceDependencyMounts.map((mount) => mount.dispose()),
+          );
+        } finally {
+          await dependencyMount?.dispose();
+        }
       }
-    }
   }
 }

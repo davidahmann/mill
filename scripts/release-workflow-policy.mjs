@@ -132,8 +132,12 @@ export function releasePublicationFailures(jobs) {
   }
   if (
     typeof registryReadback?.run !== "string" ||
-    !registryReadback.run.includes("tags.latest!==version") ||
-    registryReadback.run.includes("tags.alpha!==version")
+    !registryReadback.run.includes("scripts/retry-npm-metadata.mjs") ||
+    !registryReadback.run.includes(
+      '"$RUNNER_TEMP/npm-observation-initial.json"',
+    ) ||
+    registryReadback.run.indexOf("retry-npm-metadata.mjs") >
+      registryReadback.run.indexOf("retry-npm-install.mjs")
   ) {
     failures.push(
       "publish: registry readback must bind latest to the published version",
@@ -183,7 +187,7 @@ export function releasePublicationFailures(jobs) {
   }
   const draftEvidenceUpload =
     'gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/release-evidence-draft.json"';
-  const finalRelease = 'gh release edit "$RELEASE_TAG" --draft=false';
+  const finalRelease = 'gh release edit "$RELEASE_TAG" --draft=false --latest';
   if (
     typeof publishRelease?.run !== "string" ||
     !publishRelease.run.includes(finalRelease) ||
@@ -191,6 +195,29 @@ export function releasePublicationFailures(jobs) {
   ) {
     failures.push(
       "publish: final GitHub release must remain a normal public-alpha release",
+    );
+  }
+  if (
+    typeof finalReadback?.run !== "string" ||
+    !finalReadback.run.includes("scripts/retry-npm-metadata.mjs") ||
+    !finalReadback.run.includes('"$RUNNER_TEMP/registry-dist-final.json"') ||
+    !finalReadback.run.includes(
+      'gh api "repos/$GITHUB_REPOSITORY/releases/latest"',
+    ) ||
+    !finalReadback.run.includes("scripts/capture-release-channels.mjs") ||
+    !finalReadback.run.includes('"$RUNNER_TEMP/release-channels.json"') ||
+    (finalReadback.run.match(/release-channels\.json/gu)?.length ?? 0) !== 2 ||
+    (finalReadback.run.match(/npm-observation-final\.json/gu)?.length ?? 0) !==
+      2 ||
+    (finalReadback.run.match(/registry-dist-final\.json/gu)?.length ?? 0) !==
+      2 ||
+    finalReadback.run.indexOf("capture-release-channels.mjs") >
+      finalReadback.run.indexOf("assemble-release-evidence.mjs") ||
+    finalReadback.if !== undefined ||
+    ![undefined, false].includes(finalReadback["continue-on-error"])
+  ) {
+    failures.push(
+      "publish: final evidence must bind fresh npm latest and GitHub Latest readbacks",
     );
   }
   if (

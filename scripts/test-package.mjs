@@ -594,10 +594,25 @@ if(args.includes("--output-schema")){
     docker,
     `#!${process.execPath}
 import {readFile} from "node:fs/promises";
+import {existsSync,readFileSync,writeFileSync} from "node:fs";
+import {randomBytes} from "node:crypto";
 import path from "node:path";
 const args=process.argv.slice(2);
+const stateFile=new URL("./containers.json",import.meta.url);
+if(args[0]==="info"){console.log(JSON.stringify("package-fixture-daemon"));process.exit(0)}
+let containers=existsSync(stateFile)?JSON.parse(readFileSync(stateFile,"utf8")):[];
+const save=()=>writeFileSync(stateFile,JSON.stringify(containers));
 if(args[0]==="image"&&args[1]==="inspect"){process.exit(0)}
-if(args[0]==="rm"){process.exit(0)}
+if(args[0]==="container"&&args[1]==="inspect"){
+  const found=containers.find(value=>value.name==="/"+args.at(-1)||value.id===args.at(-1));
+  if(found){console.log(JSON.stringify(found));process.exit(0)}
+  console.error("No such container: "+args.at(-1));process.exit(1);
+}
+if(args[0]==="rm"){containers=containers.filter(value=>value.id!==args.at(-1));save();process.exit(0)}
+if(args[0]==="run"){
+  const labels={};for(let i=0;i<args.length-1;i++)if(args[i]==="--label"){const [key,...value]=args[i+1].split("=");labels[key]=value.join("=")}
+  containers.push({id:randomBytes(32).toString("hex"),name:"/"+args[args.indexOf("--name")+1],labels});save();
+}
 const mounts=args.flatMap((value,index)=>value==="--mount"?[args[index+1]??""]:[]);
 const mount=mounts.find((value)=>value.includes("target=/workspace/src,"))??"";
 const source=/source=([^,]+)/u.exec(mount)?.[1];

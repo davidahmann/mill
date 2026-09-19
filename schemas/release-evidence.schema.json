@@ -219,6 +219,43 @@
         { "type": "null" }
       ]
     },
+    "channels": {
+      "type": "object",
+      "properties": {
+        "npm": {
+          "type": "object",
+          "properties": {
+            "latestVersion": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          "required": ["latestVersion", "observedAt"],
+          "additionalProperties": false
+        },
+        "github": {
+          "type": "object",
+          "properties": {
+            "releaseId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "tag": { "type": "string", "minLength": 1 },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          "required": ["releaseId", "tag", "observedAt"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["npm", "github"],
+      "additionalProperties": false
+    },
     "generatedAt": {
       "type": "string",
       "format": "date-time",

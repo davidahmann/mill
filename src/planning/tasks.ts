@@ -131,20 +131,6 @@ export async function compileChangeTasks(input: {
         ExitCode.configuration,
         { blockers: assessed.blockers },
       );
-    const outcome = product.outcomes.find(
-      (value) => value.id === draft.outcomeId,
-    );
-    if (
-      outcome === undefined ||
-      (outcome.acceptanceIds !== undefined &&
-        digest([...outcome.acceptanceIds].sort()) !==
-          digest([...impact.acceptanceIds].sort()))
-    )
-      throw new MillError(
-        "CHANGE_OUTCOME_MISMATCH",
-        "Task acceptance must equal the approved outcome acceptance.",
-        ExitCode.configuration,
-      );
     for (const command of impact.commandIds)
       if (config.commands[command] === undefined)
         throw new MillError(
@@ -283,11 +269,23 @@ export async function compileChangeTasks(input: {
         const draft = request.tasks.find(
           (task) => task.outcomeId === outcome.id,
         );
+        const replacement = outcomes.find((next) => next.id === outcome.id);
+        const firstBinding =
+          outcome.taskRef === undefined &&
+          outcome.status === "approved" &&
+          draft?.supersedesTaskDigest === undefined &&
+          previous.productContractDigest === digest(product) &&
+          (outcome.acceptanceIds === undefined ||
+            digest([...outcome.acceptanceIds].sort()) ===
+              digest([...(replacement?.acceptanceIds ?? [])].sort())) &&
+          digest([...outcome.dependsOn].sort()) ===
+            digest([...(replacement?.dependsOn ?? [])].sort());
         if (
-          outcome.taskRef === undefined ||
-          draft?.supersedesTaskDigest === undefined ||
-          textDigest(await safeReadText(input.root, outcome.taskRef)) !==
-            draft.supersedesTaskDigest
+          !firstBinding &&
+          (outcome.taskRef === undefined ||
+            draft?.supersedesTaskDigest === undefined ||
+            textDigest(await safeReadText(input.root, outcome.taskRef)) !==
+              draft.supersedesTaskDigest)
         )
           throw new MillError(
             "CHANGE_SUPERSESSION_REQUIRED",

@@ -317,24 +317,30 @@ Only one writer lease may mutate a repository namespace. The lease is a
 dedicated SQLite exclusive transaction: kernel ownership makes acquisition
 atomic and releases it on controller death, without stale-directory deletion or
 ABA races. Child processes run in their own process group with an absolute
-deadline and output cap. The persisted absolute run deadline is reused for
-verification, review, retry, repair, and resume; no checkpoint grants a fresh
-budget. An attempt ID plus PID, PGID, and process-start digest is diagnostic
-state, not signalling authority. Cancellation is durable state polled by the
-foreground lease owner, which terminates its own in-memory child, including a
-GitHub mutation process; no command signals a stored PID. Cancellation is
-rechecked before each external effect, and an interrupted effect remains unknown
-until authoritative readback. If the lease is free but a recorded process may
-still exist, resume and terminal cancellation fail closed for attended
-reconciliation. State events are append-only, backup restore validates SQLite
-integrity, schema, and required objects before atomic replacement. Restoring
-older state moves newer unreferenced Mill worktrees into a mode-restricted
-quarantine. Its immutable recovery manifest records the database-swap commit
-point and exact moved paths; restore never silently deletes them. Purge requires
-every run to be reviewed or terminal. A failed pre-build context setup removes
-its provisional worktree and branch. Review attempt budgets are scoped to an
-exact candidate generation, and repair reasserts the reviewed commit/tree before
-allowing writes. There is no background daemon or implicit retry.
+deadline and output cap while their controller is alive. Docker's daemon can
+outlive both controller and client. Verifier and dependency containers therefore
+have durable ownership intents and a separate kernel lease; recovery checks
+private labels and binds removal readback to the observed container and daemon.
+Unresolved ownership blocks retry and destructive cleanup. There is no
+host-independent deadline watchdog; see [OCI recovery](../docs/oci-recovery.md).
+The persisted absolute run deadline is reused for verification, review, retry,
+repair, and resume; no checkpoint grants a fresh budget. An attempt ID plus PID,
+PGID, and process-start digest is diagnostic state, not signalling authority.
+Cancellation is durable state polled by the foreground lease owner, which
+terminates its own in-memory child, including a GitHub mutation process; no
+command signals a stored PID. Cancellation is rechecked before each external
+effect, and an interrupted effect remains unknown until authoritative readback.
+If the lease is free but a recorded process may still exist, resume and terminal
+cancellation fail closed for attended reconciliation. State events are
+append-only, backup restore validates SQLite integrity, schema, and required
+objects before atomic replacement. Restoring older state moves newer
+unreferenced Mill worktrees into a mode-restricted quarantine. Its immutable
+recovery manifest records the database-swap commit point and exact moved paths;
+restore never silently deletes them. Purge requires every run to be reviewed or
+terminal. A failed pre-build context setup removes its provisional worktree and
+branch. Review attempt budgets are scoped to an exact candidate generation, and
+repair reasserts the reviewed commit/tree before allowing writes. There is no
+background daemon or implicit retry.
 
 The built-in Codex builder is a trusted-host `workspace-write` process, not an
 isolated worker. Mill exposes that boundary through `isolation`; an explicit

@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   chmod,
   copyFile,
@@ -31,6 +31,11 @@ import {
   type ProcessResult,
 } from "./process.js";
 import { acquireExclusiveLease } from "./lease.js";
+import {
+  acquireOciResourceLease,
+  hasPendingOciResources,
+  type OciResourceLease,
+} from "./oci-resources.js";
 
 interface DependencyIdentity {
   schemaVersion: "1";
@@ -922,40 +927,13 @@ async function mountSource(root: string): Promise<{
   };
 }
 
-async function removeContainer(
-  docker: string,
-  root: string,
-  containerName: string,
-): Promise<void> {
-  const result = await runProcess({
-    executable: docker,
-    args: ["rm", "--force", "--volumes", containerName],
-    cwd: root,
-    env: { HOME: process.env.HOME, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
-    deadlineMs: Date.now() + 15_000,
-    maxOutputBytes: 128 * 1024,
-  });
-  if (
-    result.timedOut ||
-    result.outputExceeded ||
-    result.cancelled ||
-    (result.exitCode !== 0 && !/no such container/iu.test(result.stderr))
-  ) {
-    throw new MillError(
-      "DEPENDENCY_CONTAINER_CLEANUP_FAILED",
-      "Mill could not remove the exact dependency-preparation container.",
-      ExitCode.temporary,
-      { containerName },
-    );
-  }
-}
-
 async function prepareDependencySnapshotWithSignal(input: {
   root: string;
   stateDirectory: string;
   config: MillConfig;
   attended: boolean;
   signal: AbortSignal;
+  resources: OciResourceLease;
 }): Promise<DependencyPreparationResult> {
   if (!input.attended) {
     throw new MillError(
@@ -1085,7 +1063,7 @@ async function prepareDependencySnapshotWithSignal(input: {
     }
     const canonicalTemporary = await realpath(temporary);
     const mount = await mountSource(canonicalTemporary);
-    const containerName = `mill-deps-${randomUUID()}`;
+    const resource = await input.resources.create("dependency-preparation");
     const uid = process.getuid?.() ?? 1000;
     const gid = process.getgid?.() ?? 1000;
     let result: ProcessResult;
@@ -1097,9 +1075,8 @@ async function prepareDependencySnapshotWithSignal(input: {
           "--pull",
           "never",
           "--name",
-          containerName,
-          "--label",
-          "dev.mill.owner=dependency-preparation",
+          resource.name,
+          ...resource.labels,
           "--network",
           "bridge",
           "--read-only",
@@ -1154,14 +1131,16 @@ async function prepareDependencySnapshotWithSignal(input: {
         cwd: input.root,
         env: { HOME: process.env.HOME, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
         deadlineMs: Date.now() + 10 * 60_000,
+        onBeforeSpawn: resource.onBeforeSpawn,
         maxOutputBytes: 2 * 1024 * 1024,
         signal: input.signal,
       });
     } finally {
       try {
-        await removeContainer(docker, input.root, containerName);
+        await input.resources.remove(resource);
       } finally {
-        await mount.dispose();
+        if (!(await hasPendingOciResources(input.stateDirectory)))
+          await mount.dispose();
       }
     }
     if (
@@ -1244,7 +1223,8 @@ async function prepareDependencySnapshotWithSignal(input: {
     };
   } finally {
     try {
-      await rm(temporary, { recursive: true, force: true });
+      if (!(await hasPendingOciResources(input.stateDirectory)))
+        await rm(temporary, { recursive: true, force: true });
     } finally {
       await preparationLease?.release();
     }
@@ -1259,12 +1239,20 @@ export async function prepareDependencySnapshot(input: {
   signal?: AbortSignal;
 }): Promise<DependencyPreparationResult> {
   const signals = processCancellationScope(input.signal);
+  let resources: OciResourceLease | undefined;
   try {
+    resources = await acquireOciResourceLease({
+      stateDirectory: input.stateDirectory,
+      root: input.root,
+      reconcile: true,
+    });
     return await prepareDependencySnapshotWithSignal({
       ...input,
       signal: signals.signal,
+      resources,
     });
   } finally {
     signals.dispose();
+    await resources?.release();
   }
 }

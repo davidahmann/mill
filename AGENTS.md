@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.4
+Version: 2.5
 
 Status: normative
 
@@ -87,6 +87,10 @@ the same candidate. Unknown or conflicting authority blocks execution.
 - Confirm the task's base commit, authority-file digests, impact approval,
   acceptance IDs, invariant IDs, scenario IDs, allowed paths, command IDs,
   budget, and stop conditions before model spend.
+- Enforce the product outcome's declared acceptance set on every admission
+  route. A ready outcome needs a matching task; approved unbound outcomes and
+  historical closed outcomes may remain without one. A command cannot certify a
+  human or external scenario; its exact owner-attested claim is required.
 - Treat `contextPaths` as frozen priority context, not a filesystem read ACL.
 - Keep credentials, `.env*`, `.npmrc`, local state, raw prompts/responses,
   command logs, and temporary worktrees out of candidate scope.
@@ -249,6 +253,10 @@ millctl --json support-bundle --run <run-id>
   effect or when it is performing the approved bounded review-repair pass.
 - `cancel` records intent; only the live foreground controller may signal its
   own child process group.
+- OCI containers can survive controller and client death. Preserve their private
+  ownership journal and mounted paths until [OCI recovery](docs/oci-recovery.md)
+  proves removal on the recorded daemon. Deadlines require a live controller;
+  never treat an absent host PID as proof that a container stopped.
 - An uncertain push or PR operation remains `effect_unknown` until GitHub
   readback classifies it. Reconcile before retry.
 - For uncertain readiness/merge, use `pr merge-reconcile`; never repeat a

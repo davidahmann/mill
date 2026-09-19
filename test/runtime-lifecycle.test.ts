@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 
@@ -756,6 +757,7 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
 `,
         { mode: 0o755 },
       );
+      await trackFakeDocker(fixture.dockerPath);
       const taskFile = path.join(fixture.root, fixture.taskPath);
       await writeFile(
         taskFile,
