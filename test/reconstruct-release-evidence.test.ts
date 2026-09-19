@@ -26,6 +26,8 @@ function run(
 }
 
 describe("permanent release evidence reconstruction", () => {
+  // Each adversarial case starts a fresh CLI; keep the per-process bound above
+  // and allow the complete matrix to finish on shared CI runners.
   it("reconstructs retained draft and published evidence and rejects missing, swapped, or mismatched assets", async () => {
     const temporary = await temporaryDirectory("mill-release-reconstruct-");
     try {
@@ -573,5 +575,5 @@ describe("permanent release evidence reconstruction", () => {
     } finally {
       await temporary.cleanup();
     }
-  });
+  }, 60_000);
 });
