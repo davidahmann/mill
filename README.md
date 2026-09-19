@@ -158,9 +158,15 @@ existing repository.
 
 ```sh
 npm view @davidahmann/mill dist-tags --json
-npm install --save-dev --ignore-scripts @davidahmann/mill@<released-version>
+npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.7.1
 npx --no-install millctl --version
 ```
+
+The example selects this source candidate's version, `0.7.1`. Use it after the
+linked release's final evidence confirms publication; an unpublished source
+candidate is not an installable release. See the
+[v0.7.1 scope](docs/releases/v0.7.1.md) and
+[planning evidence rules](docs/planning.md#what-passing-evidence-means).
 
 To develop Mill itself from a clean source checkout:
 
@@ -478,8 +484,11 @@ The Codex worker runs on the trusted host with a workspace-write sandbox. This
 is not containment against hostile code, host files, keychains, processes, or
 network access. Native candidate verification is the stronger boundary: a
 pre-pulled digest-pinned OCI image, no network, read-only source/root, dropped
-capabilities, deadlines, bounded output and resources, and explicit cleanup. Do
-not use this alpha with hostile repositories or sensitive source.
+capabilities, deadlines, bounded output and resources, and explicit cleanup.
+Deadlines require a live controller. After abrupt controller death, daemon-owned
+containers can remain until [OCI recovery](docs/oci-recovery.md) removes them;
+unresolved ownership blocks retry and state cleanup. Do not use this alpha with
+hostile repositories or sensitive source.
 
 `millctl isolation --request trusted-host` reports the exact built-in boundary.
 `millctl isolation --request isolated` fails closed because no isolated builder

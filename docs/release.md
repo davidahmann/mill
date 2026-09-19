@@ -213,14 +213,15 @@ its preserved qualification, and assembles prepublication evidence. It runs:
 npm publish "$artifact" --provenance --access public --tag latest
 ```
 
-It does not run `npm pack` again. It verifies that npm's `latest` dist-tag names
-the exact version, retries package installation until the registry serves that
-exact version, then verifies registry signatures with a bounded propagation
-retry. It downloads and requalifies the registry artifact, creates a plainly
-labelled draft public-alpha release with the same
-tarball/checksum/SBOM/evidence, downloads the GitHub asset, checks every
-identity, uploads final evidence using the durable tag URL, and only then
-publishes the normal GitHub Release.
+It does not rebuild or repack the local candidate. Bounded read-only retries
+wait for npm's exact version, integrity, provenance metadata and `latest` tag,
+then package installation and signature verification. A conflicting immutable
+version or integrity fails immediately; publication itself is never retried. The
+job downloads and requalifies the registry artifact, creates a plainly labelled
+draft public-alpha release with the same tarball/checksum/SBOM/evidence, and
+verifies the downloaded GitHub asset. It uploads draft evidence before
+publishing the normal GitHub Release with `--latest`. Fresh npm and GitHub
+Latest readbacks then supply the final evidence, which is uploaded last.
 
 ### 5. Close the release
 
@@ -228,7 +229,14 @@ The protected workflow attaches `release-evidence-final.json` to the normal
 GitHub Release after provider readback. It records the workflow runs, tag
 commit/tree, tarball digest/integrity, npm tarball and provenance, GitHub
 Release URL and asset digests, qualification digest, support tuple, and canary
-window. That asset is the canonical provider closure. Reinstall the exact newly
+window. Its optional `channels` field records npm's latest version and GitHub's
+Latest release ID/tag with observation times after publication. New workflows
+require both observations. Older evidence without this field remains
+reconstructable but does not prove those channel pointers. Reconstruction checks
+retained identities and provenance; it does not require a historical support
+tuple to be unexpired today.
+
+That asset is the canonical provider closure. Reinstall the exact newly
 qualified version in an empty directory with lifecycle scripts disabled and
 confirm its version and help.
 

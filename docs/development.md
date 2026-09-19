@@ -207,12 +207,13 @@ job with personal credentials. The realistic scenario set covers:
 - degradation from provider failure, missing OCI runtime/image, nonzero command,
   deadline, cancellation, and output exhaustion;
 - recovery through crash-released writer leases, PID-reuse-safe orphan
-  reconciliation, explicit OCI container cleanup, provisional workspace cleanup,
-  exact-candidate repair revalidation, per-candidate review budgets, validated
-  state backup/restore, quarantine of worktrees newer than a restored backup,
-  external-effect readback, one readback-authorized retry, retry exhaustion,
-  coordinator-level attendance enforcement, changing blocker identity, and purge
-  only after a locally reviewed or terminal state;
+  reconciliation, durable OCI ownership and guarded cleanup, provisional
+  workspace cleanup, exact-candidate repair revalidation, per-candidate review
+  budgets, validated state backup/restore, quarantine of worktrees newer than a
+  restored backup, external-effect readback, one readback-authorized retry,
+  retry exhaustion, coordinator-level attendance enforcement, changing blocker
+  identity, and purge only after a locally reviewed or terminal state and
+  settled OCI ownership;
 - provenance through exact base, context, candidate commit/tree, validation, and
   review identity checks;
 - remote delivery through wrong-actor/fork/remote denial, stale approvals,

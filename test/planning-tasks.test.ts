@@ -16,7 +16,8 @@ import {
   reviewRun,
   statePurge,
 } from "../src/runtime/lifecycle.js";
-import { runtimeFixture } from "./runtime-fixture.js";
+import { runtimeFixture, rewriteFixtureAuthority } from "./runtime-fixture.js";
+import { startNextReadyOutcome } from "../src/workflows/founder.js";
 import {
   abandonAuthorityPlan,
   reconcileAuthorityPlans,
@@ -105,6 +106,91 @@ async function requestFixture(kind = "prd", allowedPaths = ["src/value.js"]) {
 }
 
 describe("change-plan task compilation", () => {
+  it("admits the same scoped acceptance through compilation and the founder flow", async () => {
+    const { fixture, input } = await requestFixture();
+    try {
+      await rewriteFixtureAuthority(fixture, ({ product }) => {
+        product.acceptance.push({
+          id: "ACC-OTHER",
+          kind: "functional",
+          statement: "Another outcome's behavior remains outside this task.",
+          sourceRefs: ["SRC-PRD"],
+        });
+        expect(product.outcomes[0]?.acceptanceIds).toBeUndefined();
+      });
+      await git(fixture.root, ["add", "."]);
+      await git(fixture.root, ["commit", "-m", "test: approve scoped work"]);
+      const compiled = await compileChangeTasks(input);
+      for (const file of compiled.files)
+        await writeFile(path.join(fixture.root, file.path), file.content);
+      await git(fixture.root, ["add", "."]);
+      await git(fixture.root, [
+        "commit",
+        "-m",
+        "test: approve compiled packet",
+      ]);
+      const admitted = await loadRuntimeInputs(
+        fixture.root,
+        "product/tasks/compiled-value.yaml",
+      );
+      expect(admitted.continuity?.impact.acceptanceIds).toEqual([
+        "ACC-POSITIVE",
+      ]);
+      // Reaching baseline approval proves founder admission accepted the same scope.
+      await expect(
+        startNextReadyOutcome({
+          root: fixture.root,
+          approvalDigest: `sha256:${"0".repeat(64)}`,
+        }),
+      ).rejects.toMatchObject({ code: "TASK_APPROVAL_REQUIRED" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("binds the first packet to an approved unbound outcome and admits the result", async () => {
+    const { fixture, input } = await requestFixture();
+    try {
+      const initial = await compileChangeTasks(input);
+      const planFile = initial.files.find(
+        (file) => file.path === "product/plan.yaml",
+      );
+      if (!planFile) throw new Error("missing plan");
+      const plan = outcomePlanSchema.parse(parseYaml(planFile.content));
+      for (const outcome of plan.outcomes) {
+        outcome.status = "approved";
+        delete outcome.taskRef;
+      }
+      await writeFile(path.join(fixture.root, planFile.path), yaml(plan));
+      await git(fixture.root, ["add", planFile.path]);
+      await git(fixture.root, [
+        "commit",
+        "-m",
+        "test: approve unbound outcome",
+      ]);
+      const compiled = await compileChangeTasks(input);
+      for (const file of compiled.files)
+        await writeFile(path.join(fixture.root, file.path), file.content);
+      const admitted = await loadRuntimeInputs(
+        fixture.root,
+        "product/tasks/compiled-value.yaml",
+      );
+      expect(admitted.continuity?.impact.outcomeId).toBe("OUT-POSITIVE-VALUE");
+      const compiledPlan = compiled.files.find(
+        (file) => file.path === planFile.path,
+      );
+      if (compiledPlan === undefined) throw new Error("missing compiled plan");
+      expect(
+        outcomePlanSchema.parse(parseYaml(compiledPlan.content)).outcomes[0],
+      ).toMatchObject({
+        status: "ready",
+        taskRef: "product/tasks/compiled-value.yaml",
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("combines reviewed planning drafts without creating authority files", async () => {
     const { fixture, input, request } = await requestFixture();
     try {

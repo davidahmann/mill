@@ -27,6 +27,12 @@ import { ExitCode, MillError } from "../errors.js";
 import { isWithin } from "../security/safe-path.js";
 import { acquireExclusiveLease, type ExclusiveLease } from "./lease.js";
 import {
+  acquireOciResourceLease,
+  assertOciLease,
+  assertOciResourcesSettled,
+  type OciResourceLease,
+} from "./oci-resources.js";
+import {
   applyStateMigrations,
   assertCurrentStateMigrations,
   CURRENT_STATE_SCHEMA_VERSION,
@@ -2058,6 +2064,25 @@ export async function restoreStateBackup(
   commonDirectory: string,
   backupPath: string,
 ): Promise<StateRestoreReport> {
+  const lease = await acquireOciResourceLease({
+    stateDirectory: repositoryStateDirectory(repositoryId, commonDirectory),
+  });
+  try {
+    return await restoreStateBackupWithLease(
+      repositoryId,
+      commonDirectory,
+      backupPath,
+    );
+  } finally {
+    await lease.release();
+  }
+}
+
+async function restoreStateBackupWithLease(
+  repositoryId: string,
+  commonDirectory: string,
+  backupPath: string,
+): Promise<StateRestoreReport> {
   const directory = repositoryStateDirectory(repositoryId, commonDirectory);
   const resolvedBackup = path.resolve(backupPath);
   if (!isWithin(directory, resolvedBackup)) {
@@ -2252,6 +2277,24 @@ export interface StateRestoreReport {
 }
 
 export async function purgeRepositoryState(
+  repositoryId: string,
+  commonDirectory: string,
+  resourceLease?: OciResourceLease,
+): Promise<void> {
+  const directory = repositoryStateDirectory(repositoryId, commonDirectory);
+  const lease =
+    resourceLease ??
+    (await acquireOciResourceLease({ stateDirectory: directory }));
+  try {
+    assertOciLease(lease, directory);
+    await assertOciResourcesSettled(directory);
+    await purgeRepositoryStateWithLease(repositoryId, commonDirectory);
+  } finally {
+    if (resourceLease === undefined) await lease.release();
+  }
+}
+
+async function purgeRepositoryStateWithLease(
   repositoryId: string,
   commonDirectory: string,
 ): Promise<void> {

@@ -327,6 +327,7 @@ try {
     attended: true,
   });
   const evidence = await verifyDeclaredCommands({
+    stateDirectory: state,
     root: workspace,
     dependencyRoot: prepared.directory,
     artifactDirectory: path.join(state, "artifacts"),
@@ -389,6 +390,7 @@ try {
   };
   const negativeControl = async (commandId, expectedReason, extra = {}) => {
     const result = await verifyDeclaredCommands({
+      stateDirectory: state,
       root: workspace,
       dependencyRoot: prepared.directory,
       artifactDirectory: path.join(state, "artifacts-negative", commandId),

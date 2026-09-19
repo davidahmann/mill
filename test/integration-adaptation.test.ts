@@ -151,6 +151,7 @@ describe("integration adaptation evidence", () => {
 import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 import { promisify } from "node:util";
 import { afterEach } from "vitest";
 import { parse, stringify } from "yaml";
@@ -229,9 +230,10 @@ async function prepared() {
   };
   await writeFile(taskFile, stringify(task));
   await writeFile(path.join(fixture.root, "mill.yaml"), stringify(config));
-  const docker = await readFile(fixture.dockerPath, "utf8");
+  const dockerImplementation = `${fixture.dockerPath}.implementation.mjs`;
+  const docker = await readFile(dockerImplementation, "utf8");
   await writeFile(
-    fixture.dockerPath,
+    dockerImplementation,
     docker.replace(
       "process.exit(/value",
       'if(args.at(-1)==="target" && /value = 1/u.test(value))process.exit(1);\nprocess.exit(/value',
@@ -509,6 +511,7 @@ describe("dependency-free native repositories", () => {
           fixture.dockerPath,
           `#!${process.execPath}\nprocess.exit(0);\n`,
         );
+        await trackFakeDocker(fixture.dockerPath);
         await writeFile(
           path.join(fixture.root, "package.json"),
           JSON.stringify({

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
@@ -440,6 +441,7 @@ if (command === "preservation") {
 `,
   );
   await chmod(fixture.dockerPath, 0o755);
+  await trackFakeDocker(fixture.dockerPath);
   await execute(
     gitExecutable,
     [

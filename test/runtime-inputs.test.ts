@@ -4,9 +4,38 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { loadMillConfig, loadRuntimeInputs } from "../src/runtime/inputs.js";
-import { runtimeFixture } from "./runtime-fixture.js";
+import { runtimeFixture, rewriteFixtureAuthority } from "./runtime-fixture.js";
 
 describe("runtime input contracts", () => {
+  it("rejects an exact expert packet that undercovers its declared outcome", async () => {
+    const fixture = await runtimeFixture();
+    try {
+      await rewriteFixtureAuthority(fixture, ({ product }) => {
+        product.acceptance.push({
+          id: "ACC-SECOND",
+          kind: "functional",
+          statement: "A second required behavior is preserved.",
+          sourceRefs: ["SRC-PRD"],
+        });
+        const outcome = product.outcomes[0];
+        if (outcome === undefined) throw new Error("missing outcome");
+        outcome.acceptanceIds = ["ACC-POSITIVE", "ACC-SECOND"];
+      });
+      await expect(
+        loadRuntimeInputs(fixture.root, fixture.taskPath),
+      ).rejects.toMatchObject({
+        code: "CONTINUITY_AUTHORITY_BLOCKED",
+        details: {
+          blockers: [
+            "impact acceptance must equal the declared outcome acceptance: OUT-POSITIVE-VALUE",
+          ],
+        },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("fails closed for escaping paths, invalid YAML, and invalid schemas", async () => {
     const fixture = await runtimeFixture();
     try {

@@ -50,6 +50,7 @@ import {
   isTerminalRun,
   purgeRepositoryState,
   publicRunRecord,
+  repositoryStateDirectory,
   restoreStateBackup,
   StateStore,
   type StateStats,
@@ -60,6 +61,12 @@ import { CURRENT_STATE_SCHEMA_VERSION } from "./state-migrations.js";
 import { createWorkerInvocation } from "./worker.js";
 import { dependencySnapshotDirectory } from "./dependencies.js";
 import { verifyDeclaredCommands, type ValidationEvidence } from "./verifier.js";
+import {
+  acquireOciResourceLease,
+  hasPendingOciResources,
+  reconcileOciResources,
+  type OciResourceLease,
+} from "./oci-resources.js";
 import {
   processCancellationScope,
   processIdentityStatus,
@@ -603,6 +610,10 @@ export async function startLocalRun(input: {
       }
     }
     lease = await acquireWriterLease(store);
+    await reconcileOciResources({
+      stateDirectory: store.directory,
+      root: input.root,
+    });
     const activeRuns = store
       .runs()
       .filter((candidate) => !isTerminalRun(candidate.status));
@@ -795,6 +806,10 @@ export async function qualifyBaseline(input: {
     );
     try {
       lease = await acquireWriterLease(store);
+      await reconcileOciResources({
+        stateDirectory: store.directory,
+        root: input.root,
+      });
       await createDetachedWorktree(
         input.root,
         destination,
@@ -806,6 +821,7 @@ export async function qualifyBaseline(input: {
         config: inputs.config,
       });
       const evidence = await verifyDeclaredCommands({
+        stateDirectory: store.directory,
         root: destination,
         ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
         artifactDirectory: path.join(
@@ -844,7 +860,10 @@ export async function qualifyBaseline(input: {
       return { approvalDigest, evidence };
     } finally {
       try {
-        if (lease !== undefined) {
+        if (
+          lease !== undefined &&
+          !(await hasPendingOciResources(store.directory))
+        ) {
           await removeCandidateWorktree(input.root, destination);
         }
       } finally {
@@ -871,6 +890,10 @@ export async function verifyRun(input: {
   const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
+    await reconcileOciResources({
+      stateDirectory: store.directory,
+      root: input.root,
+    });
     let run = store.getRun(input.runId);
     reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
     run = store.getRun(run.id);
@@ -890,6 +913,7 @@ export async function verifyRun(input: {
       config: inputs.config,
     });
     const evidence = await verifyDeclaredCommands({
+      stateDirectory: store.directory,
       root: candidate.worktree,
       ...(dependencyRoot === undefined ? {} : { dependencyRoot }),
       artifactDirectory: path.join(
@@ -962,6 +986,10 @@ export async function reviewRun(input: {
   let reviewPrepared = false;
   try {
     lease = await acquireWriterLease(store);
+    await reconcileOciResources({
+      stateDirectory: store.directory,
+      root: input.root,
+    });
     let run = store.getRun(input.runId);
     reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
     run = store.getRun(run.id);
@@ -1157,6 +1185,10 @@ export async function resumeRun(input: {
   const signals = processCancellationScope();
   try {
     lease = await acquireWriterLease(store);
+    await reconcileOciResources({
+      stateDirectory: store.directory,
+      root: input.root,
+    });
     let run = store.getRun(input.runId);
     const active = storedActiveProcess(run);
     reconcileMutatingWorkerAdmissions(store, run, active);
@@ -1343,6 +1375,7 @@ export async function cancelRun(input: {
   const commonDirectory = await commonGitDirectory(input.root);
   const store = await StateStore.open(config.repositoryId, commonDirectory);
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
+  let resources: OciResourceLease | undefined;
   try {
     const run = store.requestCancellation(input.runId);
     try {
@@ -1357,6 +1390,19 @@ export async function cancelRun(input: {
       throw error;
     }
     const current = store.getRun(run.id);
+    try {
+      resources = await acquireOciResourceLease({
+        stateDirectory: store.directory,
+        root: input.root,
+        reconcile: true,
+      });
+    } catch (error) {
+      const failure = asMillError(error);
+      store.recordEvent(current.id, "run.cancellation_pending", {
+        code: failure.code,
+      });
+      return publicRunRecord(current);
+    }
     const boundary = externalEffectBoundary(current);
     if (boundary.unresolved || boundary.merged) {
       store.recordEvent(current.id, "run.cancellation_pending", {
@@ -1390,6 +1436,7 @@ export async function cancelRun(input: {
     );
   } finally {
     try {
+      await resources?.release();
       await lease?.release();
     } finally {
       store.close();
@@ -1413,16 +1460,25 @@ export async function runStatus(input: {
     config.repositoryId,
     commonDirectory,
   );
-  if (store === undefined) return {};
+  if (store === undefined)
+    return (await hasPendingOciResources(
+      repositoryStateDirectory(config.repositoryId, commonDirectory),
+    ))
+      ? { reconciliationRequired: true }
+      : {};
   try {
     const run =
       input.runId === undefined ? store.latestRun() : store.getRun(input.runId);
-    if (run === undefined) return {};
+    if (run === undefined)
+      return (await hasPendingOciResources(store.directory))
+        ? { reconciliationRequired: true }
+        : {};
     let interrupted = false;
     const effectBoundary = externalEffectBoundary(run);
     let reconciliationRequired =
       effectBoundary.unresolved ||
-      store.unresolvedMutatingWorkerInvocations(run.id).length > 0;
+      store.unresolvedMutatingWorkerInvocations(run.id).length > 0 ||
+      (await hasPendingOciResources(store.directory));
     const active = storedActiveProcess(run);
     let controllerAbsent = false;
     if (
@@ -1777,6 +1833,10 @@ export async function stateRestore(input: {
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   try {
     lease = await acquireWriterLease(store);
+    await reconcileOciResources({
+      stateDirectory: store.directory,
+      root: input.root,
+    });
     store.close();
     return await restoreStateBackup(
       config.repositoryId,
@@ -1805,8 +1865,14 @@ export async function statePurge(input: {
   const store = await StateStore.open(config.repositoryId, commonDirectory);
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   let storeClosed = false;
+  let resources: OciResourceLease | undefined;
   try {
     lease = await acquireWriterLease(store);
+    resources = await acquireOciResourceLease({
+      stateDirectory: store.directory,
+      root: input.root,
+      reconcile: true,
+    });
     const runs = store.runs();
     for (const run of runs) assertEffectAllowsNewWork(run);
     const plans = store.authorityPlans();
@@ -1843,9 +1909,10 @@ export async function statePurge(input: {
         await removeCandidateWorktree(input.root, run.worktreePath);
       }
     }
-    await purgeRepositoryState(config.repositoryId, commonDirectory);
+    await purgeRepositoryState(config.repositoryId, commonDirectory, resources);
   } finally {
     if (!storeClosed) store.close();
+    await resources?.release();
     await lease?.release();
   }
 }

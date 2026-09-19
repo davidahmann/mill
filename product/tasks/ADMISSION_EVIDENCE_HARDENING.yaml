@@ -1,0 +1,62 @@
+schemaVersion: "2"
+task_id: mill-admission-evidence-hardening
+status: awaiting_provider_closure
+owner: davidahmann
+base_commit: 59dfb9061c61777743ef812ab402fe6f6d100459
+execution_mode: approved_native_maintainer
+authority: product/admission-evidence-hardening.md
+impact_manifest: product/impacts/ADMISSION_EVIDENCE_HARDENING.yaml
+objective:
+  Repair scoped admission and evidence gaps, qualify v0.7.1 and update the
+  downstream pin.
+allowed_paths:
+  - src/**
+  - test/**
+  - schemas/**
+  - scripts/**
+  - recipes/**
+  - docs/**
+  - architecture/**
+  - quality/**
+  - product/**
+  - .github/**
+  - README.md
+  - AGENTS.md
+  - WORKFLOW.md
+  - CHANGELOG.md
+  - package.json
+  - package-lock.json
+authority_preparation_paths:
+  - product/**
+  - quality/**
+acceptance_items:
+  - AH-01 shared scope, oracle ownership and preservation evidence
+  - AH-02 coherent first packet, selection and closure transitions
+  - AH-03 bounded recovery and resource lifetime
+  - AH-04 consistent durable release reconstruction
+  - AH-05 bounded registry reads and final channel identity
+  - AH-06 independent validation, review, CI and main readback
+  - AH-07 qualified exact v0.7.1 latest publication
+  - AH-08 deliberate downstream upgrade and preserved external gates
+validation_commands:
+  - npm run check
+  - node dist/cli.js --json --cwd . audit
+  - applicable digest-pinned OCI canaries
+required_reviews:
+  - independent full candidate review across contracts, runtime and release
+constraints:
+  - one attended maintainer writer; no worker forge credentials
+  - preserve prior release identities and historical task receipts
+  - no widened support or customer acceptance claim
+stop_conditions:
+  - ambiguous external effect or unverifiable release identity
+  - failed required check or unresolved material review finding
+closure:
+  status: pending_provider_closure
+  provider_closure:
+    Required PR/main checks and permanent v0.7.1 release evidence govern
+    completion.
+  release_evidence: https://github.com/davidahmann/mill/releases/download/v0.7.1/release-evidence-final.json
+  note:
+    This source-time status does not override later provider evidence. Do not
+    rewrite the tagged record or create a docs-only PR to repeat publication.

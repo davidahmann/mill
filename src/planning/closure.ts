@@ -13,7 +13,10 @@ import {
 } from "../runtime/repository.js";
 import { StateStore } from "../runtime/state.js";
 import { safeReadText } from "../security/safe-path.js";
-import { assertOutcomeDependencies } from "./outcomes.js";
+import {
+  assertOutcomeAuthority,
+  assertOutcomeDependencies,
+} from "./outcomes.js";
 
 /** Propose a repository-authority update from finalized evidence; never approve it. */
 export async function planOutcomeClosure(input: {
@@ -62,6 +65,14 @@ export async function planOutcomeClosure(input: {
         "Closure requires the exact task, product plan and provider-finalized run; a ready flag or model claim is insufficient.",
         ExitCode.configuration,
       );
+    assertOutcomeAuthority(
+      {
+        outcomeId: outcome.id,
+        productContractDigest: plan.productContractDigest,
+        acceptanceIds: outcome.acceptanceIds ?? [],
+      },
+      inputs,
+    );
     outcome.status = "closed";
     if (input.nextOutcomeId !== undefined) {
       const next = plan.outcomes.find(
@@ -73,6 +84,21 @@ export async function planOutcomeClosure(input: {
           "The next outcome must already be approved.",
           ExitCode.configuration,
         );
+      if (next.taskRef === undefined)
+        throw new MillError(
+          "OUTCOME_NEXT_TASK_REQUIRED",
+          "Compile and approve the next outcome's task before marking it ready; closure alone may leave it approved.",
+          ExitCode.configuration,
+        );
+      const nextInputs = await loadRuntimeInputs(input.root, next.taskRef);
+      assertOutcomeAuthority(
+        {
+          outcomeId: next.id,
+          productContractDigest: plan.productContractDigest,
+          acceptanceIds: next.acceptanceIds ?? [],
+        },
+        nextInputs,
+      );
       next.status = "ready";
     }
     assertOutcomeDependencies(plan);

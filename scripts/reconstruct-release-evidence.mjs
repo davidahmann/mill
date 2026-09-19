@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  assertReleaseChannels,
+  assertReleaseIdentity,
+} from "./release-evidence-identity.mjs";
 
 const [assetsDirectory, draftName, finalName] = process.argv.slice(2);
 if (
@@ -41,8 +45,25 @@ const [metadata, qualification, identity, sbom, draft, final] =
   ]);
 const parsedQualification =
   mill.contractSchemas.publicAlphaQualification.parse(qualification);
+// Judge historical qualification at its recorded generation time, not today.
+const assessment = mill.assessPublicAlphaQualification(
+  parsedQualification,
+  new Date(parsedQualification.generatedAt),
+);
+if (!assessment.passed) {
+  throw new Error(
+    `retained qualification did not pass: ${assessment.blockers.join("; ")}`,
+  );
+}
 const parsedDraft = mill.contractSchemas.releaseEvidence.parse(draft);
 const parsedFinal = mill.contractSchemas.releaseEvidence.parse(final);
+assertReleaseIdentity(metadata, parsedQualification, identity);
+// Use the validated evidence filename before accessing a retained asset.
+if (!same(parsedFinal.selectedArtifact, metadata.selectedArtifact)) {
+  throw new Error(
+    "release evidence does not bind the retained package artifact",
+  );
+}
 const artifactPath = asset(metadata.selectedArtifact?.filename);
 const artifactBytes = await readFile(artifactPath);
 
@@ -53,7 +74,9 @@ if (
   !same(parsedFinal.builders, metadata.builders) ||
   !same(parsedDraft.selectedArtifact, metadata.selectedArtifact) ||
   !same(parsedFinal.selectedArtifact, metadata.selectedArtifact) ||
-  digest(artifactBytes) !== metadata.selectedArtifact?.sha256
+  digest(artifactBytes) !== metadata.selectedArtifact?.sha256 ||
+  `sha512-${createHash("sha512").update(artifactBytes).digest("base64")}` !==
+    metadata.selectedArtifact.npmIntegrity
 ) {
   throw new Error(
     "release evidence does not bind the retained package artifact",
@@ -74,6 +97,7 @@ const expectedQualification = {
   },
 };
 for (const evidence of [parsedDraft, parsedFinal]) {
+  assertReleaseChannels(evidence);
   if (
     !same(evidence.package, expectedPackage) ||
     evidence.qualificationDigest !==
@@ -107,13 +131,22 @@ if (
   );
 }
 for (const evidence of [parsedDraft, parsedFinal]) {
+  if (
+    evidence.registry === null ||
+    evidence.registry.integrity !== metadata.selectedArtifact.npmIntegrity ||
+    evidence.registry.provenanceVerified !== true
+  ) {
+    throw new Error(
+      "registry readback does not prove selected artifact integrity and provenance",
+    );
+  }
   const receipt = evidence.githubRelease;
   if (
     receipt === null ||
     receipt.tag !== expectedPackage.tag ||
     receipt.artifactDigest !== metadata.selectedArtifact.sha256 ||
-    new URL(receipt.url).pathname !==
-      `/davidahmann/mill/releases/tag/${expectedPackage.tag}`
+    receipt.url !==
+      `https://github.com/davidahmann/mill/releases/tag/${expectedPackage.tag}`
   ) {
     throw new Error(
       "release evidence does not bind the provider release receipt",

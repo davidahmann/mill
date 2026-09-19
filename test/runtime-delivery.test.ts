@@ -54,7 +54,7 @@ import {
   restoreStateBackup,
   purgeRepositoryState,
 } from "../src/runtime/state.js";
-import { runtimeFixture } from "./runtime-fixture.js";
+import { runtimeFixture, rewriteFixtureAuthority } from "./runtime-fixture.js";
 import { applyMerge, planMerge, reconcileMerge } from "../src/runtime/merge.js";
 import {
   assertEffectAllowsNewWork,
@@ -456,6 +456,9 @@ async function reviewedFixture(
     githubReviewer?: string;
     requiredChecks?: readonly string[];
     postMergeRequiredChecks?: readonly string[];
+    prepare?: (
+      fixture: Awaited<ReturnType<typeof runtimeFixture>>,
+    ) => Promise<void>;
   } = {},
 ): Promise<{
   fixture: Awaited<ReturnType<typeof runtimeFixture>>;
@@ -489,6 +492,7 @@ async function reviewedFixture(
   if (options.adaptationExpiresAt !== undefined) {
     await bindAdaptationAuthority(fixture, options.adaptationExpiresAt);
   }
+  await options.prepare?.(fixture);
   activate(fixture);
   const qualification = await qualifyBaseline({
     root: fixture.root,
@@ -1484,11 +1488,18 @@ describe("exact-candidate GitHub draft delivery", () => {
         "-m",
         "test: record approved outcome plan",
       ]);
+      await expect(
+        planOutcomeClosure({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId,
+          nextOutcomeId: "OUT-NEXT",
+        }),
+      ).rejects.toMatchObject({ code: "OUTCOME_NEXT_TASK_REQUIRED" });
       const closure = await planOutcomeClosure({
         root: fixture.root,
         taskPath: fixture.taskPath,
         runId,
-        nextOutcomeId: "OUT-NEXT",
       });
       expect(closure.authority).toBe("proposal_only");
       const closureFile = closure.files[0];
@@ -1497,7 +1508,7 @@ describe("exact-candidate GitHub draft delivery", () => {
         outcomePlanSchema
           .parse(parseYaml(closureFile.content))
           .outcomes.map((item: { status: string }) => item.status),
-      ).toEqual(["closed", "ready"]);
+      ).toEqual(["closed", "approved"]);
       expect(
         await readFile(path.join(fixture.root, "product/plan.yaml"), "utf8"),
       ).toBe(yaml(closurePlan));
@@ -1509,6 +1520,123 @@ describe("exact-candidate GitHub draft delivery", () => {
           nextOutcomeId: "OUT-ABSENT",
         }),
       ).rejects.toMatchObject({ code: "OUTCOME_NEXT_NOT_APPROVED" });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("marks a bound next packet ready and rejects another outcome's packet", async () => {
+    const nextTaskPath = "product/tasks/next.yaml";
+    const { fixture, runId, candidateTree } = await reviewedFixture({
+      async prepare(prepared) {
+        const { task, continuity } = await rewriteFixtureAuthority(
+          prepared,
+          ({ product }) => {
+            product.outcomes.push({
+              id: "OUT-NEXT",
+              statement: "Preserve the positive value in the next change.",
+              acceptanceIds: ["ACC-POSITIVE"],
+            });
+          },
+        );
+        const nextImpact = structuredClone(continuity.impact);
+        nextImpact.id = "next-value";
+        nextImpact.outcomeId = "OUT-NEXT";
+        if (nextImpact.approval === null) throw new Error("missing approval");
+        nextImpact.approval.proposalDigest = canonicalDigest({
+          ...nextImpact,
+          approval: null,
+        });
+        const nextImpactSource = yaml(nextImpact);
+        const nextTask = structuredClone(task);
+        nextTask.id = "next-value";
+        nextTask.authority.impactManifest = {
+          path: "product/next-impact.yaml",
+          digest: textDigest(nextImpactSource),
+        };
+        await writeFile(
+          path.join(prepared.root, nextTask.authority.impactManifest.path),
+          nextImpactSource,
+        );
+        await writeFile(path.join(prepared.root, nextTaskPath), yaml(nextTask));
+        await git(prepared.root, ["add", "."]);
+        await git(prepared.root, ["commit", "-m", "test: approve next packet"]);
+      },
+    });
+    try {
+      const adapter = new FakeGitHub(
+        (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+      );
+      const deliveryInput = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId,
+        adapter,
+      };
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [completedCheck("success")];
+      await observeDraftPr(deliveryInput);
+      adapter.merge(candidateTree);
+      adapter.mergeChecks = [completedCheck("success")];
+      expect((await finalizeDraftPr(deliveryInput)).run.status).toBe("closed");
+      const loaded = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+      if (loaded.continuity === undefined)
+        throw new Error("missing continuity");
+      const plan = outcomePlanSchema.parse({
+        schemaVersion: "1",
+        productContractDigest: canonicalDigest(
+          loaded.continuity.product as JsonValue,
+        ),
+        outcomes: [
+          {
+            id: "OUT-POSITIVE-VALUE",
+            title: "Current outcome",
+            acceptance: ["The value remains positive."],
+            acceptanceIds: ["ACC-POSITIVE"],
+            dependsOn: [],
+            status: "ready",
+            taskRef: fixture.taskPath,
+          },
+          {
+            id: "OUT-NEXT",
+            title: "Next approved outcome",
+            acceptance: ["The value remains positive."],
+            acceptanceIds: ["ACC-POSITIVE"],
+            dependsOn: ["OUT-POSITIVE-VALUE"],
+            status: "approved",
+            taskRef: nextTaskPath,
+          },
+        ],
+      });
+      const planPath = path.join(fixture.root, "product/plan.yaml");
+      await writeFile(planPath, yaml(plan));
+      await git(fixture.root, ["add", "product/plan.yaml"]);
+      await git(fixture.root, [
+        "commit",
+        "-m",
+        "test: approve outcome sequence",
+      ]);
+      const closureInput = { ...deliveryInput, nextOutcomeId: "OUT-NEXT" };
+      const closure = await planOutcomeClosure(closureInput);
+      const closureFile = closure.files[0];
+      if (closureFile === undefined) throw new Error("missing closure file");
+      expect(
+        outcomePlanSchema
+          .parse(parseYaml(closureFile.content))
+          .outcomes.map((outcome) => outcome.status),
+      ).toEqual(["closed", "ready"]);
+      expect(await readFile(planPath, "utf8")).toBe(yaml(plan));
+
+      const next = plan.outcomes[1];
+      if (next === undefined) throw new Error("missing next outcome");
+      next.taskRef = fixture.taskPath;
+      await writeFile(planPath, yaml(plan));
+      await git(fixture.root, ["add", "product/plan.yaml"]);
+      await git(fixture.root, ["commit", "-m", "test: bind wrong next packet"]);
+      await expect(planOutcomeClosure(closureInput)).rejects.toMatchObject({
+        code: "OUTCOME_TASK_AUTHORITY_MISMATCH",
+      });
+      expect(await readFile(planPath, "utf8")).toBe(yaml(plan));
     } finally {
       await fixture.cleanup();
     }

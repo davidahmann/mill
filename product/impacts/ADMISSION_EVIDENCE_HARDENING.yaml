@@ -1,0 +1,32 @@
+schemaVersion: "2"
+id: mill-admission-evidence-hardening
+status: approved
+approved_by: davidahmann
+approval_source:
+  Attended request on 2026-09-19 to fix Mill end to end, release latest and
+  qualify the downstream upgrade.
+source_base: 59dfb9061c61777743ef812ab402fe6f6d100459
+authority: product/admission-evidence-hardening.md
+affected_invariants:
+  - INV-HUMAN-AUTHORITY
+  - INV-EXACT-EVIDENCE
+  - INV-WORKER-LEAST-AUTHORITY
+  - INV-DOWNSTREAM-INDEPENDENT
+material_changes:
+  - Enforce selected outcome and independently owned evidence at shared
+    boundaries.
+  - Preserve legitimate planning states while rejecting unusable or false
+    completion.
+  - Repair confirmed recovery gaps and release readback/reconstruction identity.
+affected_surfaces:
+  - planning, expert admission, semantic verification, closure and runtime
+    recovery
+  - release schemas, workflow, reconstruction and channel readback
+  - tests, native controls, package identity and operator documentation
+verification:
+  - unchanged baseline, red/green regressions and positive compatibility cases
+  - native check, installed artifact, real OCI and exact audit
+  - independent full review, PR/main CI and release provider evidence
+exceptions:
+  - The attended maintainer may update protected controls and acceptance tests
+    under this reviewed scope.

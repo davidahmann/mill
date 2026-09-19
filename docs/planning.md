@@ -42,20 +42,27 @@ Use `schemas/change-request.schema.json` as the exact contract. A request names:
 - one `readyOutcomeId`, DCO commit identity and bounded execution budget.
 
 The compiler checks source freshness, configured native commands, impact
-approval, product acceptance IDs, dependencies and cycles. A ready outcome
-cannot depend on an unclosed outcome. Each acceptance item needs one explicit
-repository-owned command selected by its scenarios. External or human oracles
-require the expert task-packet path. Acceptance coverage is derived from those
-scenarios, not asserted merely because a task compiled.
+approval, product acceptance IDs, dependencies and cycles. A ready outcome must
+reference a task and cannot depend on an unclosed outcome. If a product outcome
+declares acceptance IDs, the impact must cover that exact set. For an outcome
+without declared IDs, the impact selects a nonempty subset of the product's
+acceptance. Expert task admission and the founder workflow enforce the same
+rule. Each acceptance item needs one explicit repository-owned command selected
+by its scenarios. External or human oracles require the expert task-packet path.
+Acceptance coverage is derived from those scenarios, not asserted merely because
+a task compiled.
 
 Allowed output cannot overlap authority, command controls or sensitive paths.
 Existing closed outcomes are preserved; follow-up work needs a new outcome ID.
-Unmentioned outcomes remain in the plan. Replacing a nonclosed outcome requires
-`supersedesTaskDigest` matching its exact prior task-file bytes. Review that
-supersession in the generated plan before approval; the old task is preserved.
-The replacement must use a fresh task ID and output path. Compilation rejects
-existing task paths with `CHANGE_OUTPUT_EXISTS`, before it offers an approval
-digest or records apply intent; supersession does not authorize overwriting.
+Unmentioned outcomes remain in the plan. An approved outcome without a task may
+receive its first packet without a supersession digest, provided its product,
+declared acceptance and dependencies still match. Replacing an existing packet
+requires `supersedesTaskDigest` matching its exact prior task-file bytes. Review
+that supersession in the generated plan before approval; the old task is
+preserved. The replacement must use a fresh task ID and output path. Compilation
+rejects existing task paths with `CHANGE_OUTPUT_EXISTS`, before it offers an
+approval digest or records apply intent; supersession does not authorize
+overwriting.
 
 ## Apply and execute
 
@@ -124,8 +131,23 @@ before disposition; Mill does not guess ownership or create a recovery branch.
 After `pr finalize` closes the exact run from GitHub merge and resulting-main
 evidence, use `plan close-outcome --task product/tasks/TASK.yaml --run RUN`.
 Optional `--next OUTCOME_ID` selects one already approved, dependency-ready
-successor. The returned proposal binds the current base/product/task, prior plan
-and finalized delivery evidence. It does not mutate the plan or automatically
-approve the next task. Review and commit this authority update through the
-ordinary repository change path. A model statement, successful build or manually
-toggled ready flag cannot supply closure evidence to this command.
+successor with a valid task bound to the same product and outcome scope. If its
+packet has not been prepared, close the current outcome without `--next`, then
+compile and approve the successor. The returned proposal binds the current
+base/product/task, prior plan and finalized delivery evidence. It does not
+mutate the plan or automatically approve the next task. Review and commit this
+authority update through the ordinary repository change path. A model statement,
+successful build or manually toggled ready flag cannot supply closure evidence
+to this command.
+
+## What passing evidence means
+
+A passing repository command certifies only repository-owned scenarios that name
+that command. Human and external scenarios require an active attestation bound
+to the exact scenario, including when a command supplies supporting evidence. An
+expired or changed claim does not pass.
+
+A preservation-only task can pass without adding behavior. Its item records
+remain preservation evidence; an empty new-behavior lane means there was no new
+behavior to check. Passing checks do not establish customer acceptance or the
+completeness of a product plan.

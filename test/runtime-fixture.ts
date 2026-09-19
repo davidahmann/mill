@@ -1,15 +1,56 @@
 import { execFile } from "node:child_process";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 import { promisify } from "node:util";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { canonicalDigest, type JsonValue } from "../src/contracts/canonical.js";
-import { loadRuntimeInputs, textDigest } from "../src/runtime/inputs.js";
+import {
+  loadRuntimeInputs,
+  textDigest,
+  type RuntimeInputs,
+} from "../src/runtime/inputs.js";
 import { temporaryDirectory } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
 const gitExecutable = process.env.MILL_GIT_PATH ?? "/usr/bin/git";
+
+/** Rebind all authority digests so admission tests exercise semantics, not stale bytes. */
+export async function rewriteFixtureAuthority(
+  fixture: Awaited<ReturnType<typeof runtimeFixture>>,
+  update: (continuity: NonNullable<RuntimeInputs["continuity"]>) => void,
+) {
+  const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+  if (inputs.task.schemaVersion !== "2" || inputs.continuity === undefined)
+    throw new Error("expected continuity fixture");
+  const { task, continuity } = inputs;
+  update(continuity);
+  const productDigest = canonicalDigest(continuity.product as JsonValue);
+  continuity.scenarios.productContractDigest = productDigest;
+  continuity.impact.productContractDigest = productDigest;
+  if (continuity.impact.approval === null)
+    throw new Error("expected approved impact fixture");
+  continuity.impact.approval.proposalDigest = canonicalDigest({
+    ...continuity.impact,
+    approval: null,
+  });
+  for (const [reference, value] of [
+    [task.authority.productContract, continuity.product],
+    [task.authority.scenarioSet, continuity.scenarios],
+    [task.authority.impactManifest, continuity.impact],
+  ] as const) {
+    const source = stringifyYaml(value);
+    reference.digest = textDigest(source);
+    await writeFile(path.join(fixture.root, reference.path), source);
+  }
+  await writeFile(
+    path.join(fixture.root, fixture.taskPath),
+    stringifyYaml(task),
+  );
+  fixture.taskDigest = canonicalDigest(task as JsonValue);
+  return { task, continuity };
+}
 
 async function git(root: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync(
@@ -387,6 +428,7 @@ process.exit(/value = [1-9]/u.test(value)&&!(${options.nativeRepair === true}&&/
     { mode: 0o755 },
   );
   await chmod(dockerPath, 0o755);
+  await trackFakeDocker(dockerPath);
   const taskDigest = (await loadRuntimeInputs(root, taskPath)).taskDigest;
   return {
     root,

@@ -6,7 +6,6 @@ import {
   outcomePlanSchema,
   sourceManifestSchema,
 } from "../contracts/schemas.js";
-import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { doctor, doctorReady } from "../doctor.js";
 import { asMillError, ExitCode, MillError } from "../errors.js";
 import {
@@ -40,7 +39,10 @@ import {
 } from "../runtime/dependencies.js";
 import { isTerminalRun, repositoryStateDirectory } from "../runtime/state.js";
 import { safeReadText } from "../security/safe-path.js";
-import { assertOutcomeDependencies } from "../planning/outcomes.js";
+import {
+  assertOutcomeAuthority,
+  assertOutcomeDependencies,
+} from "../planning/outcomes.js";
 
 export interface NextOutcome {
   outcomeId: string;
@@ -151,62 +153,6 @@ async function assertApprovedPrd(
       "The selected PRD is not the exact source bound by the approved product contract.",
       ExitCode.configuration,
       { prdPath, digest: expectedDigest, matches: matches.length },
-    );
-  }
-}
-
-function sameMembers(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
-  const sortedLeft = [...left].sort();
-  const sortedRight = [...right].sort();
-  return (
-    sortedLeft.length === sortedRight.length &&
-    sortedLeft.every((value, index) => value === sortedRight[index])
-  );
-}
-
-function assertOutcomeAuthority(
-  outcome: NextOutcome,
-  inputs: RuntimeInputs,
-): void {
-  const continuity = inputs.continuity;
-  const contractDigest =
-    continuity === undefined
-      ? null
-      : canonicalDigest(continuity.product as unknown as JsonValue);
-  const contractOutcome = continuity?.product.outcomes.find(
-    (candidate) => candidate.id === outcome.outcomeId,
-  );
-  const impact = continuity?.impact;
-  const contractAcceptance =
-    contractOutcome?.acceptanceIds ??
-    continuity?.product.acceptance.map((item) => item.id) ??
-    [];
-  const planAcceptance =
-    outcome.acceptanceIds.length > 0
-      ? outcome.acceptanceIds
-      : contractAcceptance;
-  if (
-    continuity === undefined ||
-    contractDigest !== outcome.productContractDigest ||
-    contractOutcome === undefined ||
-    impact?.outcomeId !== outcome.outcomeId ||
-    contractAcceptance.length === 0 ||
-    !sameMembers(planAcceptance, contractAcceptance) ||
-    !sameMembers(contractAcceptance, impact.acceptanceIds)
-  ) {
-    throw new MillError(
-      "OUTCOME_TASK_AUTHORITY_MISMATCH",
-      "The ready outcome, product contract, and referenced task impact do not identify the same approved work.",
-      ExitCode.configuration,
-      {
-        readyOutcomeId: outcome.outcomeId,
-        impactOutcomeId: impact?.outcomeId ?? null,
-        planProductContractDigest: outcome.productContractDigest,
-        taskProductContractDigest: contractDigest,
-      },
     );
   }
 }

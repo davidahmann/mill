@@ -1790,6 +1790,19 @@ export const releaseEvidenceSchema = z.strictObject({
       observedAt: z.iso.datetime().optional(),
     })
     .nullable(),
+  channels: z
+    .strictObject({
+      npm: z.strictObject({
+        latestVersion: exactSemverSchema,
+        observedAt: z.iso.datetime(),
+      }),
+      github: z.strictObject({
+        releaseId: z.string().regex(/^[1-9][0-9]*$/u),
+        tag: z.string().min(1),
+        observedAt: z.iso.datetime(),
+      }),
+    })
+    .optional(),
   generatedAt: z.iso.datetime(),
 });
 

@@ -696,6 +696,81 @@ describe("impact and semantic evidence", () => {
       preservationPassed: true,
       passed: true,
     });
+    for (const oracleOwner of ["human", "external"] as const) {
+      const ownedScenarios = scenarioSetSchema.parse({
+        ...fixture.scenarios,
+        scenarios: fixture.scenarios.scenarios.map((scenario) => ({
+          ...scenario,
+          oracleOwner,
+        })),
+      });
+      const input = {
+        task,
+        manifest: fixture.impact,
+        product: fixture.product,
+        scenarios: ownedScenarios,
+        commandResults: [{ commandId: "test", status: "passed" as const }],
+        now: new Date("2026-09-02T00:00:01.000Z"),
+      };
+      expect(
+        buildSemanticEvidence(input)
+          .items.filter((item) => item.kind === "scenario")
+          .every((item) => item.status === "blocked"),
+      ).toBe(true);
+      const attestedTask = taskPacketSchema.parse({
+        ...task,
+        attestations: [
+          {
+            id: "ATT-OWNER",
+            approvedBy: "independent-owner",
+            approvedAt: "2026-09-02T00:00:00.000Z",
+            expiresAt: "2026-09-03T00:00:00.000Z",
+            claims: ownedScenarios.scenarios.map((scenario) => ({
+              kind: "scenario",
+              id: scenario.id,
+              digest: semanticClaimDigest(
+                "scenario",
+                scenario.id,
+                scenario as JsonValue,
+              ),
+            })),
+          },
+        ],
+      });
+      expect(
+        buildSemanticEvidence({ ...input, task: attestedTask }).passed,
+      ).toBe(true);
+      expect(
+        buildSemanticEvidence({
+          ...input,
+          task: attestedTask,
+          now: new Date("2026-09-04T00:00:00.000Z"),
+        }).passed,
+      ).toBe(false);
+    }
+    const preserved = buildSemanticEvidence({
+      task: taskPacketSchema.parse({
+        ...task,
+        acceptance: task.acceptance.map((item) => ({
+          ...item,
+          coverage: "preservation",
+        })),
+      }),
+      manifest: fixture.impact,
+      product: fixture.product,
+      scenarios: scenarioSetSchema.parse({
+        ...fixture.scenarios,
+        scenarios: fixture.scenarios.scenarios.map((item) => ({
+          ...item,
+          coverage: "preservation",
+        })),
+      }),
+      commandResults: [{ commandId: "test", status: "passed" }],
+    });
+    expect(preserved.passed).toBe(true);
+    expect(
+      preserved.items.every((item) => item.coverage === "preservation"),
+    ).toBe(true);
     const negativeControl = buildSemanticEvidence({
       task,
       manifest: fixture.impact,

@@ -7,6 +7,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { trackFakeDocker } from "./fake-oci.js";
 
 import { afterEach, describe, expect, it } from "vitest";
 import { stringify as yaml } from "yaml";
@@ -118,6 +119,7 @@ process.exit(0);
     { mode: 0o755 },
   );
   await chmod(executable, 0o755);
+  await trackFakeDocker(executable);
   process.env.MILL_DOCKER_PATH = executable;
   return { repository, state, tools, config, log };
 }

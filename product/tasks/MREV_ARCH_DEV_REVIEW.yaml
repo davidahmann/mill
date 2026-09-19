@@ -1,6 +1,6 @@
 schemaVersion: "2"
 task_id: mill-mrev-architecture-development-review
-status: active
+status: closed
 owner: davidahmann
 base_commit: 5b5803e353c67bad8a547fe4bd7d81d3db634734
 execution_mode: approved_native_maintainer
@@ -68,7 +68,8 @@ stop_conditions:
     provenance
   - recurring P0 or P1 defect in the same subsystem after a design repair
 closure:
-  status: pending
+  status: closed
   disposition: >-
-    Close only after every MREV item is reconciled against durable evidence and
-    the resulting v0.7.0 release is separately read back.
+    Source landed in PR #54 and release recovery in PR #55. The v0.7.0
+    release-evidence-final.json records publication and was read back on
+    2026-09-19. New gaps belong to ADMISSION_EVIDENCE_HARDENING, not this task.
