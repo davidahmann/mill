@@ -30,6 +30,7 @@ describe("bounded npm metadata and final channel readback", () => {
     { mode: "http-transient", expectedAttempts: 3, accepted: true },
     { mode: "tag-transient", expectedAttempts: 3, accepted: true },
     { mode: "provenance-transient", expectedAttempts: 3, accepted: true },
+    { mode: "late-propagation", expectedAttempts: 13, accepted: true },
     { mode: "integrity-conflict", expectedAttempts: 1, accepted: false },
     { mode: "version-conflict", expectedAttempts: 1, accepted: false },
     { mode: "unavailable", expectedAttempts: 3, accepted: false },
@@ -50,7 +51,7 @@ const mode = process.env.TEST_MODE;
 const countFile = process.env.TEST_COUNT;
 const count = fs.existsSync(countFile) ? Number(fs.readFileSync(countFile, "utf8")) + 1 : 1;
 fs.writeFileSync(countFile, String(count));
-if (mode === "unavailable" || (mode === "http-transient" && count < 3)) { process.stderr.write("npm error E404/503 propagation delay"); process.exit(1); }
+if (mode === "unavailable" || (mode === "http-transient" && count < 3) || (mode === "late-propagation" && count < 13)) { process.stderr.write("npm error E404/503 propagation delay"); process.exit(1); }
 const response = { version: "0.7.0", dist: { integrity: ${JSON.stringify(integrity)}, tarball: "https://registry.npmjs.org/@davidahmann/mill/-/mill-0.7.0.tgz", attestations: { url: "https://registry.npmjs.org/attestations", provenance: { predicateType: "https://slsa.dev/provenance/v1" } } }, "dist-tags": { latest: "0.7.0" } };
 if (mode === "integrity-conflict") response.dist.integrity = "sha512-other";
 if (mode === "version-conflict") response.version = "0.6.0";
@@ -60,6 +61,10 @@ process.stdout.write(JSON.stringify(response));
 `,
           { mode: 0o755 },
         );
+        const environment = { ...process.env };
+        if (mode === "late-propagation")
+          delete environment.MILL_NPM_METADATA_ATTEMPTS;
+        else environment.MILL_NPM_METADATA_ATTEMPTS = "3";
         const result = spawnSync(
           process.execPath,
           [
@@ -72,11 +77,10 @@ process.stdout.write(JSON.stringify(response));
             encoding: "utf8",
             timeout: 10_000,
             env: {
-              ...process.env,
+              ...environment,
               PATH: `${temporary.path}${path.delimiter}${process.env.PATH ?? ""}`,
               TEST_MODE: mode,
               TEST_COUNT: file("count"),
-              MILL_NPM_METADATA_ATTEMPTS: "3",
               MILL_NPM_METADATA_DELAY_MS: "0",
             },
           },

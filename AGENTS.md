@@ -320,6 +320,12 @@ Reconcile exact assets and obtain owner disposition before changing an existing
 release. Preserve failed runs, tags and artifact bytes. A later npm dist-tag or
 GitHub Latest change needs authoritative readback, not a rebuild.
 
+The protected finalization-only recovery workflow runs from reviewed `main` and
+separately verifies the original tag, qualified candidate and successful npm
+publish step. It cannot publish npm or overwrite an existing GitHub Release.
+Retain the original failed workflow as evidence and bind the recovery source
+separately. Follow the narrower recovery procedure in `docs/release.md`.
+
 ## Engineering rules
 
 - Node.js 24.20.0, TypeScript, ESM, strict types, and exact dependency pins.

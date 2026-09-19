@@ -33,14 +33,14 @@ function bounded(value, fallback, minimum, maximum, name) {
 }
 const attempts = bounded(
   process.env.MILL_NPM_METADATA_ATTEMPTS,
-  12,
+  20,
   1,
   20,
   "MILL_NPM_METADATA_ATTEMPTS",
 );
 const delayMs = bounded(
   process.env.MILL_NPM_METADATA_DELAY_MS,
-  10_000,
+  30_000,
   0,
   60_000,
   "MILL_NPM_METADATA_DELAY_MS",
