@@ -96,6 +96,7 @@ try {
     "schemas/run-timeline.schema.json",
     "schemas/source-manifest.schema.json",
     "schemas/support-tuple.schema.json",
+    "scripts/maintainer-review.mjs",
     "schemas/specification-proposal.schema.json",
     "schemas/task-packet.schema.json",
     "schemas/validation-evidence.schema.json",
@@ -625,7 +626,13 @@ if(args.includes("--output-schema")){
   const candidate=execFileSync(${JSON.stringify(gitExecutable)},["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
   const prompt=readFileSync(0,"utf8");
   const scope=JSON.parse(prompt.split("Review scope JSON: ")[1]?.split("\\n")[0]??"null");
-  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:"clean",findings:[]});
+  const schema=JSON.parse(await readFile(args[args.indexOf("--output-schema")+1],"utf8"));
+  if(Object.hasOwn(schema.properties,"gate"))process.exit(2);
+  let scenario={};
+  try{scenario=JSON.parse(await readFile(new URL("./review-scenario.json",import.meta.url),"utf8"))}catch(error){if(error.code!=="ENOENT")throw error}
+  const findings=scenario.severity?[{id:"PACKED-F1",severity:scenario.severity,class:"correctness",title:"Packed review policy fixture",body:"Synthetic review finding retained by the packed lifecycle.",file:"src/value.js",line:1}]:[];
+  const gate=scenario.injectGate?{schemaVersion:"1",policy:"p0_p1",configDigest:"sha256:"+"0".repeat(64),blockingFindingIds:[],advisoryFindingIds:["PACKED-F1"]}:undefined;
+  const text=JSON.stringify({schemaVersion:"1",candidateCommit:candidate,...(scope===null?{}:{scope}),summary:findings.length?"fixture finding":"clean",findings,...(gate===undefined?{}:{gate})});
   const outputIndex=args.indexOf("--output-last-message");
   if(outputIndex<0||!args[outputIndex+1])process.exit(2);
   await writeFile(args[outputIndex+1],text,{mode:0o600});
@@ -1002,6 +1009,149 @@ else process.exit(2);
   if (observed.data.run.status !== "awaiting_human") {
     throw new Error("packed lifecycle did not reach the human merge gate");
   }
+
+  // Fresh, independent fixtures exercise the new packed review contracts without
+  // changing the five-step legacy sequence or claiming real provider behavior.
+  for (const scenario of [
+    { id: "p2-opt-in", severity: "P2", optIn: true, passes: true },
+    { id: "p1-opt-in", severity: "P1", optIn: true, passes: false },
+    { id: "p2-legacy", severity: "P2", optIn: false, passes: false },
+    {
+      id: "provider-gate",
+      severity: "P1",
+      optIn: true,
+      passes: false,
+      injectGate: true,
+    },
+  ]) {
+    const fixture = path.join(temporary, `review-${scenario.id}`);
+    command(
+      gitExecutable,
+      ["clone", "--quiet", "--no-hardlinks", consumer, fixture],
+      temporary,
+    );
+    command(
+      gitExecutable,
+      ["remote", "set-url", "origin", "https://github.com/example/app.git"],
+      fixture,
+    );
+    if (scenario.optIn) {
+      const configPath = path.join(fixture, "mill.yaml");
+      const config = await readFile(configPath, "utf8");
+      await writeFile(configPath, `${config}review:\n  blocking: p0_p1\n`);
+      command(gitExecutable, ["add", "mill.yaml"], fixture);
+      command(
+        gitExecutable,
+        [
+          "-c",
+          "user.name=Mill Package Test",
+          "-c",
+          "user.email=mill-package@example.invalid",
+          "commit",
+          "--no-gpg-sign",
+          "-m",
+          "test: approve packed review policy",
+        ],
+        fixture,
+      );
+    }
+    await writeFile(
+      path.join(tools, "review-scenario.json"),
+      JSON.stringify(scenario),
+      { mode: 0o600 },
+    );
+    const environment = {
+      ...canaryEnvironment,
+      MILL_STATE_HOME: path.join(state, `review-${scenario.id}`),
+      MILL_GH_PATH: gh,
+      MILL_GIT_PATH: git,
+    };
+    const mill = (args) =>
+      JSON.parse(
+        command(
+          bin,
+          ["--json", "--cwd", fixture, ...args],
+          fixture,
+          environment,
+        ),
+      );
+    const task = "product/tasks/canary-1.yaml";
+    const qualification = mill(["qualify", "--baseline", "--task", task]);
+    const started = mill([
+      "run",
+      "--task",
+      task,
+      "--approve",
+      qualification.data.approvalDigest,
+      "--attended",
+    ]);
+    const scenarioRun = started.data.run.id;
+    mill(["verify", "--task", task, "--run", scenarioRun]);
+    const reviewProcess = spawnSync(
+      bin,
+      [
+        "--json",
+        "--cwd",
+        fixture,
+        "review",
+        "--task",
+        task,
+        "--run",
+        scenarioRun,
+      ],
+      { cwd: fixture, env: environment, encoding: "utf8", timeout: 120_000 },
+    );
+    const review = JSON.parse(reviewProcess.stdout);
+    const status = mill(["status", "--run", scenarioRun]).data.run;
+    if (
+      (scenario.passes
+        ? reviewProcess.status !== 0
+        : reviewProcess.status === 0) ||
+      status.status !== (scenario.passes ? "reviewed" : "blocked") ||
+      status.repairCount !== 0
+    ) {
+      throw new Error(`packed ${scenario.id} review admission failed`);
+    }
+    if (scenario.injectGate) {
+      if (
+        review.reasons?.[0]?.code !== "INVALID_REVIEW_RESULT" ||
+        status.blockCode !== "INVALID_REVIEW_RESULT"
+      ) {
+        throw new Error("packed reviewer supplied a controller-owned receipt");
+      }
+    } else {
+      const evidence = review.data.review;
+      const ids = scenario.passes ? "advisoryFindingIds" : "blockingFindingIds";
+      if (
+        evidence.findings.length !== 1 ||
+        evidence.findings[0]?.severity !== scenario.severity ||
+        (scenario.optIn
+          ? evidence.gate?.[ids]?.[0] !== "PACKED-F1" ||
+            evidence.gate?.configDigest !== status.configDigest
+          : evidence.gate !== undefined) ||
+        (!scenario.passes && status.blockCode !== "REVIEW_FINDINGS")
+      ) {
+        throw new Error(`packed ${scenario.id} findings were not preserved`);
+      }
+      const outcome = mill(["outcome", "--run", scenarioRun]);
+      if (
+        outcome.data.review.status !==
+          (scenario.passes ? "advisories" : "findings") ||
+        outcome.data.review.findingCounts[scenario.severity] !== 1
+      ) {
+        throw new Error(`packed ${scenario.id} outcome classification failed`);
+      }
+      if (scenario.passes) {
+        const plan = mill(["pr", "plan", "--task", task, "--run", scenarioRun]);
+        if (plan.data.delivery.reviewBlocking !== "p0_p1") {
+          throw new Error("packed draft plan lost the frozen review policy");
+        }
+      }
+    }
+  }
+  process.stdout.write(
+    "package review-policy canary passed: opt-in P2 advisory, opt-in P1 block, legacy P2 block, provider receipt rejection (fixture adapters)\n",
+  );
   process.stdout.write(
     `package draft-PR lifecycle canary passed: ${packResult.filename}\n`,
   );

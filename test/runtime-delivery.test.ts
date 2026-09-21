@@ -450,6 +450,8 @@ async function seedLegacyPostMergeDelivery(
 
 async function reviewedFixture(
   options: {
+    advisoryReview?: boolean;
+    reviewBlocking?: "p0_p1";
     attendedMerge?: boolean;
     adaptationExpiresAt?: string;
     impactExpiresAt?: string;
@@ -468,6 +470,10 @@ async function reviewedFixture(
 }> {
   const fixture = await runtimeFixture({
     propose: true,
+    ...(options.advisoryReview ? { advisoryReview: true } : {}),
+    ...(options.reviewBlocking
+      ? { reviewBlocking: options.reviewBlocking }
+      : {}),
     ...(options.impactExpiresAt === undefined
       ? {}
       : { impactExpiresAt: options.impactExpiresAt }),
@@ -836,6 +842,7 @@ describe("exact-candidate GitHub draft delivery", () => {
     },
   );
   it.each([
+    "advisory_success",
     "merge_receipt_lost",
     "ready_receipt_lost",
     "success",
@@ -848,6 +855,9 @@ describe("exact-candidate GitHub draft delivery", () => {
       const { fixture, runId, candidateCommit, candidateTree } =
         await reviewedFixture({
           attendedMerge: true,
+          ...(scenario === "advisory_success"
+            ? { advisoryReview: true, reviewBlocking: "p0_p1" as const }
+            : {}),
           ...(scenario === "authority_expires_after_ready"
             ? { impactExpiresAt: authorityExpiresAt }
             : {}),
@@ -915,6 +925,36 @@ describe("exact-candidate GitHub draft delivery", () => {
         await expect(
           planMerge({ ...input, method: "merge" }),
         ).rejects.toMatchObject({ code: "MERGE_METHOD_FORBIDDEN" });
+        if (scenario === "advisory_success") {
+          const inputs = await loadRuntimeInputs(
+            fixture.root,
+            fixture.taskPath,
+          );
+          const store = await StateStore.open(
+            inputs.config.repositoryId,
+            await commonGitDirectory(fixture.root),
+          );
+          const current = store.getRun(runId);
+          const saved = current.deliveryJson;
+          if (saved === undefined) throw new Error("missing delivery");
+          const wrong = deliveryRecordSchema.parse(JSON.parse(saved));
+          delete wrong.reviewBlocking;
+          store.setDelivery(
+            runId,
+            JSON.stringify(wrong),
+            "test.policy_changed",
+          );
+          store.close();
+          await expect(
+            planMerge({ ...input, method: "squash" }),
+          ).rejects.toMatchObject({ code: "MERGE_EVIDENCE_STALE" });
+          const restore = await StateStore.open(
+            inputs.config.repositoryId,
+            await commonGitDirectory(fixture.root),
+          );
+          restore.setDelivery(runId, saved, "test.policy_restored");
+          restore.close();
+        }
         const planned = await planMerge({ ...input, method: "squash" });
         expect(planned.plan).toMatchObject({
           markReady: true,
@@ -1169,11 +1209,14 @@ describe("exact-candidate GitHub draft delivery", () => {
     }
   });
 
-  it.each(["normal", "interrupted"])(
+  it.each(["normal", "interrupted", "advisory"])(
     "refreshes a local review missing GitHub preparation without changing the candidate (%s)",
     async (scenario) => {
       const { fixture, runId } = await reviewedFixture({
         postMergeRequiredChecks: ["validate"],
+        ...(scenario === "advisory"
+          ? { advisoryReview: true, reviewBlocking: "p0_p1" as const }
+          : {}),
       });
       const base = (
         await git(fixture.root, ["rev-parse", "main"])
@@ -2682,6 +2725,77 @@ describe("exact-candidate GitHub draft delivery", () => {
       await fixture.cleanup();
     }
   }, 10_000);
+
+  it("retains hosted advisories while requiring explicit approval", async () => {
+    const { fixture, runId, candidateCommit } = await reviewedFixture({
+      reviewBlocking: "p0_p1",
+      advisoryReview: true,
+      githubReviewer: "codex-review",
+    });
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
+    const input = {
+      root: fixture.root,
+      taskPath: fixture.taskPath,
+      runId,
+      adapter,
+    };
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [completedCheck("success")];
+      adapter.feedback = [
+        {
+          id: "p2",
+          actorLogin: "codex-review",
+          priority: "P2",
+          body: "Optional",
+          path: null,
+          line: null,
+          url: "https://github.com/example/app/pull/41#discussion_r1",
+          commitId: candidateCommit,
+        },
+      ];
+      adapter.reviews = [
+        {
+          id: "rejected",
+          actorLogin: "codex-review",
+          state: "CHANGES_REQUESTED",
+          commitId: candidateCommit,
+          body: "",
+          url: "https://github.com/example/app/pull/41#pullrequestreview-1",
+        },
+      ];
+      expect((await observeDraftPr(input)).run.status).not.toBe(
+        "awaiting_human",
+      );
+      if (adapter.reviews[0] === undefined || adapter.feedback[0] === undefined)
+        throw new Error("missing review fixture");
+      adapter.reviews.push({
+        ...adapter.reviews[0],
+        id: "approved",
+        state: "APPROVED",
+      });
+      const ready = await observeDraftPr(input);
+      expect(ready.run.status).toBe("awaiting_human");
+      expect(ready.delivery.observation).toMatchObject({
+        feedback: adapter.feedback,
+      });
+      expect(
+        actionableFeedback(
+          {
+            ...(await adapter.observe()),
+            feedback: [{ ...adapter.feedback[0], priority: "unclassified" }],
+          },
+          { mode: "github_required", requiredReviewerLogins: ["codex-review"] },
+          candidateCommit,
+          "p0_p1",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 
   it("requires an explicit approval and retains unclassified top-level feedback", () => {
     const candidateCommit = "a".repeat(40);

@@ -1,3 +1,4 @@
+import { blockingReviewFindings, blocksReview } from "./review-policy.js";
 import type { z } from "zod";
 import {
   assertEffectAllowsNewWork,
@@ -253,7 +254,9 @@ async function assertReviewedCandidate(
     !validation.passed ||
     validation.candidateCommit !== run.candidateCommit ||
     review.candidateCommit !== run.candidateCommit ||
-    review.findings.length > 0
+    blockingReviewFindings(review, run.configDigest, {
+      policy: inputs.config.review?.blocking,
+    }).length > 0
   ) {
     throw new MillError(
       "LOCAL_EVIDENCE_STALE",
@@ -637,6 +640,7 @@ async function assertDeliveryContinuity(input: {
         JSON.stringify(configuredPostMergeChecks)) ||
     (delivery.legacyPostMergePolicyConfigDigest !== undefined &&
       !hasBoundLegacyPostMergePolicy) ||
+    delivery.reviewBlocking !== inputs.config.review?.blocking ||
     JSON.stringify(delivery.reviewPolicy) !==
       JSON.stringify(config.reviewPolicy) ||
     JSON.stringify(delivery.allowedMergerLogins) !==
@@ -707,13 +711,15 @@ export function actionableFeedback(
   observation: GitHubObservation,
   reviewPolicy: DeliveryRecord["reviewPolicy"],
   candidateCommit: string,
+  blocking?: "p0_p1",
 ): GitHubFeedback[] {
   if (reviewPolicy.mode !== "github_required") return [];
   return observation.feedback.filter(
     (item) =>
       item.commitId === candidateCommit &&
       reviewPolicy.requiredReviewerLogins.includes(item.actorLogin) &&
-      item.priority !== "P3",
+      item.priority !== "P3" &&
+      blocksReview(item.priority, blocking),
   );
 }
 
@@ -862,6 +868,9 @@ export async function planDraftPr(input: {
       postMergeRequiredChecks: postMergeRequiredChecks(config),
       postMergePolicySource: postMergePolicySource(config),
       reviewPolicy: config.reviewPolicy,
+      ...(inputs.config.review === undefined
+        ? {}
+        : { reviewBlocking: inputs.config.review.blocking }),
       allowedMergerLogins: config.allowedMergerLogins,
       allowedMergeMethods: config.allowedMergeMethods,
       effects: existing?.effects ?? [],
@@ -1560,6 +1569,7 @@ export async function observeDraftPr(input: {
       observation,
       delivery.reviewPolicy,
       delivery.candidateCommit,
+      delivery.reviewBlocking,
     );
     const observationRecord = {
       headSha: observation.pullRequest.headSha,
@@ -1567,7 +1577,7 @@ export async function observeDraftPr(input: {
       checkDecision: checks,
       checks: observation.checks,
       reviews: observation.reviews,
-      feedback,
+      feedback: observation.feedback,
       observedAt: new Date().toISOString(),
     };
     if (feedback.length > 0) {

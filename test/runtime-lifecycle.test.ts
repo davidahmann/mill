@@ -86,6 +86,71 @@ async function qualifiedApproval(
 }
 
 describe("local delivery lifecycle", () => {
+  it.each([undefined, "p0_p1"] as const)(
+    "retains P2 evidence with approved policy %s",
+    async (policy) => {
+      const fixture = await runtimeFixture({
+        advisoryReview: true,
+        ...(policy ? { reviewBlocking: policy } : {}),
+      });
+      activate(fixture);
+      try {
+        const started = await startLocalRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          approvalDigest: await qualifiedApproval(fixture),
+        });
+        const input = {
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId: started.run.id,
+        };
+        await verifyRun(input);
+        const result = await reviewRun(input);
+        expect(result.run.status).toBe(policy ? "reviewed" : "blocked");
+        expect(result.review.findings).toHaveLength(1);
+        expect(result.review.gate?.advisoryFindingIds).toEqual(
+          policy ? ["A1"] : undefined,
+        );
+        expect(result.run.repairCount).toBe(0);
+        expect(JSON.stringify(await supportBundle(input))).not.toContain(
+          "PRIVATE-REVIEW-SENTINEL",
+        );
+        if (policy)
+          await expect(resumeRun(input)).rejects.toMatchObject({
+            code: "RUN_NOT_RESUMABLE",
+          });
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+  it("a failing baseline infrastructure probe grants no builder approval", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      await writeFile(
+        path.join(fixture.root, "src/value.js"),
+        "export const value = 0;\n",
+      );
+      await git(fixture.root, ["add", "src/value.js"]);
+      await git(fixture.root, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: failing preparation probe",
+      ]);
+      const result = await qualifyBaseline({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+      });
+      expect(result.approvalDigest).toBeNull();
+      expect(result.evidence.passed).toBe(false);
+      expect((await runStatus({ root: fixture.root })).run).toBeUndefined();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
   it("keeps repeated baseline retained-artifact collection in distinct storage", async () => {
     const fixture = await runtimeFixture();
     activate(fixture);

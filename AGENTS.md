@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.5
+Version: 2.6
 
 Status: normative
 
@@ -15,6 +15,11 @@ explicit human-approved merge capability supersedes browser-only/draft-only
 restrictions solely for the approved attended merge workflow. Builder and
 reviewer forge exclusions remain in force. Historical bootstrap exceptions
 remain closed. All release effects require their own verified identities.
+
+The owner approved the review/delivery follow-through on 2026-09-21. Its scope
+and checks are in `product/review-delivery-follow-through.md`. Use the native
+maintainer path for these Mill control changes; it does not grant a builder
+permission to modify its own frozen controls.
 
 ## Operating Mill
 
@@ -181,6 +186,11 @@ two-step plan/apply wrapper, never as implicit push authority.
   one systemic repair generation; do not churn one PR per comment. A task may
   use two generations only through its explicit `fixture_only` experiment; each
   repaired candidate requires fresh validation and review.
+- A repository may approve top-level `review: { blocking: p0_p1 }` before run
+  admission. The controller records the classification against frozen config.
+  Preserve every finding; only P0/P1 require repair under that policy. Legacy
+  reviews retain their original blocking rules. Required GitHub approval remains
+  separate. See `docs/review-policy.md`.
 - Before any remote attempt, stale full-diff scope may use attended
   `review --refresh --base <exact-provider-commit>`. Preserve candidate, native
   validation, prior receipts, deadline and remaining review budget; do not move

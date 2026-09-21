@@ -18,3 +18,10 @@ to branch protection through the target repository's own reviewed settings.
 Add `node scripts/check-docs.mjs` to the target repository's native validation
 script. The starter detects local-link and stock-phrase mistakes; pair it with a
 review of the changed prose and the technical source that supports each claim.
+
+Routine development updates are grouped only for minor and patch versions. Keep
+qualification-sensitive upgrades, such as compiler or runtime majors and the
+downstream Mill pin, deliberate. The verified Dependabot DCO exception is not an
+exemption from reviewing manifests, lockfiles and affected behavior. Mill's
+standalone maintainer review script can record that exact-candidate review
+before merge; it does not install a required GitHub check.

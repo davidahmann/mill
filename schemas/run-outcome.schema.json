@@ -258,7 +258,13 @@
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["not_recorded", "clean", "findings", "inconsistent"]
+          "enum": [
+            "not_recorded",
+            "clean",
+            "advisories",
+            "findings",
+            "inconsistent"
+          ]
         },
         "candidateCommit": {
           "anyOf": [

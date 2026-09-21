@@ -467,3 +467,13 @@ The release workflow is not a daemon, deployment service, or autonomous release
 authority. Tagging, publication, and GitHub Release creation remain distinct
 maintainer-authorized effects. Support attaches only to the non-expired exact
 tuple and recipe in final evidence.
+
+## Review policy evidence
+
+The optional top-level `review.blocking: p0_p1` setting is frozen in the run's
+configuration digest. A controller-owned review gate partitions the unchanged
+finding IDs into blocking and advisory sets. The worker cannot supply that
+receipt. State, delivery, refresh, merge and outcome readers validate the
+partition and config identity. A missing receipt preserves legacy behavior.
+Delivery records also retain the remote-feedback policy; required GitHub
+approval is evaluated separately. See [the policy](../docs/review-policy.md).

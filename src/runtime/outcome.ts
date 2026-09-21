@@ -1,3 +1,4 @@
+import { blockingReviewFindings, blocksReview } from "./review-policy.js";
 import type { z } from "zod";
 
 import {
@@ -441,7 +442,7 @@ function recordedReviewsPass(
       )
         latest = review.state;
     }
-    return latest === "APPROVED" || latest === "COMMENTED";
+    return latest === "APPROVED";
   });
 }
 
@@ -465,7 +466,8 @@ function recordedFeedbackIsClear(
       delivery.reviewPolicy.requiredReviewerLogins.includes(
         feedback.actorLogin,
       ) &&
-      feedback.priority !== "P3"
+      feedback.priority !== "P3" &&
+      blocksReview(feedback.priority, delivery.reviewBlocking)
     );
   });
 }
@@ -924,6 +926,22 @@ export function projectRunOutcome(input: {
       (evidence.scope.candidateCommit === evidence.candidateCommit &&
         evidence.scope.candidateCommit === run.candidateCommit &&
         evidence.scope.candidateTree === run.candidateTree);
+    let blockingFindings = evidence.findings.length;
+    let policyValid = true;
+    try {
+      blockingFindings = blockingReviewFindings(
+        evidence,
+        run.configDigest,
+      ).length;
+    } catch {
+      policyValid = false;
+      reasons.push(
+        reason(
+          "OUTCOME_REVIEW_POLICY_INVALID",
+          "Stored review classification is invalid.",
+        ),
+      );
+    }
     const reviewMustBeClean = cleanReviewRequired(run, input.timeline);
     const reviewCompletion = latestPhaseCompletion(
       input.timeline,
@@ -936,7 +954,7 @@ export function projectRunOutcome(input: {
       new Set(["review.passed", "review.blocked"]),
     );
     const reviewCompletionMatches =
-      reviewCompletion !== "review.blocked" || evidence.findings.length > 0;
+      reviewCompletion !== "review.blocked" || blockingFindings > 0;
     if (!candidateMatches || !scopeMatches) {
       reasons.push(
         reason(
@@ -945,7 +963,7 @@ export function projectRunOutcome(input: {
         ),
       );
     }
-    if (reviewMustBeClean && evidence.findings.length !== 0) {
+    if (reviewMustBeClean && blockingFindings !== 0) {
       reasons.push(
         reason(
           "OUTCOME_REVIEW_RESULT_MISMATCH",
@@ -965,14 +983,17 @@ export function projectRunOutcome(input: {
     for (const finding of evidence.findings) findingCounts[finding.severity]++;
     review = {
       status:
+        !policyValid ||
         !candidateMatches ||
         !scopeMatches ||
-        (reviewMustBeClean && evidence.findings.length !== 0) ||
+        (reviewMustBeClean && blockingFindings !== 0) ||
         !reviewCompletionMatches
           ? "inconsistent"
           : evidence.findings.length === 0
             ? "clean"
-            : "findings",
+            : blockingFindings === 0
+              ? "advisories"
+              : "findings",
       candidateCommit: evidence.candidateCommit,
       findingCounts,
     };
@@ -1009,6 +1030,7 @@ export function projectRunOutcome(input: {
     const evidence = deliveryStored.value;
     const matches =
       evidence.runId === run.id &&
+      evidence.reviewBlocking === reviewStored.value?.gate?.policy &&
       sameCandidate(run, evidence.candidateCommit, evidence.candidateTree);
     const receiptsMatch = deliveryReceiptsMatch(evidence, run);
     const effects = externalEffectBoundary(input.run);

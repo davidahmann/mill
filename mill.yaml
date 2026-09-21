@@ -1,6 +1,8 @@
 schemaVersion: "1"
 repositoryId: 889e67bd-0768-4f73-9e18-286f2fb8b5f3
 trustCeiling: propose
+review:
+  blocking: p0_p1
 reporting:
   ledgerPath: quality/development-evidence-ledger.yaml
 sensitivePaths: [".env", ".npmrc", ".mill/**"]

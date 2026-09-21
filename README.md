@@ -158,14 +158,14 @@ existing repository.
 
 ```sh
 npm view @davidahmann/mill dist-tags --json
-npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.7.2
+npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.8.0
 npx --no-install millctl --version
 ```
 
-The example selects this source candidate's version, `0.7.2`. Use it after the
+The example selects this source candidate's version, `0.8.0`. Use it after the
 linked release's final evidence confirms publication; an unpublished source
 candidate is not an installable release. See the
-[v0.7.2 scope](docs/releases/v0.7.2.md) and
+[v0.8.0 scope](docs/releases/v0.8.0.md) and
 [planning evidence rules](docs/planning.md#what-passing-evidence-means).
 
 To develop Mill itself from a clean source checkout:
@@ -260,6 +260,12 @@ millctl --json pr open --task product/tasks/TASK.yaml --run <run-id> \
 Mill never treats these commands as approval to mark ready, merge, deploy, or
 release. See the [glossary](docs/glossary.md) before creating or reviewing
 authority files.
+
+Repositories may approve `review: { blocking: p0_p1 }` in `mill.yaml` before
+admitting a run. Mill retains every finding; P0/P1 block and standalone P2/P3
+remain advisory. Existing receiptless reviews keep their previous rules. See
+[review policy and preparation](docs/review-policy.md). Changes outside admitted
+runs use the [maintainer review route](docs/maintainer-review.md).
 
 ## Expert reference
 

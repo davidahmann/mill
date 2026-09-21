@@ -29,3 +29,9 @@ The second synthetic webhook replay in
 uses a separate frozen provider transition and workflow/configuration matrix.
 Its deterministic worker and OCI adapters exercise Mill's lifecycle mechanics;
 they do not contact a provider or establish customer compatibility.
+
+Under the approved P0/P1 review policy, `review.status: advisories` means the
+review gate passed with retained P2/P3 findings. `clean` means no findings were
+reported. Counts include every finding. Receiptless legacy reviews keep their
+original blocking rules; a newer checkout does not reinterpret them. See
+[review policy](review-policy.md).

@@ -13,6 +13,10 @@ bookkeeping, closure, tests, or docs into micro-PRs.
    integration approvals.
 5. Audits, clean-room qualification, genesis distribution, and public alpha.
 
+For native maintainer changes outside an admitted run, use the packaged
+[local review script](docs/maintainer-review.md). It records exact-candidate
+validation and independent review without claiming runtime delivery authority.
+
 For each wave:
 
 1. Freeze one task brief with scope, exclusions, commands, acceptance items,

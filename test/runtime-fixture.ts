@@ -70,6 +70,8 @@ async function git(root: string, args: readonly string[]): Promise<string> {
 export async function runtimeFixture(
   options: {
     reviewRepair?: boolean;
+    advisoryReview?: boolean;
+    reviewBlocking?: "p0_p1";
     twoReviewRepairs?: boolean;
     retryCount?: number;
     repositoryPrefix?: string;
@@ -263,6 +265,7 @@ scenarios:
     `schemaVersion: "1"
 repositoryId: "11111111-1111-4111-8111-111111111111"
 trustCeiling: ${options.propose === true ? "propose" : "build"}
+${options.reviewBlocking === undefined ? "" : "review: { blocking: p0_p1 }"}
 sensitivePaths:
   - .env
 verifier:
@@ -357,7 +360,9 @@ ${
     options.reviewRepair === true
       ? `const source=await readFile(path.join(cwd,"src/value.js"),"utf8");
 const findings=${options.twoReviewRepairs === true ? 'source.includes("value = 2")||source.includes("value = 3")' : 'source.includes("value = 2")'}?[{id:"R1",severity:"P1",class:"correctness",title:"Use the repaired value",body:"Set the value to the next approved value.",file:"src/value.js",line:1}]:[];`
-      : "const findings=[];";
+      : options.advisoryReview === true
+        ? 'const findings=[{id:"A1",severity:"P2",class:"maintainability",title:"Optional improvement",body:"PRIVATE-REVIEW-SENTINEL /private/customer/secret.txt",file:"src/value.js",line:1}];'
+        : "const findings=[];";
   const reviewerUsage =
     options.reviewerCacheInputTokens === undefined
       ? "input_tokens:10,output_tokens:5"

@@ -1751,7 +1751,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
             ? {}
             : { attended: options.attended }),
         });
-        const ok = result.review.findings.length === 0;
+        const ok = result.run.status === "reviewed";
         emit(
           io,
           global.json === true,

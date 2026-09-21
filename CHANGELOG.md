@@ -4,6 +4,21 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-21
+
+### Added
+
+- Optional frozen P0/P1 review policy with retained advisory findings across
+  review, repair, draft delivery, merge and outcome reporting.
+- Packaged exact-candidate maintainer review and receipt checking.
+- Dependency policy validation for Mill and the downstream starter.
+
+### Fixed
+
+- Redact private review and repair payloads from support event output.
+- Exclude scratch worktrees from local tests and lint.
+- Correct starter Dependabot grouping syntax and keep routine majors separate.
+
 ## [0.7.2] - 2026-09-19
 
 ### Fixed
