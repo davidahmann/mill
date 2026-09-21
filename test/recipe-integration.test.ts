@@ -147,12 +147,17 @@ async function cancellingGit(directory: string): Promise<string> {
   const executable = path.join(directory, "git");
   await writeFile(
     executable,
-    `#!${process.execPath}
-const {spawnSync}=require("node:child_process");
-const args=process.argv.slice(2);
-const result=spawnSync(${JSON.stringify(gitExecutable)},args,{env:process.env,stdio:"inherit"});
-if(result.status===0&&args.includes("commit"))process.kill(process.ppid,"SIGINT");
-process.exit(result.status??1);
+    `#!/bin/sh
+# Avoid a Node startup for every Git inspection in this cancellation fixture.
+for argument do
+  if [ "$argument" = commit ]; then
+    ${"'" + gitExecutable.replaceAll("'", "'\\''") + "'"} "$@"
+    result=$?
+    if [ "$result" -eq 0 ]; then kill -INT "$PPID"; fi
+    exit "$result"
+  fi
+done
+exec ${"'" + gitExecutable.replaceAll("'", "'\\''") + "'"} "$@"
 `,
     { mode: 0o755 },
   );
