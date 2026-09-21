@@ -783,6 +783,38 @@ export function githubReviewEvidenceDigest(
   );
 }
 
+export function githubReviewCompletionDigest(
+  observation: Pick<GitHubObservation, "reviews">,
+  reviewPolicy: DeliveryRecord["reviewPolicy"],
+  candidateCommit: string,
+): string | undefined {
+  if (reviewPolicy.mode === "local_only") return undefined;
+  const completions = reviewPolicy.requiredReviewerLogins.map((actorLogin) => {
+    const review = observation.reviews
+      .filter(
+        (item) =>
+          item.actorLogin === actorLogin &&
+          (reviewPolicy.mode === "github_codex_required"
+            ? item.state.startsWith("CODEX_")
+            : !item.state.startsWith("CODEX_")),
+      )
+      .at(-1);
+    return review === undefined
+      ? { actorLogin, review: null }
+      : { actorLogin, review };
+  });
+  return canonicalDigest(
+    JSON.parse(
+      JSON.stringify({
+        schemaVersion: "1",
+        candidateCommit,
+        reviewPolicy,
+        completions,
+      }),
+    ) as JsonValue,
+  );
+}
+
 function feedbackAsReview(
   candidateCommit: string,
   feedback: readonly GitHubFeedback[],

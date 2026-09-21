@@ -1331,6 +1331,7 @@ export const mergeApprovalPlanSchema = z.strictObject({
   actorId: z.number().int().positive(),
   policyDigest: digestSchema,
   reviewEvidenceDigest: digestSchema.optional(),
+  reviewCompletionDigest: digestSchema.optional(),
   method: z.enum(["merge", "squash"]),
   markReady: z.boolean(),
   expiresAt: z.iso.datetime(),

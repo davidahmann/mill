@@ -12,6 +12,7 @@ import { ExitCode, MillError } from "../errors.js";
 import {
   actionableFeedback,
   checkDecision,
+  githubReviewCompletionDigest,
   githubReviewEvidenceDigest,
   reviewsPassed,
   type DeliveryRecord,
@@ -323,6 +324,11 @@ async function preflight(
     observation,
     deadlineMs,
     reviewReady,
+    reviewCompletionDigest: githubReviewCompletionDigest(
+      observation,
+      config.reviewPolicy,
+      candidate.commit,
+    ),
     reviewEvidenceDigest: githubReviewEvidenceDigest(
       observation,
       config.reviewPolicy,
@@ -363,7 +369,8 @@ export async function planMerge(
       !current.observation.pullRequest.draft &&
       prior?.state === "ready_verified" &&
       prior.plan.markReady &&
-      prior.plan.reviewEvidenceDigest === current.reviewEvidenceDigest
+      (prior.plan.reviewCompletionDigest === undefined ||
+        prior.plan.reviewCompletionDigest === current.reviewCompletionDigest)
     )
       throw new MillError(
         "MERGE_NOT_READY",
@@ -394,6 +401,9 @@ export async function planMerge(
       ...(current.reviewEvidenceDigest === undefined
         ? {}
         : { reviewEvidenceDigest: current.reviewEvidenceDigest }),
+      ...(current.reviewCompletionDigest === undefined
+        ? {}
+        : { reviewCompletionDigest: current.reviewCompletionDigest }),
       method: input.method,
       markReady: current.observation.pullRequest.draft,
       expiresAt: new Date(
@@ -472,6 +482,8 @@ export async function applyMerge(
       context.inputs.configDigest !== plan.policyDigest ||
       (plan.reviewEvidenceDigest !== undefined &&
         current.reviewEvidenceDigest !== plan.reviewEvidenceDigest) ||
+      (plan.reviewCompletionDigest !== undefined &&
+        current.reviewCompletionDigest !== plan.reviewCompletionDigest) ||
       current.observation.pullRequest.draft !== plan.markReady
     )
       throw new MillError(
@@ -556,6 +568,7 @@ export async function applyMerge(
       if (
         fresh.observation.defaultBranchHead !== plan.baseCommit ||
         fresh.reviewEvidenceDigest !== plan.reviewEvidenceDigest ||
+        fresh.reviewCompletionDigest !== plan.reviewCompletionDigest ||
         Date.now() >= effectDeadline ||
         cancellationRequested()
       )
