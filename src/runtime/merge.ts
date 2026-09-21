@@ -29,7 +29,7 @@ import {
   commonGitDirectory,
   repositoryRemoteUrl,
 } from "./repository.js";
-import { acquireWriterLease, StateStore } from "./state.js";
+import { acquireWriterLease, StateStore, type RunStatus } from "./state.js";
 
 type MergePlan = z.infer<typeof mergeApprovalPlanSchema>;
 type Approval = NonNullable<DeliveryRecord["mergeApproval"]>;
@@ -45,6 +45,7 @@ interface MergeContext {
   adapter: GitHubAdapter;
   inputs: RuntimeInputs;
   config: ProposeConfig;
+  runStatus: RunStatus;
   save(value: Approval): void;
 }
 
@@ -153,6 +154,7 @@ async function withMergeContext<T>(
       delivery,
       inputs,
       config,
+      runStatus: run.status,
       adapter: input.adapter ?? createGitHubAdapter(input.root),
       save(value) {
         delivery.mergeApproval = value;
@@ -348,6 +350,15 @@ export async function planMerge(
       allowCodexReadiness: true,
     });
     if (
+      context.runStatus === "awaiting_ci" &&
+      !current.observation.pullRequest.draft
+    )
+      throw new MillError(
+        "MERGE_NOT_READY",
+        "Observe the completed hosted review before planning the final merge.",
+        ExitCode.configuration,
+      );
+    if (
       !current.config.allowedMergeMethods.includes(
         input.method === "squash" ? "linear_tree_preserving" : "merge",
       )
@@ -429,6 +440,12 @@ export async function applyMerge(
         ExitCode.configuration,
       );
     const plan = approval.plan;
+    if (context.runStatus === "awaiting_ci" && !plan.markReady)
+      throw new MillError(
+        "MERGE_NOT_READY",
+        "Observe the completed hosted review before applying the final merge.",
+        ExitCode.configuration,
+      );
     const effectDeadline = Math.min(
       Date.now() + context.config.pollTimeoutSeconds * 1000,
       Date.parse(plan.expiresAt),

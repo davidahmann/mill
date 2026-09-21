@@ -659,6 +659,9 @@ describe("exact-candidate GitHub draft delivery", () => {
 
       adapter.reviews = [review("CODEX_COMPLETED")];
       adapter.feedback = [advisory()];
+      await expect(
+        planMerge({ ...input, method: "squash" }),
+      ).rejects.toMatchObject({ code: "MERGE_NOT_READY" });
       expect((await observeDraftPr(input)).run.status).toBe("awaiting_human");
       const merge = await planMerge({ ...input, method: "squash" });
       expect(merge.plan.markReady).toBe(false);
