@@ -327,7 +327,8 @@ The persisted absolute run deadline is reused for verification, review, retry,
 repair, and resume; ordinary checkpoints grant no fresh budget. The explicit
 [candidate recovery](../docs/verifier-recovery.md) boundary may grant one
 separately approved verification/review window after eligible infrastructure
-failure. Its immutable receipt retains the original deadline, failure history,
+failure and expiry of the original deadline. A committed candidate pin is
+required. Its immutable receipt retains the original deadline, failure history,
 controller identity and exact candidate. It grants no builder or repair and
 requires settled worker/container ownership before application. An attempt ID
 plus PID, PGID, and process-start digest is diagnostic state, not signalling

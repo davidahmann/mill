@@ -23,8 +23,8 @@ export const verificationRecoverySchema = z
     checkpointDigest: digest,
     failureSequence: z.number().int().positive(),
     controllerVersion: z.string(),
-    lockDigest: digest.nullable(),
-    pinnedVersion: z.string().nullable(),
+    lockDigest: digest,
+    pinnedVersion: z.string().min(1),
     builderAttempts: z.literal(0),
     repairGenerations: z.literal(0),
   })

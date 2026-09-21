@@ -1184,6 +1184,36 @@ mill:
     ],
     recoveryFixture,
   );
+  const recoveryTaskFile = path.join(
+    recoveryFixture,
+    "product/tasks/canary-1.yaml",
+  );
+  await writeFile(
+    recoveryTaskFile,
+    (await readFile(recoveryTaskFile, "utf8")).replace(
+      "deadlineSeconds: 60",
+      "deadlineSeconds: 20",
+    ),
+  );
+  command(
+    gitExecutable,
+    ["add", "product/tasks/canary-1.yaml"],
+    recoveryFixture,
+  );
+  command(
+    gitExecutable,
+    [
+      "-c",
+      "user.name=Mill Package Test",
+      "-c",
+      "user.email=mill-package@example.invalid",
+      "commit",
+      "--no-gpg-sign",
+      "-m",
+      "test: bound packed recovery deadline",
+    ],
+    recoveryFixture,
+  );
   const recoveryEnvironment = {
     ...canaryEnvironment,
     MILL_STATE_HOME: path.join(state, "verification-recovery"),
@@ -1239,7 +1269,14 @@ mill:
     );
   }
   await rm(path.join(tools, "image-unavailable"));
-  const recoveryExpiry = new Date(Date.now() + 50_000).toISOString();
+  // A fresh allowance must never overlap the original worker authority.
+  await new Promise((resolve) =>
+    setTimeout(
+      resolve,
+      Math.max(0, Date.parse(recoveryRun.deadlineAt) - Date.now() + 50),
+    ),
+  );
+  const recoveryExpiry = new Date(Date.now() + 19_000).toISOString();
   const recoveryProposal = recoveryCall([
     "verification-recovery",
     "plan",

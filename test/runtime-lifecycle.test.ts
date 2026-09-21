@@ -39,6 +39,8 @@ import {
 } from "../src/runtime/repository.js";
 import { acquireWriterLease, StateStore } from "../src/runtime/state.js";
 import { runProcess, type ActiveProcess } from "../src/runtime/process.js";
+import { recoveryDigest } from "../src/runtime/verification-recovery.js";
+import { MILL_VERSION } from "../src/version.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 
 const original = {
@@ -133,13 +135,52 @@ describe("local delivery lifecycle", () => {
       await expect(
         planVerificationRecovery({ ...input, expiresAt }),
       ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+      const lockPath = path.join(fixture.root, "mill.lock");
+      const originalLock = await readFile(lockPath, "utf8");
+      await writeFile(
+        lockPath,
+        originalLock.replace('"0.8.0"', `"${MILL_VERSION}"`),
+      );
+      await expect(
+        planVerificationRecovery({ ...input, expiresAt }),
+      ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
       const db = new DatabaseSync(dbPath);
       db.prepare("UPDATE runs SET deadline_at = ? WHERE id = ?").run(
         "2020-01-01T00:00:00.000Z",
         input.runId,
       );
       db.close();
+      await expect(
+        planVerificationRecovery({ ...input, expiresAt }),
+      ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+      await writeFile(lockPath, originalLock);
       const proposal = await planVerificationRecovery({ ...input, expiresAt });
+      const liveDeadline = new Date(Date.now() + 60000).toISOString();
+      const mutationDb = new DatabaseSync(dbPath);
+      mutationDb
+        .prepare("UPDATE runs SET deadline_at = ? WHERE id = ?")
+        .run(liveDeadline, input.runId);
+      const guardedStore = await StateStore.open(
+        "11111111-1111-4111-8111-111111111111",
+        await commonGitDirectory(fixture.root),
+      );
+      const invalidPlan = {
+        ...proposal.plan,
+        originalDeadlineAt: liveDeadline,
+      };
+      expect(() =>
+        guardedStore.applyVerificationRecovery(
+          input.runId,
+          invalidPlan,
+          recoveryDigest(invalidPlan),
+        ),
+      ).toThrow("expiration");
+      expect(guardedStore.getRun(input.runId).status).toBe("blocked");
+      guardedStore.close();
+      mutationDb
+        .prepare("UPDATE runs SET deadline_at = ? WHERE id = ?")
+        .run("2020-01-01T00:00:00.000Z", input.runId);
+      mutationDb.close();
       expect(proposal.plan.pinnedVersion).toBe("0.8.0");
       await recoverVerification({
         ...input,
@@ -147,6 +188,14 @@ describe("local delivery lifecycle", () => {
         approvalDigest: proposal.approvalDigest,
         attended: true,
       });
+      await writeFile(
+        lockPath,
+        originalLock.replace('"0.8.0"', `"${MILL_VERSION}"`),
+      );
+      await expect(verifyRun(input)).rejects.toMatchObject({
+        code: "VERIFICATION_RECOVERY_UNAVAILABLE",
+      });
+      await writeFile(lockPath, originalLock);
       expect((await verifyRun(input)).evidence.passed).toBe(true);
       expect((await reviewRun(input)).run.status).toBe("reviewed");
       expect(
@@ -162,6 +211,17 @@ describe("local delivery lifecycle", () => {
       const fixture = await runtimeFixture();
       activate(fixture);
       try {
+        await writeFile(
+          path.join(fixture.root, "mill.lock"),
+          `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\n`,
+        );
+        await git(fixture.root, ["add", "mill.lock"]);
+        await git(fixture.root, [
+          "commit",
+          "--no-gpg-sign",
+          "-m",
+          "test: current committed pin",
+        ]);
         const started = await startLocalRun({
           root: fixture.root,
           taskPath: fixture.taskPath,

@@ -1163,6 +1163,13 @@ export class StateStore {
         recoveryError("Recovery is single use.");
       assertRecoveryBinding(run, plan);
       if (
+        !Number.isFinite(Date.parse(run.deadlineAt)) ||
+        Date.parse(run.deadlineAt) > Date.now()
+      )
+        recoveryError(
+          "Recovery requires expiration of the original builder deadline.",
+        );
+      if (
         recoveryDigest(plan) !== approvalDigest ||
         recoveryCheckpoint(this.events(id)) !== plan.checkpointDigest ||
         eligibleVerificationFailure(run, this.events(id)) !==

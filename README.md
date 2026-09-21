@@ -553,7 +553,8 @@ Cancellation records intent without discarding the receipt. Use
 For an eligible pre-command verifier infrastructure failure, inspect the
 [candidate recovery procedure](docs/verifier-recovery.md). It preserves the
 original run and can grant one separately approved verification/review window
-for the unchanged candidate. Tests and independent review remain required.
+after its original deadline expires. The unchanged candidate must have a
+committed version pin. Tests and independent review remain required.
 
 Before any remote attempt, stale review scope can use
 `review --task product/tasks/TASK.yaml --run <run-id> --refresh --base <exact-provider-commit> --attended`.

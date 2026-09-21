@@ -5,10 +5,11 @@ exact digest explicitly and inspect the run's status and timeline. Mill never
 pulls it during verification, and restoring it does not establish passing tests.
 
 Recovery is available only for a committed candidate with an eligible
-infrastructure failure. The task, configuration, frozen context, base, candidate
-commit and tree must still match. Failed tests, changed files, cancellation,
-uncertain workers or containers, and delivery effects require their existing
-reconciliation or disposition.
+infrastructure failure and a valid `mill.lock` committed in that candidate.
+Unpinned candidates cannot use this recovery route. The task, configuration,
+frozen context, base, candidate commit and tree must still match. Failed tests,
+changed files, cancellation, uncertain workers or containers, and delivery
+effects require their existing reconciliation or disposition.
 
 ## One attended recovery window
 
@@ -27,14 +28,14 @@ millctl --json verify --task product/tasks/TASK.yaml --run <run-id>
 millctl --json review --task product/tasks/TASK.yaml --run <run-id>
 ```
 
-Inspect the exact plan before applying it. The approval binds the recorded
-failure history, authority, candidate and recovery controller. Cross-version
-recovery, including a repository without a version pin, requires the original
-deadline to have expired, so the older pinned controller cannot start another
-worker. A newer controller can service only the bound recovery operations; it
-does not silently upgrade the repository's pinned tool. Preserve its exact
-installed artifact and release evidence. Repin the downstream repository through
-a reviewed change after the old run closes.
+Inspect the exact plan before applying it. Every fresh recovery window requires
+the original run deadline to have expired. This prevents an older controller
+from using remaining worker authority. The approval binds the recorded failure,
+immutable candidate pin, invoking checkout, authority and recovery controller. A
+changed checkout pin blocks recovery. A newer controller can service only the
+bound recovery operations; it does not silently upgrade the repository's tool.
+Preserve its installed artifact and release evidence. Repin the downstream
+repository through a reviewed change after the old run closes.
 
 The recovery grants no builder, repair, new candidate or delivery approval.
 P0/P1 findings stop a candidate-only allowance. Required test failures remain

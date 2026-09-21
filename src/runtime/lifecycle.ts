@@ -52,6 +52,7 @@ import {
   removeVerifiedAuthorityWorktree,
   resetCandidateWorktree,
   resolveCommit,
+  readCommittedFile,
   type GitControlSnapshot,
 } from "./repository.js";
 import {
@@ -896,13 +897,30 @@ export async function qualifyBaseline(input: {
 
 async function recoveryLock(
   root: string,
-): Promise<{ pinnedVersion: string | null; lockDigest: string | null }> {
+  candidateCommit: string,
+): Promise<{ pinnedVersion: string; lockDigest: string }> {
   const lock = await readLockStatus(root);
+  if (!lock.found || lock.requiredVersion === undefined)
+    recoveryError("Recovery requires the original committed mill.lock.");
+  let committed: string;
+  try {
+    committed = await readCommittedFile(
+      root,
+      candidateCommit,
+      "mill.lock",
+      256 * 1024,
+    );
+  } catch {
+    recoveryError("The immutable candidate lock cannot be read.");
+  }
+  const source = await safeReadText(root, "mill.lock", 256 * 1024);
+  if (source !== committed)
+    recoveryError(
+      "The invoking checkout's pin differs from the immutable candidate lock.",
+    );
   return {
-    pinnedVersion: lock.requiredVersion ?? null,
-    lockDigest: lock.found
-      ? canonicalDigest(await safeReadText(root, "mill.lock", 256 * 1024))
-      : null,
+    pinnedVersion: lock.requiredVersion,
+    lockDigest: canonicalDigest(committed),
   };
 }
 
@@ -916,7 +934,7 @@ async function verificationDeadline(
     await enforceExactVersion(root);
     return persistedRunDeadline(run);
   }
-  const lock = await recoveryLock(root);
+  const lock = await recoveryLock(root, receipt.candidateCommit);
   if (
     receipt.controllerVersion !== MILL_VERSION ||
     receipt.lockDigest !== lock.lockDigest ||
@@ -946,14 +964,12 @@ async function createVerificationRecoveryPlan(
   assertEffectAllowsNewWork(run);
   const failureSequence = eligibleVerificationFailure(run, store.events(runId));
   const candidate = await assertRunBindings(root, run, inputs);
-  const lock = await recoveryLock(root);
-  if (
-    lock.pinnedVersion !== MILL_VERSION &&
-    Date.parse(run.deadlineAt) > Date.now()
-  )
+  const originalDeadline = Date.parse(run.deadlineAt);
+  if (!Number.isFinite(originalDeadline) || originalDeadline > Date.now())
     recoveryError(
-      "Cross-version recovery requires expiration of the original builder deadline.",
+      "Recovery requires expiration of the original builder deadline.",
     );
+  const lock = await recoveryLock(root, candidate.commit);
   const expiry = Date.parse(expiresAt);
   if (
     !Number.isFinite(expiry) ||

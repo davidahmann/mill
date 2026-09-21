@@ -30,10 +30,12 @@ Acceptance:
   block it.
 - Historical overwritten blocker codes qualify only when the retained event
   history proves the allowed failure and excludes intervening evidence/effects.
+- Recovery requires a valid version pin committed in the candidate.
 - A tool upgrade is explicit. Any exception to the frozen package pin binds the
   recovery controller version to this run and its verification/review only.
-  Cross-version or unpinned recovery requires the original deadline to expire,
-  preventing the old controller from launching a builder or repair.
+  Every new recovery window requires the original deadline to expire, preventing
+  an old controller from launching a builder or repair. Bind the immutable
+  candidate pin and reject invoking-checkout pin drift.
 - Unit/integration and installed CLI tests cover success and adversarial
   boundaries. Full native checks, audit and independent reviews pass before
   merge. Release follows the existing tag/artifact/OIDC/readback procedure.
