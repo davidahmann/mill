@@ -25,6 +25,7 @@ import {
   planDraftPr,
   reconcileDraftPr,
   reviewsPassed,
+  type DeliveryRecord,
 } from "../src/runtime/delivery.js";
 import type {
   GitHubAdapter,
@@ -456,6 +457,7 @@ async function reviewedFixture(
     adaptationExpiresAt?: string;
     impactExpiresAt?: string;
     githubReviewer?: string;
+    githubReviewMode?: "github_required" | "github_codex_required";
     requiredChecks?: readonly string[];
     postMergeRequiredChecks?: readonly string[];
     prepare?: (
@@ -480,7 +482,12 @@ async function reviewedFixture(
     ...(options.attendedMerge === true ? { attendedMerge: true } : {}),
     ...(options.githubReviewer === undefined
       ? {}
-      : { githubReviewer: options.githubReviewer }),
+      : {
+          githubReviewer: options.githubReviewer,
+          ...(options.githubReviewMode === undefined
+            ? {}
+            : { githubReviewMode: options.githubReviewMode }),
+        }),
   });
   if (
     options.requiredChecks !== undefined ||
@@ -558,6 +565,183 @@ async function planAndOpen(input: {
 }
 
 describe("exact-candidate GitHub draft delivery", () => {
+  it("gates GitHub Codex delivery across readiness, exact review evidence, and post-merge readback", async () => {
+    const { fixture, runId, candidateCommit, candidateTree } =
+      await reviewedFixture({
+        attendedMerge: true,
+        githubReviewer: "chatgpt-codex-connector",
+        githubReviewMode: "github_codex_required",
+        reviewBlocking: "p0_p1",
+      });
+    class CodexMergeGitHub extends FakeGitHub {
+      readyCalls = 0;
+      mergeCalls = 0;
+      async strictChecks() {
+        await Promise.resolve();
+        return true;
+      }
+      async markReady() {
+        await Promise.resolve();
+        this.readyCalls++;
+        if (this.pullRequest === null) throw new Error("missing fake PR");
+        this.pullRequest = { ...this.pullRequest, draft: false };
+      }
+      async mergeExact() {
+        await Promise.resolve();
+        this.mergeCalls++;
+        this.merge(candidateTree);
+      }
+    }
+    const adapter = new CodexMergeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
+    const input = {
+      root: fixture.root,
+      taskPath: fixture.taskPath,
+      runId,
+      adapter,
+    };
+    const review = (
+      state: "CODEX_RUNNING" | "CODEX_COMPLETED",
+    ): GitHubReview => ({
+      id: `summary-${state}`,
+      actorLogin: "chatgpt-codex-connector",
+      state,
+      commitId: candidateCommit,
+      body: "",
+      url: "https://github.com/example/app/pull/41#issuecomment-1",
+    });
+    const advisory = (body = "[P2] Optional cleanup"): GitHubFeedback => ({
+      id: "advisory-1",
+      actorLogin: "chatgpt-codex-connector",
+      priority: "P2",
+      body,
+      path: "src/value.js",
+      line: 1,
+      url: "https://github.com/example/app/pull/41#discussion-1",
+      commitId: candidateCommit,
+    });
+    const check = {
+      ...completedCheck("success"),
+      appId: 15368,
+      workflowPath: ".github/workflows/ci.yml",
+      event: "pull_request",
+      headSha: candidateCommit,
+    };
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [check];
+      adapter.reviews = [review("CODEX_RUNNING")];
+      expect((await observeDraftPr(input)).run.status).toBe("awaiting_ci");
+
+      const readiness = await planMerge({ ...input, method: "squash" });
+      expect(readiness.plan.markReady).toBe(true);
+      expect(readiness.plan.reviewEvidenceDigest).toBeUndefined();
+      expect(
+        (
+          await applyMerge({
+            ...input,
+            approvalDigest: readiness.digest,
+            attended: true,
+          })
+        ).state,
+      ).toBe("ready_verified");
+      expect(adapter.readyCalls).toBe(1);
+      expect(adapter.mergeCalls).toBe(0);
+
+      adapter.reviews = [review("CODEX_COMPLETED")];
+      adapter.feedback = [advisory()];
+      expect((await observeDraftPr(input)).run.status).toBe("awaiting_human");
+      const merge = await planMerge({ ...input, method: "squash" });
+      expect(merge.plan.markReady).toBe(false);
+      expect(merge.plan.reviewEvidenceDigest).toMatch(/^sha256:/u);
+      adapter.feedback = [advisory("[P2] Changed after approval")];
+      await expect(
+        applyMerge({
+          ...input,
+          approvalDigest: merge.digest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "MERGE_PLAN_STALE" });
+
+      const fresh = await planMerge({ ...input, method: "squash" });
+      expect(
+        (
+          await applyMerge({
+            ...input,
+            approvalDigest: fresh.digest,
+            attended: true,
+          })
+        ).state,
+      ).toBe("merged");
+      expect(adapter.mergeCalls).toBe(1);
+      adapter.feedback = [{ ...advisory(), id: "blocking-1", priority: "P1" }];
+      adapter.mergeChecks = [
+        { ...check, event: "push", headSha: "c".repeat(40) },
+      ];
+      expect((await finalizeDraftPr(input)).run).toMatchObject({
+        status: "blocked",
+        blockCode: "POST_MERGE_REVIEW_BLOCKED",
+      });
+      adapter.feedback = [advisory()];
+      expect((await finalizeDraftPr(input)).run.status).toBe("closed");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("blocks completed GitHub Codex review when exact-head P1 feedback remains", async () => {
+    const { fixture, runId, candidateCommit } = await reviewedFixture({
+      githubReviewer: "chatgpt-codex-connector",
+      githubReviewMode: "github_codex_required",
+      reviewBlocking: "p0_p1",
+    });
+    const adapter = new FakeGitHub(
+      (await git(fixture.root, ["rev-parse", "main"])).stdout.trim(),
+    );
+    try {
+      await planAndOpen({ fixture, runId, adapter });
+      adapter.checks = [completedCheck("success")];
+      adapter.reviews = [
+        {
+          id: "codex-complete",
+          actorLogin: "chatgpt-codex-connector",
+          state: "CODEX_COMPLETED",
+          commitId: candidateCommit,
+          body: "",
+          url: "https://github.com/example/app/pull/41#issuecomment-1",
+        },
+      ];
+      adapter.feedback = [
+        {
+          id: "p1",
+          actorLogin: "chatgpt-codex-connector",
+          priority: "P1",
+          body: "[P1] Correctness gap",
+          path: "src/value.js",
+          line: 1,
+          url: "https://github.com/example/app/pull/41#discussion-1",
+          commitId: candidateCommit,
+        },
+      ];
+      expect(
+        (
+          await observeDraftPr({
+            root: fixture.root,
+            taskPath: fixture.taskPath,
+            runId,
+            adapter,
+          })
+        ).run,
+      ).toMatchObject({
+        status: "blocked",
+        blockCode: "REMOTE_REVIEW_FINDINGS",
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it.each([
     ["push", "before", false],
     ["push", "after", false],
@@ -2850,6 +3034,70 @@ describe("exact-candidate GitHub draft delivery", () => {
         candidateCommit,
       ),
     ).toBe(true);
+  });
+
+  it("requires exact-head GitHub Codex completion and blocks only configured priorities", () => {
+    const candidateCommit = "a".repeat(40);
+    const policy = {
+      mode: "github_codex_required",
+      requiredReviewerLogins: ["chatgpt-codex-connector"],
+    } as unknown as DeliveryRecord["reviewPolicy"];
+    const observation = {
+      reviews: [
+        {
+          id: "codex-summary",
+          actorLogin: "chatgpt-codex-connector",
+          state: "CODEX_COMPLETED",
+          commitId: candidateCommit,
+          body: "",
+          url: "https://github.com/example/app/pull/41#issuecomment-1",
+        },
+      ],
+      feedback: [],
+    } as Pick<GitHubObservation, "reviews" | "feedback"> as GitHubObservation;
+
+    expect(reviewsPassed(observation, policy, candidateCommit)).toBe(true);
+    expect(
+      reviewsPassed(
+        {
+          ...observation,
+          reviews: observation.reviews.map((review) => ({
+            ...review,
+            state: "CODEX_RUNNING",
+          })),
+        },
+        policy,
+        candidateCommit,
+      ),
+    ).toBe(false);
+    expect(reviewsPassed(observation, policy, "b".repeat(40))).toBe(false);
+
+    const feedback = (priority: "P1" | "P2"): GitHubFeedback => ({
+      id: priority,
+      actorLogin: "chatgpt-codex-connector",
+      priority,
+      body: `[${priority}] finding`,
+      path: "src/index.ts",
+      line: 1,
+      url: `https://github.com/example/app/pull/41#discussion_${priority}`,
+      commitId: candidateCommit,
+    });
+    expect(
+      actionableFeedback(
+        { ...observation, feedback: [feedback("P1")] },
+        policy,
+        candidateCommit,
+        "p0_p1",
+      ),
+    ).toHaveLength(1);
+    expect(
+      actionableFeedback(
+        { ...observation, feedback: [feedback("P2")] },
+        policy,
+        candidateCommit,
+        "p0_p1",
+      ),
+    ).toHaveLength(0);
   });
 
   it("fails closed on PR drift and post-merge evidence until every identity settles", async () => {

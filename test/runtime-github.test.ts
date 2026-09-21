@@ -49,6 +49,10 @@ describe("GitHub CLI adapter", () => {
     const repository = await temporaryDirectory("mill-github-repository-");
     const tools = await temporaryDirectory("mill-github-tools-");
     const gh = path.join(tools.path, "gh");
+    const completedSummary = `<!-- codex-pull-request-review-summary -->
+| Review | Status | Commit | Review trigger |
+| --- | --- | --- | --- |
+| 📝 **Code Review** | ✅ **Completed** | \`${sha.slice(0, 7)}\` | PR opened |`;
     try {
       await writeFile(
         gh,
@@ -75,6 +79,7 @@ else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markP
 else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
 else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
+else if(endpoint.includes("/issues/41/comments?"))console.log(JSON.stringify([[{id:13,user:{login:"codex-review"},body:mode.issueBody??${JSON.stringify(completedSummary)},html_url:"https://github.com/example/app/pull/41#issuecomment-13"}]]));
 else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
 else process.exit(2);
 `,
@@ -157,6 +162,13 @@ else process.exit(2);
             commitId: sha,
             body: "Top-level concern without a priority label",
           },
+          {
+            id: "codex-summary-13",
+            actorLogin: "codex-review",
+            state: "CODEX_COMPLETED",
+            commitId: sha,
+            body: "",
+          },
         ],
         feedback: [
           { priority: "unclassified", commitId: sha, path: null },
@@ -174,9 +186,73 @@ else process.exit(2);
           deadlineMs: Date.now() + 10_000,
         }),
       ).resolves.toMatchObject({
-        reviews: [{ state: "APPROVED", body: "LGTM" }],
+        reviews: [
+          { state: "APPROVED", body: "LGTM" },
+          { state: "CODEX_COMPLETED", commitId: sha },
+        ],
         feedback: [{ priority: "P2", path: "src/index.ts" }],
       });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary
+            .replace("✅ **Completed**", "🔄 **Running**")
+            .replace(sha.slice(0, 7), "b".repeat(7)),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_RUNNING", commitId: null },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          review: {
+            body: "### 💡 Codex Review\n\n**Reviewed commit:** abcdef0\n\nCodex can also answer questions or update the PR",
+          },
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: sha },
+        ],
+        feedback: [{ priority: "P2", path: "src/index.ts" }],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody:
+            "<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | unknown | malformed |",
+        }),
+      );
+      const malformed = await adapter.observe({
+        config,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(
+        malformed.reviews.some((review) => review.state.startsWith("CODEX_")),
+      ).toBe(false);
+      expect(malformed.feedback).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ priority: "unclassified" }),
+        ]),
+      );
       await writeFile(path.join(tools.path, "mode.json"), "{}");
       const calls = await readFile(path.join(tools.path, "calls.log"), "utf8");
       const producerConfig: ProposeConfig = {

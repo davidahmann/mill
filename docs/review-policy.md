@@ -22,6 +22,31 @@ policy was frozen for that delivery. Unclassified feedback blocks. An explicit
 required GitHub approval remains required; advisory findings do not turn a
 rejection or missing approval into approval.
 
+## GitHub review modes
+
+`propose.reviewPolicy` has three modes:
+
+- `local_only` uses Mill's required exact-candidate local review and does not
+  wait for a GitHub reviewer.
+- `github_required` additionally requires an `APPROVED` review from every named
+  login on the exact PR head.
+- `github_codex_required` additionally requires the GitHub Codex summary comment
+  from every named login to report `Completed` for the exact PR head. GitHub
+  Codex posts findings as review comments rather than an approving review, so
+  this mode treats its exact-head summary as completion evidence and evaluates
+  its current-head feedback separately.
+
+For `github_codex_required`, a running, missing, malformed, or stale summary is
+not completion. P0/P1 and unclassified feedback block when the frozen review
+policy is `p0_p1`; standalone P2/P3 remains recorded and advisory. Mill binds
+the complete required-actor review and feedback snapshot into the merge plan.
+Any change before merge invalidates that approval.
+
+GitHub Codex begins its hosted review after a draft is marked ready. With
+attended merge enabled, Mill therefore uses two approvals: the first may only
+mark an exact, green draft ready; after `pr observe` records completed review,
+the second may authorize merge. The first approval cannot merge the PR.
+
 Changing policy does not repair an existing blocked run. Preserve its evidence
 and use a separately approved admission when its configuration, deadline or
 budget no longer permits continuation. Do not edit a stored receipt, reset a

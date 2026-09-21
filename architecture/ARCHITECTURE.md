@@ -48,8 +48,9 @@ exact human-authored task + product/scenario/policy digests
         -> reviewed local candidate or one repair-and-revalidate cycle
         -> exact actor/repository/remote proposal digest
         -> expected-head push + immutable-marker draft PR
-        -> exact-head CI and optional GitHub-review observation
-        -> human readiness and merge
+        -> exact-head CI and configured GitHub-review observation
+        -> separately approved readiness when hosted review starts there
+        -> completed exact-head hosted review and separately approved merge
         -> exact merge/tree/default-branch check readback and closure
 ```
 

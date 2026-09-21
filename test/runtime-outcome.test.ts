@@ -865,6 +865,54 @@ describe("run outcome projection", () => {
     ready.deliveryJson = JSON.stringify(delivery);
     expect(outcome(ready).integrity.status).toBe("consistent");
 
+    const codexReady = run();
+    codexReady.status = "awaiting_human";
+    const codexDelivery = awaitingHumanDelivery();
+    codexDelivery.reviewPolicy = {
+      mode: "github_codex_required",
+      requiredReviewerLogins: ["chatgpt-codex-connector"],
+    };
+    codexDelivery.observation = {
+      headSha: candidateCommit,
+      branchSha: candidateCommit,
+      checks: [
+        {
+          name: "validate",
+          status: "completed",
+          conclusion: "success",
+          headSha: candidateCommit,
+        },
+      ],
+      reviews: [
+        {
+          actorLogin: "chatgpt-codex-connector",
+          state: "CODEX_COMPLETED",
+          commitId: candidateCommit,
+        },
+      ],
+      feedback: [],
+    };
+    codexReady.deliveryJson = JSON.stringify(codexDelivery);
+    expect(outcome(codexReady).integrity.status).toBe("consistent");
+    const completedCodexObservation = codexDelivery.observation as Record<
+      string,
+      unknown
+    >;
+    codexDelivery.observation = {
+      ...completedCodexObservation,
+      reviews: [
+        {
+          actorLogin: "chatgpt-codex-connector",
+          state: "CODEX_RUNNING",
+          commitId: candidateCommit,
+        },
+      ],
+    };
+    codexReady.deliveryJson = JSON.stringify(codexDelivery);
+    expect(outcome(codexReady).integrity.reasons).toContainEqual(
+      expect.objectContaining({ code: "OUTCOME_DELIVERY_RECEIPT_MISMATCH" }),
+    );
+
     delivery.observation = {
       headSha: candidateCommit,
       branchSha: candidateCommit,

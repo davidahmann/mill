@@ -46,6 +46,18 @@ method and readiness action. `merge` and `squash` are the available request
 methods; squash requires the existing `linear_tree_preserving` policy. The
 operator is reauthenticated through the configured local `gh` session.
 
+With `github_codex_required`, a draft can still be in `awaiting_ci` after its
+checks pass because hosted review has not started. `pr merge-plan` may then
+produce a readiness-only plan. Applying it marks the exact PR ready, verifies
+that effect, and stops. Wait for GitHub Codex, run `pr observe`, address any
+P0/P1 or unclassified feedback, and request a new merge plan. That second plan
+includes the digest of the completed exact-head review and feedback snapshot.
+Mill rereads the snapshot immediately before merge and rejects drift.
+
+Do not reuse the readiness approval for merge. A `ready_verified` receipt is
+evidence that the PR left draft state; it is not hosted-review completion or
+merge authority.
+
 A trusted chat integration must authenticate its operator and obtain their
 approval of this exact displayed plan before invoking the CLI. The local
 `attended_operator` receipt is not a signed chat event, an identity federation
@@ -53,10 +65,11 @@ service, or proof that an arbitrary message was human-authored. Keep this
 capability outside all model-controlled builder/reviewer tool bundles.
 
 Mill rechecks policy, native validation, full-diff review, current GitHub
-review, feedback and CI before effects. GitHub's merge API compares the exact PR
-head; it does not offer an atomic base-SHA comparison. Strict branch protection
-and fresh base checks constrain that race, and exact merged-tree readback is
-still required. Do not interpret an API success as verified lifecycle closure.
+review, feedback and CI before effects and during post-merge closure. GitHub's
+merge API compares the exact PR head; it does not offer an atomic base-SHA
+comparison. Strict branch protection and fresh base checks constrain that race,
+and exact merged-tree readback is still required. Do not interpret an API
+success as verified lifecycle closure.
 
 Draft planning, push and PR creation compare the locally reviewed merge-base
 diff with GitHub's authoritative base SHA. An unpushed preparation commit on

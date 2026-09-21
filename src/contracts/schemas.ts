@@ -405,19 +405,18 @@ const repositoryMountDirectorySchema = z
 
 const githubReviewPolicySchema = z
   .strictObject({
-    mode: z.enum(["local_only", "github_required"]),
+    mode: z.enum(["local_only", "github_required", "github_codex_required"]),
     requiredReviewerLogins: z.array(z.string().min(1)),
   })
   .superRefine((policy, context) => {
     if (
-      policy.mode === "github_required" &&
+      policy.mode !== "local_only" &&
       policy.requiredReviewerLogins.length === 0
     ) {
       context.addIssue({
         code: "custom",
         path: ["requiredReviewerLogins"],
-        message:
-          "github_required review policy needs at least one reviewer login",
+        message: "remote review policy needs at least one reviewer login",
       });
     }
   })
@@ -425,7 +424,11 @@ const githubReviewPolicySchema = z
     allOf: [
       {
         if: {
-          properties: { mode: { const: "github_required" } },
+          properties: {
+            mode: {
+              enum: ["github_required", "github_codex_required"],
+            },
+          },
           required: ["mode"],
         },
         then: {
@@ -1327,6 +1330,7 @@ export const mergeApprovalPlanSchema = z.strictObject({
   actorLogin: z.string().min(1),
   actorId: z.number().int().positive(),
   policyDigest: digestSchema,
+  reviewEvidenceDigest: digestSchema.optional(),
   method: z.enum(["merge", "squash"]),
   markReady: z.boolean(),
   expiresAt: z.iso.datetime(),

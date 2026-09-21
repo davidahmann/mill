@@ -425,6 +425,10 @@ function recordedReviewsPass(
 ): boolean {
   if (delivery.reviewPolicy.mode === "local_only") return true;
   if (!Array.isArray(value)) return false;
+  const requiredState =
+    delivery.reviewPolicy.mode === "github_codex_required"
+      ? "CODEX_COMPLETED"
+      : "APPROVED";
   return delivery.reviewPolicy.requiredReviewerLogins.every((login) => {
     let latest: string | undefined;
     for (const entry of value) {
@@ -442,7 +446,7 @@ function recordedReviewsPass(
       )
         latest = review.state;
     }
-    return latest === "APPROVED";
+    return latest === requiredState;
   });
 }
 

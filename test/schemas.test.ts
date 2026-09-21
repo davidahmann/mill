@@ -1142,6 +1142,34 @@ describe("compact schemas", () => {
     expect(
       contractSchemas.millConfig.safeParse(emptyRequiredReview).success,
     ).toBe(false);
+    const codexReview = {
+      ...localReview,
+      propose: {
+        ...localReview.propose,
+        reviewPolicy: {
+          mode: "github_codex_required",
+          requiredReviewerLogins: ["chatgpt-codex-connector"],
+        },
+      },
+    } as const;
+    expect(validate(codexReview)).toBe(true);
+    expect(contractSchemas.millConfig.safeParse(codexReview).success).toBe(
+      true,
+    );
+    const emptyCodexReview = {
+      ...codexReview,
+      propose: {
+        ...codexReview.propose,
+        reviewPolicy: {
+          mode: "github_codex_required",
+          requiredReviewerLogins: [],
+        },
+      },
+    } as const;
+    expect(validate(emptyCodexReview)).toBe(false);
+    expect(contractSchemas.millConfig.safeParse(emptyCodexReview).success).toBe(
+      false,
+    );
     const deliveryValidate = ajv.compile(
       JSON.parse(
         await readFile(

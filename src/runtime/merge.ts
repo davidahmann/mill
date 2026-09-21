@@ -1,6 +1,6 @@
 import { blockingReviewFindings } from "./review-policy.js";
 import type { z } from "zod";
-import { canonicalDigest } from "../contracts/canonical.js";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { assessImpactManifest } from "../planning/impact.js";
 import {
   deliveryRecordSchema,
@@ -12,6 +12,7 @@ import { ExitCode, MillError } from "../errors.js";
 import {
   actionableFeedback,
   checkDecision,
+  githubReviewEvidenceDigest,
   reviewsPassed,
   type DeliveryRecord,
 } from "./delivery.js";
@@ -133,7 +134,11 @@ async function withMergeContext<T>(
       );
     if (
       !readback &&
-      (run.status !== "awaiting_human" ||
+      ((run.status !== "awaiting_human" &&
+        !(
+          run.status === "awaiting_ci" &&
+          config.reviewPolicy.mode === "github_codex_required"
+        )) ||
         run.cancelRequested ||
         run.configDigest !== inputs.configDigest ||
         run.taskDigest !== inputs.taskDigest)
@@ -173,6 +178,7 @@ async function preflight(
   input: MergeInput,
   context: MergeContext,
   limit?: number,
+  options: { allowCodexReadiness?: boolean } = {},
 ) {
   const { inputs, config, delivery, adapter, store } = context;
   assertCurrentAuthority(inputs);
@@ -275,28 +281,52 @@ async function preflight(
       "The open PR identity or head changed.",
       ExitCode.configuration,
     );
-  if (
+  const checksPassed =
     checkDecision(
       config.requiredChecks,
       observation.checks,
       config.checkProducers,
       "pull_request",
       candidate.commit,
-    ).status !== "passed" ||
-    !reviewsPassed(observation, config.reviewPolicy, candidate.commit) ||
-    actionableFeedback(
-      observation,
-      config.reviewPolicy,
-      candidate.commit,
-      delivery.reviewBlocking,
-    ).length !== 0
+    ).status === "passed";
+  const reviewReady = reviewsPassed(
+    observation,
+    config.reviewPolicy,
+    candidate.commit,
+  );
+  const blockingFeedback = actionableFeedback(
+    observation,
+    config.reviewPolicy,
+    candidate.commit,
+    delivery.reviewBlocking,
+  );
+  const readinessOnly =
+    options.allowCodexReadiness === true &&
+    pull.draft &&
+    config.reviewPolicy.mode === "github_codex_required";
+  if (
+    !checksPassed ||
+    blockingFeedback.length !== 0 ||
+    (!reviewReady && !readinessOnly)
   )
     throw new MillError(
       "MERGE_CHECKS_NOT_GREEN",
       "Current producer-bound checks and review must pass before any merge effect.",
       ExitCode.configuration,
     );
-  return { config, binding, candidate, observation, deadlineMs };
+  return {
+    config,
+    binding,
+    candidate,
+    observation,
+    deadlineMs,
+    reviewReady,
+    reviewEvidenceDigest: githubReviewEvidenceDigest(
+      observation,
+      config.reviewPolicy,
+      candidate.commit,
+    ),
+  };
 }
 
 export async function planMerge(
@@ -314,7 +344,9 @@ export async function planMerge(
         "An attempted merge plan must be reconciled, not overwritten.",
         ExitCode.configuration,
       );
-    const current = await preflight(input, context);
+    const current = await preflight(input, context, undefined, {
+      allowCodexReadiness: true,
+    });
     if (
       !current.config.allowedMergeMethods.includes(
         input.method === "squash" ? "linear_tree_preserving" : "merge",
@@ -325,6 +357,9 @@ export async function planMerge(
         "The selected merge method is outside repository policy.",
         ExitCode.configuration,
       );
+    const readinessOnly =
+      current.observation.pullRequest.draft &&
+      current.config.reviewPolicy.mode === "github_codex_required";
     const plan: MergePlan = mergeApprovalPlanSchema.parse({
       schemaVersion: "1",
       repositoryNodeId: current.binding.repositoryNodeId,
@@ -336,6 +371,9 @@ export async function planMerge(
       actorLogin: current.binding.actorLogin,
       actorId: current.binding.actorId,
       policyDigest: context.inputs.configDigest,
+      ...(readinessOnly || current.reviewEvidenceDigest === undefined
+        ? {}
+        : { reviewEvidenceDigest: current.reviewEvidenceDigest }),
       method: input.method,
       markReady: current.observation.pullRequest.draft,
       expiresAt: new Date(
@@ -347,7 +385,7 @@ export async function planMerge(
     });
     const approval = {
       plan,
-      digest: canonicalDigest(plan),
+      digest: canonicalDigest(JSON.parse(JSON.stringify(plan)) as JsonValue),
       state: "planned" as const,
     };
     context.save(approval);
@@ -380,7 +418,9 @@ export async function applyMerge(
     if (
       approval?.state !== "planned" ||
       approval.digest !== input.approvalDigest ||
-      canonicalDigest(approval.plan) !== input.approvalDigest ||
+      canonicalDigest(
+        JSON.parse(JSON.stringify(approval.plan)) as JsonValue,
+      ) !== input.approvalDigest ||
       Date.parse(approval.plan.expiresAt) <= Date.now()
     )
       throw new MillError(
@@ -394,7 +434,9 @@ export async function applyMerge(
       Date.parse(plan.expiresAt),
       authorityDeadline(context.inputs),
     );
-    const current = await preflight(input, context, effectDeadline);
+    const current = await preflight(input, context, effectDeadline, {
+      allowCodexReadiness: plan.markReady,
+    });
     if (
       !readbackMatches(current.observation, plan) ||
       current.observation.defaultBranchHead !== plan.baseCommit ||
@@ -402,6 +444,8 @@ export async function applyMerge(
       current.binding.actorId !== plan.actorId ||
       current.binding.actorLogin !== plan.actorLogin ||
       context.inputs.configDigest !== plan.policyDigest ||
+      (plan.reviewEvidenceDigest !== undefined &&
+        current.reviewEvidenceDigest !== plan.reviewEvidenceDigest) ||
       current.observation.pullRequest.draft !== plan.markReady
     )
       throw new MillError(
@@ -410,7 +454,7 @@ export async function applyMerge(
         ExitCode.configuration,
       );
     if (
-      context.adapter.mergeExact === undefined ||
+      (!plan.markReady && context.adapter.mergeExact === undefined) ||
       (plan.markReady && context.adapter.markReady === undefined)
     )
       throw new MillError(
@@ -471,6 +515,8 @@ export async function applyMerge(
             ExitCode.temporary,
           );
         save("ready_verified");
+        if (current.config.reviewPolicy.mode === "github_codex_required")
+          return approval;
       }
       const fresh = await preflight(input, context, effectDeadline);
       if (
@@ -484,6 +530,12 @@ export async function applyMerge(
           ExitCode.configuration,
         );
       assertCurrentAuthority(context.inputs);
+      if (context.adapter.mergeExact === undefined)
+        throw new MillError(
+          "MERGE_ADAPTER_UNAVAILABLE",
+          "The configured adapter does not implement attended merge.",
+          ExitCode.unavailable,
+        );
       save("merge_started");
       await context.adapter.mergeExact({
         config: current.config,
