@@ -35,7 +35,7 @@ installation. Before adopting a release, inspect its
 [GitHub evidence](https://github.com/davidahmann/mill/releases/latest) and npm
 channel with `npm view @davidahmann/mill dist-tags --json`.
 
-## First reviewed pull request
+## Quick start
 
 Mill's shortest useful path is: inspect the repository, approve the proposed
 authority files, run one bounded task, then approve draft delivery.
