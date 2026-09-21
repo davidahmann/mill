@@ -357,3 +357,11 @@ Native maintainer changes use the
 [standalone review route](maintainer-review.md). Dependabot grouping is checked
 by `npm run check:dependabot`; the checker covers Mill's bounded update policy
 and the shipped starter, not GitHub's full schema.
+
+## Verifier infrastructure recovery
+
+See [candidate recovery](verifier-recovery.md) for the exact plan/apply flow.
+Keep preflight failures separate from failed command evidence. Recovery tests
+must cover unchanged-candidate success, historical blocker provenance, pin
+compatibility, stale approval, cancellation, uncertain ownership, authority
+drift, original-deadline retention and denial of another builder or allowance.

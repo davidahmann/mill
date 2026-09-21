@@ -42,6 +42,7 @@ const lifecycleTransitionEventTypes = new Set([
   "run.closed",
   "run.interrupted",
   "run.ready",
+  "verification.recovery_applied",
   "validation.failed",
   "validation.passed",
   "workspace.setup_failed",
@@ -89,6 +90,9 @@ function isRecordedTransitionAllowed(
 ): boolean {
   return (
     isRunTransitionAllowed(from, to) ||
+    (type === "verification.recovery_applied" &&
+      from === "blocked" &&
+      to === "committed") ||
     (type === "review.refresh_prepared" &&
       ["reviewed", "proposing"].includes(from) &&
       to === "verified") ||

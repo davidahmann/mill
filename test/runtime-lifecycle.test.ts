@@ -1,6 +1,13 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { trackFakeDocker } from "./fake-oci.js";
 import { DatabaseSync } from "node:sqlite";
@@ -19,6 +26,8 @@ import {
   statePurge,
   supportBundle,
   verifyRun,
+  planVerificationRecovery,
+  recoverVerification,
 } from "../src/runtime/lifecycle.js";
 import { buildContextManifest } from "../src/runtime/context.js";
 import { loadRuntimeInputs } from "../src/runtime/inputs.js";
@@ -30,6 +39,8 @@ import {
 } from "../src/runtime/repository.js";
 import { acquireWriterLease, StateStore } from "../src/runtime/state.js";
 import { runProcess, type ActiveProcess } from "../src/runtime/process.js";
+import { recoveryDigest } from "../src/runtime/verification-recovery.js";
+import { MILL_VERSION } from "../src/version.js";
 import { runtimeFixture } from "./runtime-fixture.js";
 
 const original = {
@@ -86,6 +97,275 @@ async function qualifiedApproval(
 }
 
 describe("local delivery lifecycle", () => {
+  it("binds an expired original pin to the recovery controller without changing frozen files", async () => {
+    const fixture = await runtimeFixture();
+    activate(fixture);
+    try {
+      await writeFile(
+        path.join(fixture.root, "mill.lock"),
+        'schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "0.8.0"\n',
+      );
+      await git(fixture.root, ["add", "mill.lock"]);
+      await git(fixture.root, [
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        "test: historical pin",
+      ]);
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      const store = await StateStore.open(
+        "11111111-1111-4111-8111-111111111111",
+        await commonGitDirectory(fixture.root),
+      );
+      store.transition(input.runId, "blocked", "run.blocked", {
+        code: "VERIFIER_IMAGE_UNAVAILABLE",
+      });
+      const dbPath = store.databasePath;
+      store.close();
+      const expiresAt = new Date(Date.now() + 55000).toISOString();
+      await expect(
+        planVerificationRecovery({ ...input, expiresAt }),
+      ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+      const lockPath = path.join(fixture.root, "mill.lock");
+      const originalLock = await readFile(lockPath, "utf8");
+      await writeFile(
+        lockPath,
+        originalLock.replace('"0.8.0"', `"${MILL_VERSION}"`),
+      );
+      await expect(
+        planVerificationRecovery({ ...input, expiresAt }),
+      ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+      const db = new DatabaseSync(dbPath);
+      db.prepare("UPDATE runs SET deadline_at = ? WHERE id = ?").run(
+        "2020-01-01T00:00:00.000Z",
+        input.runId,
+      );
+      db.close();
+      await expect(
+        planVerificationRecovery({ ...input, expiresAt }),
+      ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+      await writeFile(lockPath, originalLock);
+      const proposal = await planVerificationRecovery({ ...input, expiresAt });
+      const liveDeadline = new Date(Date.now() + 60000).toISOString();
+      const mutationDb = new DatabaseSync(dbPath);
+      mutationDb
+        .prepare("UPDATE runs SET deadline_at = ? WHERE id = ?")
+        .run(liveDeadline, input.runId);
+      const guardedStore = await StateStore.open(
+        "11111111-1111-4111-8111-111111111111",
+        await commonGitDirectory(fixture.root),
+      );
+      const invalidPlan = {
+        ...proposal.plan,
+        originalDeadlineAt: liveDeadline,
+      };
+      expect(() =>
+        guardedStore.applyVerificationRecovery(
+          input.runId,
+          invalidPlan,
+          recoveryDigest(invalidPlan),
+        ),
+      ).toThrow("expiration");
+      expect(guardedStore.getRun(input.runId).status).toBe("blocked");
+      guardedStore.close();
+      mutationDb
+        .prepare("UPDATE runs SET deadline_at = ? WHERE id = ?")
+        .run("2020-01-01T00:00:00.000Z", input.runId);
+      mutationDb.close();
+      expect(proposal.plan.pinnedVersion).toBe("0.8.0");
+      await recoverVerification({
+        ...input,
+        expiresAt,
+        approvalDigest: proposal.approvalDigest,
+        attended: true,
+      });
+      await writeFile(
+        lockPath,
+        originalLock.replace('"0.8.0"', `"${MILL_VERSION}"`),
+      );
+      await expect(verifyRun(input)).rejects.toMatchObject({
+        code: "VERIFICATION_RECOVERY_UNAVAILABLE",
+      });
+      await writeFile(lockPath, originalLock);
+      expect((await verifyRun(input)).evidence.passed).toBe(true);
+      expect((await reviewRun(input)).run.status).toBe("reviewed");
+      expect(
+        await readFile(path.join(fixture.root, "mill.lock"), "utf8"),
+      ).toContain('"0.8.0"');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+  it.each([false, true])(
+    "recovers only the unchanged infrastructure-blocked candidate, legacy=%s",
+    async (legacy) => {
+      const fixture = await runtimeFixture();
+      activate(fixture);
+      try {
+        await writeFile(
+          path.join(fixture.root, "mill.lock"),
+          `schemaVersion: "1"\nmill:\n  package: "@davidahmann/mill"\n  version: "${MILL_VERSION}"\n`,
+        );
+        await git(fixture.root, ["add", "mill.lock"]);
+        await git(fixture.root, [
+          "commit",
+          "--no-gpg-sign",
+          "-m",
+          "test: current committed pin",
+        ]);
+        const started = await startLocalRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          approvalDigest: await qualifiedApproval(fixture),
+        });
+        const input = {
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId: started.run.id,
+        };
+        const docker = await readFile(fixture.dockerPath, "utf8");
+        await writeFile(
+          fixture.dockerPath,
+          docker.replace(
+            "const args=process.argv.slice(2);",
+            'const args=process.argv.slice(2);if(args[0]==="image")process.exit(1);',
+          ),
+        );
+        await expect(verifyRun(input)).rejects.toMatchObject({
+          code: "VERIFIER_IMAGE_UNAVAILABLE",
+        });
+        await expect(verifyRun(input)).rejects.toMatchObject({
+          code: "RUN_NOT_COMMITTED",
+        });
+        await expect(reviewRun(input)).rejects.toMatchObject({
+          code: "RUN_NOT_VERIFIED",
+        });
+        expect((await runStatus(input)).run?.blockCode).toBe(
+          "VERIFIER_IMAGE_UNAVAILABLE",
+        );
+        const store = await StateStore.open(
+          "11111111-1111-4111-8111-111111111111",
+          await commonGitDirectory(fixture.root),
+        );
+        const dbPath = store.databasePath;
+        if (legacy)
+          store.replaceBlocker(
+            input.runId,
+            "RUN_NOT_COMMITTED",
+            "run.blocker_replaced",
+          );
+        store.close();
+        await expect(
+          planVerificationRecovery({
+            ...input,
+            expiresAt: new Date(Date.now() + 55000).toISOString(),
+          }),
+        ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+        const db = new DatabaseSync(dbPath);
+        db.prepare("UPDATE runs SET deadline_at = ? WHERE id = ?").run(
+          "2020-01-01T00:00:00.000Z",
+          input.runId,
+        );
+        db.close();
+        await expect(resumeRun(input)).rejects.toMatchObject({
+          code: "RUN_DEADLINE_EXCEEDED",
+        });
+        const expiresAt = new Date(Date.now() + 55000).toISOString();
+        const proposal = await planVerificationRecovery({
+          ...input,
+          expiresAt,
+        });
+        await expect(
+          recoverVerification({
+            ...input,
+            expiresAt,
+            approvalDigest: proposal.approvalDigest,
+            attended: false,
+          }),
+        ).rejects.toMatchObject({ code: "ATTENDANCE_REQUIRED" });
+        await expect(
+          recoverVerification({
+            ...input,
+            expiresAt,
+            approvalDigest: "sha256:" + "0".repeat(64),
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+        const proofStore = await StateStore.open(
+          "11111111-1111-4111-8111-111111111111",
+          await commonGitDirectory(fixture.root),
+        );
+        const pending = path.join(
+          proofStore.directory,
+          "oci-resources",
+          "bad.json",
+        );
+        await mkdir(path.dirname(pending), { recursive: true });
+        await writeFile(pending, "{}");
+        await expect(
+          planVerificationRecovery({ ...input, expiresAt }),
+        ).rejects.toThrow();
+        await rm(pending);
+        proofStore.recordEvent(input.runId, "command.rejected", {
+          code: "TEST_STALE_APPROVAL",
+        });
+        proofStore.close();
+        await expect(
+          recoverVerification({
+            ...input,
+            expiresAt,
+            approvalDigest: proposal.approvalDigest,
+            attended: true,
+          }),
+        ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+        const freshProposal = await planVerificationRecovery({
+          ...input,
+          expiresAt,
+        });
+        const recovered = await recoverVerification({
+          ...input,
+          expiresAt,
+          approvalDigest: freshProposal.approvalDigest,
+          attended: true,
+        });
+        expect(recovered).toMatchObject({
+          status: "committed",
+          candidateCommit: started.run.candidateCommit,
+          attemptCount: 1,
+          repairCount: 0,
+          deadlineAt: "2020-01-01T00:00:00.000Z",
+        });
+        await expect(resumeRun(input)).rejects.toMatchObject({
+          code: "VERIFICATION_RECOVERY_UNAVAILABLE",
+        });
+        await expect(
+          planVerificationRecovery({ ...input, expiresAt }),
+        ).rejects.toMatchObject({ code: "VERIFICATION_RECOVERY_UNAVAILABLE" });
+        await writeFile(fixture.dockerPath, docker);
+        expect((await verifyRun(input)).evidence.passed).toBe(true);
+        expect((await reviewRun(input)).run.status).toBe("reviewed");
+        const readDb = new DatabaseSync(dbPath, { readOnly: true });
+        const row = readDb
+          .prepare(
+            "SELECT envelope_json FROM worker_invocations WHERE run_id = ? AND phase = 'review'",
+          )
+          .get(input.runId) as { envelope_json: string };
+        expect(row.envelope_json).toContain(expiresAt);
+        readDb.close();
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
   it.each([undefined, "p0_p1"] as const)(
     "retains P2 evidence with approved policy %s",
     async (policy) => {
@@ -952,7 +1232,7 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
           taskPath: early.taskPath,
           runId: started.run.id,
         }),
-      ).rejects.toMatchObject({ code: "RUN_NOT_COMMITTED" });
+      ).resolves.toMatchObject({ run: { status: "verified" } });
     } finally {
       await early.cleanup();
     }
@@ -1018,6 +1298,26 @@ writeFileSync(new URL("./baseline-started",import.meta.url),"started");setInterv
         }),
       ).rejects.toMatchObject({ code: "CODEX_PROFILE_UNAVAILABLE" });
       process.env.MILL_CODEX_PATH = fixture.codexPath;
+      const taskFile = path.join(fixture.root, fixture.taskPath);
+      const originalTask = await readFile(taskFile, "utf8");
+      await writeFile(
+        taskFile,
+        originalTask.replace("greater than one.", "greater than two."),
+      );
+      await expect(
+        reviewRun({
+          root: fixture.root,
+          taskPath: fixture.taskPath,
+          runId: started.run.id,
+        }),
+      ).rejects.toMatchObject({ code: "RUN_POLICY_DRIFT" });
+      expect(
+        (await runStatus({ root: fixture.root, runId: started.run.id })).run,
+      ).toMatchObject({
+        status: "blocked",
+        blockCode: "CODEX_PROFILE_UNAVAILABLE",
+      });
+      await writeFile(taskFile, originalTask);
       const reviewed = await reviewRun({
         root: fixture.root,
         taskPath: fixture.taskPath,

@@ -1,3 +1,12 @@
+import {
+  verificationRecoverySchema,
+  assertRecoveryBinding,
+  recoveryCheckpoint,
+  recoveryDigest,
+  eligibleVerificationFailure,
+  recoveryError,
+  type VerificationRecovery,
+} from "./verification-recovery.js";
 import { blockingReviewFindings } from "./review-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
@@ -1123,7 +1132,76 @@ export class StateStore {
     return this.getRun(id);
   }
 
+  verificationRecovery(id: string): VerificationRecovery | undefined {
+    const events = this.events(id).filter(
+      (event) => event.type === "verification.recovery_applied",
+    );
+    if (events.length === 0) return undefined;
+    if (events.length !== 1)
+      recoveryError("Multiple recovery receipts are invalid.");
+    const data = events[0]?.data as {
+      receipt?: string;
+      approvalDigest?: string;
+    };
+    const plan = verificationRecoverySchema.parse(
+      JSON.parse(data.receipt ?? "null"),
+    );
+    if (recoveryDigest(plan) !== data.approvalDigest)
+      recoveryError("Recovery receipt digest mismatch.");
+    assertRecoveryBinding(this.getRun(id), plan);
+    return plan;
+  }
+
+  applyVerificationRecovery(
+    id: string,
+    plan: VerificationRecovery,
+    approvalDigest: string,
+  ): RunRecord {
+    this.#transaction(() => {
+      const run = this.getRun(id);
+      if (this.verificationRecovery(id) !== undefined)
+        recoveryError("Recovery is single use.");
+      assertRecoveryBinding(run, plan);
+      if (
+        !Number.isFinite(Date.parse(run.deadlineAt)) ||
+        Date.parse(run.deadlineAt) > Date.now()
+      )
+        recoveryError(
+          "Recovery requires expiration of the original builder deadline.",
+        );
+      if (
+        recoveryDigest(plan) !== approvalDigest ||
+        recoveryCheckpoint(this.events(id)) !== plan.checkpointDigest ||
+        eligibleVerificationFailure(run, this.events(id)) !==
+          plan.failureSequence ||
+        Date.parse(plan.expiresAt) <= Date.now()
+      )
+        recoveryError("Recovery approval is stale, expired or mismatched.");
+      assertEffectAllowsNewWork(run);
+      this.#database
+        .prepare(
+          "UPDATE runs SET status = 'committed', block_code = NULL, updated_at = ? WHERE id = ?",
+        )
+        .run(new Date().toISOString(), id);
+      this.#event(id, "verification.recovery_applied", {
+        from: "blocked",
+        to: "committed",
+        receipt: JSON.stringify(plan),
+        approvalDigest,
+      });
+    });
+    return this.getRun(id);
+  }
+
+  assertNoRecoveryBuilder(id: string): void {
+    if (this.verificationRecovery(id) !== undefined)
+      recoveryError(
+        "Candidate recovery grants no builder or repair authority.",
+      );
+  }
+
   beginRepair(id: string, maximumRepairGenerations = 1): RunRecord {
+    this.assertNoRecoveryBuilder(id);
     this.#transaction(() => {
       const current = this.getRun(id);
       if (
@@ -1286,6 +1364,10 @@ export class StateStore {
     return row.count + 1;
   }
 
+  assertReviewBudget(id: string, maximum: number): void {
+    this.#assertReviewBudget(this.getRun(id), maximum);
+  }
+
   beginReviewAttempt(id: string, maximum: number): number {
     let attempt = 0;
     this.#transaction(() => {
@@ -1401,6 +1483,7 @@ export class StateStore {
   }
 
   beginBuilderAttempt(id: string, maximum: number): void {
+    this.assertNoRecoveryBuilder(id);
     if (this.getRun(id).cancelRequested) {
       throw new MillError(
         "OPERATOR_CANCELLED",

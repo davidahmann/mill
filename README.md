@@ -158,14 +158,14 @@ existing repository.
 
 ```sh
 npm view @davidahmann/mill dist-tags --json
-npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.8.0
+npm install --save-dev --save-exact --ignore-scripts @davidahmann/mill@0.8.1
 npx --no-install millctl --version
 ```
 
-The example selects this source candidate's version, `0.8.0`. Use it after the
+The example selects this source candidate's version, `0.8.1`. Use it after the
 linked release's final evidence confirms publication; an unpublished source
 candidate is not an installable release. See the
-[v0.8.0 scope](docs/releases/v0.8.0.md) and
+[v0.8.1 scope](docs/releases/v0.8.1.md) and
 [planning evidence rules](docs/planning.md#what-passing-evidence-means).
 
 To develop Mill itself from a clean source checkout:
@@ -549,6 +549,12 @@ Cancellation records intent without discarding the receipt. Use
 `pr merge-reconcile` for readiness/merge; a confirmed merge then requires
 `pr finalize` and green main checks before cleanup. See
 [approval recovery](docs/approvals.md#interruptions).
+
+For an eligible pre-command verifier infrastructure failure, inspect the
+[candidate recovery procedure](docs/verifier-recovery.md). It preserves the
+original run and can grant one separately approved verification/review window
+after its original deadline expires. The unchanged candidate must have a
+committed version pin. Tests and independent review remain required.
 
 Before any remote attempt, stale review scope can use
 `review --task product/tasks/TASK.yaml --run <run-id> --refresh --base <exact-provider-commit> --attended`.
