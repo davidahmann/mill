@@ -639,12 +639,13 @@ describe("exact-candidate GitHub draft delivery", () => {
     try {
       await planAndOpen({ fixture, runId, adapter });
       adapter.checks = [check];
-      adapter.reviews = [review("CODEX_RUNNING")];
-      expect((await observeDraftPr(input)).run.status).toBe("awaiting_ci");
+      adapter.reviews = [review("CODEX_COMPLETED")];
+      adapter.feedback = [advisory()];
+      expect((await observeDraftPr(input)).run.status).toBe("awaiting_human");
 
       const readiness = await planMerge({ ...input, method: "squash" });
       expect(readiness.plan.markReady).toBe(true);
-      expect(readiness.plan.reviewEvidenceDigest).toBeUndefined();
+      expect(readiness.plan.reviewEvidenceDigest).toMatch(/^sha256:/u);
       expect(
         (
           await applyMerge({
@@ -657,8 +658,16 @@ describe("exact-candidate GitHub draft delivery", () => {
       expect(adapter.readyCalls).toBe(1);
       expect(adapter.mergeCalls).toBe(0);
 
-      adapter.reviews = [review("CODEX_COMPLETED")];
-      adapter.feedback = [advisory()];
+      await expect(
+        planMerge({ ...input, method: "squash" }),
+      ).rejects.toMatchObject({ code: "MERGE_NOT_READY" });
+      adapter.reviews = [
+        { ...review("CODEX_RUNNING"), id: "summary-after-ready-running" },
+      ];
+      expect((await observeDraftPr(input)).run.status).toBe("awaiting_ci");
+      adapter.reviews = [
+        { ...review("CODEX_COMPLETED"), id: "summary-after-ready-completed" },
+      ];
       await expect(
         planMerge({ ...input, method: "squash" }),
       ).rejects.toMatchObject({ code: "MERGE_NOT_READY" });

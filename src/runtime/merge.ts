@@ -359,6 +359,18 @@ export async function planMerge(
         ExitCode.configuration,
       );
     if (
+      current.config.reviewPolicy.mode === "github_codex_required" &&
+      !current.observation.pullRequest.draft &&
+      prior?.state === "ready_verified" &&
+      prior.plan.markReady &&
+      prior.plan.reviewEvidenceDigest === current.reviewEvidenceDigest
+    )
+      throw new MillError(
+        "MERGE_NOT_READY",
+        "The hosted review must complete again after the pull request becomes ready.",
+        ExitCode.configuration,
+      );
+    if (
       !current.config.allowedMergeMethods.includes(
         input.method === "squash" ? "linear_tree_preserving" : "merge",
       )
@@ -368,9 +380,6 @@ export async function planMerge(
         "The selected merge method is outside repository policy.",
         ExitCode.configuration,
       );
-    const readinessOnly =
-      current.observation.pullRequest.draft &&
-      current.config.reviewPolicy.mode === "github_codex_required";
     const plan: MergePlan = mergeApprovalPlanSchema.parse({
       schemaVersion: "1",
       repositoryNodeId: current.binding.repositoryNodeId,
@@ -382,7 +391,7 @@ export async function planMerge(
       actorLogin: current.binding.actorLogin,
       actorId: current.binding.actorId,
       policyDigest: context.inputs.configDigest,
-      ...(readinessOnly || current.reviewEvidenceDigest === undefined
+      ...(current.reviewEvidenceDigest === undefined
         ? {}
         : { reviewEvidenceDigest: current.reviewEvidenceDigest }),
       method: input.method,
@@ -532,8 +541,16 @@ export async function applyMerge(
             ExitCode.temporary,
           );
         save("ready_verified");
-        if (current.config.reviewPolicy.mode === "github_codex_required")
+        if (current.config.reviewPolicy.mode === "github_codex_required") {
+          const run = context.store.getRun(input.runId);
+          if (run.status !== "awaiting_ci")
+            context.store.transition(
+              run.id,
+              "awaiting_ci",
+              "delivery.hosted_review_retriggered",
+            );
           return approval;
+        }
       }
       const fresh = await preflight(input, context, effectDeadline);
       if (
