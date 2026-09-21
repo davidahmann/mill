@@ -83,8 +83,8 @@ npx --no-install millctl --json start --prd product/PRD.md --attended
 npx --no-install millctl --json status
 ```
 
-`start` selects one approved ready outcome or resumes its sole active run. The
-long form exposes each boundary separately:
+`millctl start` selects one approved ready outcome or resumes its sole active
+run. The long form exposes each boundary separately:
 
 ```sh
 npx --no-install millctl --json qualify --baseline \
