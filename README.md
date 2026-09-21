@@ -9,6 +9,17 @@ Git worktree. Declared checks run against the committed candidate in a
 no-network OCI verifier. A separate read-only pass reviews the complete diff.
 Only the attended shipper can use your GitHub identity.
 
+## Why Mill
+
+A coding agent can produce a patch, but production delivery also depends on
+clear scope, stable acceptance checks, complete review, and recoverable external
+effects. Mill records those boundaries in the repository and binds each decision
+to the exact candidate it governs.
+
+This keeps product approval, implementation, verification, review, and shipping
+with separate principals while preserving the repository's native commands and
+GitHub workflow.
+
 ## Install
 
 Pin a released version in the repository that will use Mill:
