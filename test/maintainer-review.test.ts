@@ -13,7 +13,12 @@ import { afterEach, describe, expect, it } from "vitest";
 const script = path.resolve("scripts/maintainer-review.mjs");
 const directories: string[] = [];
 const gitBinary = process.env.MILL_GIT_PATH ?? "git";
-function fixture(priority = "P2", malformed = false) {
+function fixture(
+  priority = "P2",
+  malformed = false,
+  attributes?: string,
+  deletedDirectory = false,
+) {
   const directory = mkdtempSync(path.join(tmpdir(), "maintainer-review-test-"));
   directories.push(directory);
   const root = path.join(directory, "repo");
@@ -21,7 +26,13 @@ function fixture(priority = "P2", malformed = false) {
   mkdirSync(root);
   mkdirSync(bin);
   const git = (...args: string[]) => {
-    const result = spawnSync(gitBinary, args, { cwd: root, encoding: "utf8" });
+    const env = { ...process.env };
+    delete env.GIT_NO_REPLACE_OBJECTS;
+    const result = spawnSync(gitBinary, args, {
+      cwd: root,
+      encoding: "utf8",
+      env,
+    });
     if (result.status !== 0) throw new Error(result.stderr);
     return result.stdout.trim();
   };
@@ -29,9 +40,19 @@ function fixture(priority = "P2", malformed = false) {
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.test");
   writeFileSync(path.join(root, "file.txt"), "before\n");
+  if (deletedDirectory) {
+    mkdirSync(path.join(root, "removed"));
+    writeFileSync(
+      path.join(root, "removed", "old.js"),
+      "export const retained = true;\n",
+    );
+  }
+  if (attributes !== undefined)
+    writeFileSync(path.join(root, ".gitattributes"), attributes);
   git("add", ".");
   git("commit", "-qm", "base");
   const base = git("rev-parse", "HEAD");
+  if (deletedDirectory) rmSync(path.join(root, "removed", "old.js"));
   writeFileSync(path.join(root, "file.txt"), "after\n");
   git("commit", "-qam", "candidate");
   const head = git("rev-parse", "HEAD");
@@ -41,12 +62,17 @@ function fixture(priority = "P2", malformed = false) {
     `#!${process.execPath}
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-if (args[args.indexOf('--sandbox') + 1] !== 'read-only' || !args.includes('--ignore-user-config') || process.env.GH_TOKEN || process.env.MILL_GITHUB_TOKEN) process.exit(9);
+if (args[args.indexOf('--sandbox') + 1] !== 'read-only' || !args.includes('--ignore-user-config') || process.env.GH_TOKEN || process.env.MILL_GITHUB_TOKEN || process.env.GIT_NO_REPLACE_OBJECTS !== "1" || process.env.GIT_GRAFT_FILE !== "/dev/null") process.exit(9);
 fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], ${JSON.stringify(malformed ? "{}" : JSON.stringify({ base, head, findings: [{ id: "R1", priority, subsystem: "fixture", description: "file.txt:1 concrete fixture finding" }] }))});
 `,
     { mode: 0o700 },
   );
-  const invoke = (mode: string, extra: string[] = []) =>
+  const invoke = (
+    mode: string,
+    extra: string[] = [],
+    environment: NodeJS.ProcessEnv = {},
+    validation = "console.log('validated')",
+  ) =>
     spawnSync(
       process.execPath,
       [
@@ -61,11 +87,7 @@ fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], ${JSON.stringi
         ...(mode === "run"
           ? [
               "--validation",
-              JSON.stringify([
-                process.execPath,
-                "-e",
-                "console.log('validated')",
-              ]),
+              JSON.stringify([process.execPath, "-e", validation]),
             ]
           : []),
         ...extra,
@@ -78,6 +100,7 @@ fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], ${JSON.stringi
           PATH: `${bin}${path.delimiter}${process.env.PATH}`,
           GH_TOKEN: "test-not-a-secret",
           MILL_GITHUB_TOKEN: "test-not-a-secret",
+          ...environment,
         },
       },
     );
@@ -218,5 +241,148 @@ describe("standalone maintainer review evidence", () => {
     );
     expect(result.status).toBe(1);
     expect(test.invoke("check").status).toBe(1);
+  });
+  it("rejects a replaced base before review and receipt reuse", () => {
+    const test = fixture();
+    test.git("replace", test.base, test.head);
+    expect(test.git("diff", test.base, test.head)).toBe("");
+    expect(test.invoke("run").stderr).toContain("replacement refs");
+    test.git("replace", "-d", test.base);
+    expect(test.invoke("run").status).toBe(0);
+    test.git("replace", test.base, test.head);
+    expect(test.invoke("check").stderr).toContain("replacement refs");
+    test.git("replace", "-d", test.base);
+    expect(test.invoke("check").status).toBe(0);
+  });
+  it("rejects graft metadata even when object interpretation is disabled", () => {
+    const test = fixture();
+    expect(test.invoke("run").status).toBe(0);
+    const common = path.resolve(
+      test.root,
+      test.git("rev-parse", "--git-common-dir"),
+    );
+    writeFileSync(path.join(common, "info", "grafts"), test.head + "\n");
+    expect(test.invoke("check").stderr).toContain("graft metadata");
+  });
+  it.each(["--assume-unchanged", "--skip-worktree"])(
+    "rejects %s hiding modified source",
+    (flag) => {
+      const test = fixture();
+      expect(test.invoke("run").status).toBe(0);
+      test.git("update-index", flag, "file.txt");
+      writeFileSync(path.join(test.root, "file.txt"), "unreviewed\n");
+      expect(test.git("status", "--porcelain")).toBe("");
+      expect(test.invoke("check").stderr).toContain("Hidden Git index");
+    },
+  );
+  it.each([
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_GRAFT_FILE",
+  ])("rejects ambient %s before executing validation", (key) => {
+    const test = fixture();
+    const result = test.invoke("run", [], {
+      [key]: key === "GIT_CONFIG_COUNT" ? "0" : "/unused-overlay",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unsupported Git environment controls");
+  });
+
+  it("forces original-object interpretation during validation", () => {
+    const test = fixture();
+    expect(
+      test.invoke(
+        "run",
+        [],
+        { GIT_NO_REPLACE_OBJECTS: "0" },
+        "if(process.env.GIT_NO_REPLACE_OBJECTS !== '1' || process.env.GIT_GRAFT_FILE !== '/dev/null') process.exit(7); console.log('validated')",
+      ).status,
+    ).toBe(0);
+  });
+  it.each([
+    "diff.external",
+    "diff.hidden.textconv",
+    "diff.hidden.command",
+    "filter.hidden.clean",
+    "include.path",
+    "core.fsmonitor",
+    "core.attributesFile",
+  ])("rejects local %s controls before validation", (key) => {
+    const test = fixture();
+    test.git(
+      "config",
+      key,
+      key === "include.path" ? "/missing-include-fixture" : "/usr/bin/true",
+    );
+    expect(test.invoke("run").stderr).toContain(
+      "Unsupported Git configuration",
+    );
+  });
+  it("rejects harmless configuration drift after review", () => {
+    const test = fixture();
+    expect(test.invoke("run").status).toBe(0);
+    test.git("config", "user.name", "Changed identity");
+    expect(test.invoke("check").stderr).toContain("Receipt identity");
+  });
+  it("rejects configuration mutation during validation", () => {
+    const test = fixture();
+    const validation =
+      "require('node:child_process').execFileSync(" +
+      JSON.stringify(gitBinary) +
+      ", ['config','user.name','Changed validation identity']);";
+    expect(test.invoke("run", [], {}, validation).stderr).toContain(
+      "Validation changed repository identity",
+    );
+  });
+  it("rejects worktree-only executable configuration", () => {
+    const test = fixture();
+    test.git("config", "extensions.worktreeConfig", "true");
+    test.git("config", "--worktree", "diff.external", "/usr/bin/true");
+    expect(test.invoke("run").stderr).toContain(
+      "Unsupported Git configuration",
+    );
+  });
+  it("rejects untracked info attributes", () => {
+    const test = fixture();
+    expect(test.invoke("run").status).toBe(0);
+    const common = path.resolve(
+      test.root,
+      test.git("rev-parse", "--git-common-dir"),
+    );
+    writeFileSync(path.join(common, "info", "attributes"), "* -diff\n");
+    expect(test.invoke("check").stderr).toContain("info/global attributes");
+  });
+  it("rejects tracked diff-hiding attributes", () => {
+    const test = fixture("P2", false, "*.txt -diff\n");
+    expect(test.invoke("run").stderr).toContain("Transforming Git attributes");
+  });
+  it("rejects ignored diff-hiding attributes absent from the committed tree", () => {
+    const test = fixture();
+    writeFileSync(
+      path.join(test.root, ".git", "info", "exclude"),
+      ".gitattributes\n",
+    );
+    writeFileSync(path.join(test.root, ".gitattributes"), "* -diff\n");
+    expect(test.git("status", "--porcelain")).toBe("");
+    expect(test.invoke("run").stderr).toContain("Transforming Git attributes");
+  });
+  it("checks ignored attributes affecting files deleted from the base", () => {
+    const test = fixture("P2", false, undefined, true);
+    writeFileSync(
+      path.join(test.root, ".git", "info", "exclude"),
+      "removed/.gitattributes\n",
+    );
+    writeFileSync(
+      path.join(test.root, "removed", ".gitattributes"),
+      "* -diff\n",
+    );
+    expect(test.git("status", "--porcelain")).toBe("");
+    expect(test.invoke("run").stderr).toContain("Transforming Git attributes");
   });
 });

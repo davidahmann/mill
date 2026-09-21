@@ -6,9 +6,16 @@ fresh Codex reviewer in read-only mode. P0/P1 findings block; P2/P3 findings
 stay in the receipt as advisory. The operator still decides whether the selected
 validation covers the change.
 
-Run from a clean repository, with dependencies already prepared. Supply full
-commit IDs. The base must be an ancestor of the candidate, and the candidate
-must be the current HEAD. Store the receipt outside the repository.
+Run from a clean repository root, with dependencies already prepared. Supply
+full commit IDs. The base must be an ancestor of the candidate, and the
+candidate must be the current HEAD. Store the receipt outside the repository.
+
+Git replacement refs, grafts, hidden index flags and repository/environment
+overrides that can change the inspected bytes are rejected. Local and worktree
+Git configuration must use supported static settings; executable helpers,
+includes and transforming attributes are unsupported. The receipt also binds Git
+control-file digests, so configuration drift requires a new review. The
+validation and reviewer processes disable replacement objects and grafts.
 
 ```sh
 node /path/to/mill/scripts/maintainer-review.mjs run \

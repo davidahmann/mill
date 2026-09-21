@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -46,7 +47,29 @@ const reviewSchema = {
 function insist(condition, message) {
   if (!condition) throw new Error(message);
 }
-function execute(binary, args, input, env = process.env) {
+const gitControls = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_NO_REPLACE_OBJECTS: "1",
+  GIT_ATTR_NOSYSTEM: "1",
+  GIT_GRAFT_FILE: "/dev/null",
+  GIT_OPTIONAL_LOCKS: "0",
+  GIT_PAGER: "cat",
+};
+const validationEnvironment = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  ),
+  ...gitControls,
+};
+const gitEnvironment = {
+  HOME: "/var/empty",
+  LANG: "C",
+  LC_ALL: "C",
+  PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+  ...gitControls,
+};
+function execute(binary, args, input, env = validationEnvironment) {
   const result = spawnSync(binary, args, {
     encoding: "utf8",
     input,
@@ -60,14 +83,209 @@ function execute(binary, args, input, env = process.env) {
   );
   return result.stdout;
 }
+const gitExecutable = realpathSync(
+  execute("/usr/bin/which", [process.env.MILL_GIT_PATH ?? "git"]).trim(),
+);
 const git = (...args) =>
-  execute(process.env.MILL_GIT_PATH ?? "git", args).trim();
+  execute(gitExecutable, args, undefined, gitEnvironment).trim();
+function controlFile(file) {
+  try {
+    const information = lstatSync(file);
+    insist(
+      information.isFile() &&
+        !information.isSymbolicLink() &&
+        information.size <= limit,
+      "Unsafe Git control file",
+    );
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+function staticConfig(key, value) {
+  const sections = key.split(".");
+  const section = sections[0];
+  const name = sections.at(-1);
+  if (section === "user") return ["name", "email"].includes(name);
+  if (section === "core")
+    return [
+      "bare",
+      "filemode",
+      "ignorecase",
+      "logallrefupdates",
+      "precomposeunicode",
+      "repositoryformatversion",
+      "worktree",
+    ].includes(name);
+  if (section === "remote")
+    return (
+      ["fetch", "url", "pushurl"].includes(name) &&
+      !value.toLowerCase().startsWith("ext::")
+    );
+  if (section === "branch")
+    return ["merge", "pushremote", "remote", "vscode-merge-base"].includes(
+      name,
+    );
+  if (section === "extensions")
+    return [
+      "objectformat",
+      "partialclone",
+      "preciousobjects",
+      "refstorage",
+      "worktreeconfig",
+    ].includes(name);
+  if (section === "submodule")
+    return (
+      ["active", "url"].includes(name) &&
+      !value.toLowerCase().startsWith("ext::")
+    );
+  return section === "gc" && name === "auto" && value === "0";
+}
+function gitControlState(commonDirectory) {
+  const files = [
+    path.join(commonDirectory, "config"),
+    path.resolve(git("rev-parse", "--git-path", "config.worktree")),
+  ];
+  const controls = {};
+  for (const [index, file] of files.entries()) {
+    const contents = controlFile(file);
+    controls[index === 0 ? "commonConfig" : "worktreeConfig"] =
+      contents === null ? null : digest(contents);
+    if (contents === null) continue;
+    for (const entry of git(
+      "config",
+      "--no-includes",
+      "--file",
+      file,
+      "--null",
+      "--list",
+    )
+      .split("\0")
+      .filter(Boolean)) {
+      const separator = entry.indexOf("\n");
+      insist(
+        separator > 0 &&
+          staticConfig(entry.slice(0, separator), entry.slice(separator + 1)),
+        "Unsupported Git configuration can alter reviewed bytes or execute helpers",
+      );
+    }
+  }
+  const attributes = [
+    path.join(commonDirectory, "info", "attributes"),
+    path.join(process.env.HOME ?? "/var/empty", ".config", "git", "attributes"),
+    ...(process.env.XDG_CONFIG_HOME
+      ? [path.join(process.env.XDG_CONFIG_HOME, "git", "attributes")]
+      : []),
+  ];
+  for (const [index, file] of attributes.entries()) {
+    const contents = controlFile(file);
+    controls["attributes" + index] =
+      contents === null ? null : digest(contents);
+    insist(
+      contents === null ||
+        contents
+          .split(/\r?\n/)
+          .every((line) => !line.trim() || line.trim().startsWith("#")),
+      "Git info/global attributes are unsupported",
+    );
+  }
+  return controls;
+}
+function assertAttributes(source) {
+  insist(
+    source
+      .split(/\r?\n/)
+      .every(
+        (line) =>
+          !line.trim() ||
+          line.trim().startsWith("#") ||
+          (!line.includes("[attr]") &&
+            !/(?:^|\s)[-!]?(?:filter|working-tree-encoding|diff|binary|text|eol|crlf|ident)(?:=|\s|$)/.test(
+              line,
+            )),
+      ),
+    "Transforming Git attributes are unsupported",
+  );
+}
 function identity(base, head) {
   insist(
     sha.test(base) && sha.test(head),
     "Use full 40-character commit identities",
   );
+  const overlays = Object.keys(process.env).filter(
+    (key) =>
+      key.startsWith("GIT_") &&
+      process.env[key] !== gitControls[key] &&
+      ![
+        "GIT_TERMINAL_PROMPT",
+        "GIT_OPTIONAL_LOCKS",
+        "GIT_PAGER",
+        "GIT_NO_REPLACE_OBJECTS",
+      ].includes(key),
+  );
+  insist(
+    overlays.length === 0,
+    "Unsupported Git environment controls; clear Git overrides before review",
+  );
   const root = realpathSync(git("rev-parse", "--show-toplevel"));
+  insist(
+    realpathSync(process.cwd()) === root,
+    "Run review from the repository root",
+  );
+  insist(
+    git("for-each-ref", "--format=%(refname)", "refs/replace/") === "",
+    "Git replacement refs are forbidden",
+  );
+  const commonDirectory = realpathSync(
+    path.resolve(git("rev-parse", "--git-common-dir")),
+  );
+  const controls = gitControlState(commonDirectory);
+  try {
+    lstatSync(path.join(commonDirectory, "info", "grafts"));
+    throw new Error("Git graft metadata is forbidden");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  insist(
+    git("ls-files", "-v", "-z")
+      .split("\0")
+      .filter(Boolean)
+      .every((entry) => entry.startsWith("H ")),
+    "Hidden Git index flags or non-normal tracked entries are forbidden",
+  );
+  const applicableAttributes = new Set([".gitattributes"]);
+  const reviewedFiles = new Set(
+    [
+      git("ls-files", "-z"),
+      ...[base, head].map((ref) =>
+        git("ls-tree", "-r", "--name-only", "-z", ref),
+      ),
+    ].flatMap((list) => list.split("\0").filter(Boolean)),
+  );
+  for (const file of reviewedFiles) {
+    let directory = path.posix.dirname(file);
+    while (directory !== ".") {
+      applicableAttributes.add(path.posix.join(directory, ".gitattributes"));
+      directory = path.posix.dirname(directory);
+    }
+  }
+  controls.worktreeAttributes = {};
+  for (const file of [...applicableAttributes].sort()) {
+    const contents = controlFile(path.join(root, file));
+    controls.worktreeAttributes[file] =
+      contents === null ? null : digest(contents);
+    if (contents !== null) assertAttributes(contents);
+  }
+  for (const ref of [base, head]) {
+    for (const file of git("ls-tree", "-r", "--name-only", "-z", ref)
+      .split("\0")
+      .filter((file) => path.posix.basename(file) === ".gitattributes")) {
+      assertAttributes(git("cat-file", "blob", `${ref}:${file}`));
+      const contents = controlFile(path.join(root, file));
+      if (contents !== null) assertAttributes(contents);
+    }
+  }
   insist(
     git("status", "--porcelain", "--untracked-files=all") === "",
     "Repository must be clean, including untracked files",
@@ -78,7 +296,7 @@ function identity(base, head) {
     "Base is not an exact commit",
   );
   git("merge-base", "--is-ancestor", base, head);
-  return { root, base, head, tree: git("rev-parse", "HEAD^{tree}") };
+  return { root, base, head, tree: git("rev-parse", "HEAD^{tree}"), controls };
 }
 function readJson(file) {
   insist(statSync(file).size <= limit, "Evidence exceeds size limit");
@@ -217,10 +435,7 @@ function main() {
           LANG: "C.UTF-8",
           LC_ALL: "C.UTF-8",
           PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
-          GIT_CONFIG_GLOBAL: "/dev/null",
-          GIT_CONFIG_NOSYSTEM: "1",
-          GIT_OPTIONAL_LOCKS: "0",
-          GIT_PAGER: "cat",
+          ...gitControls,
           PAGER: "cat",
         }).filter(([, value]) => value !== undefined),
       );
