@@ -576,6 +576,8 @@ describe("exact-candidate GitHub draft delivery", () => {
     class CodexMergeGitHub extends FakeGitHub {
       readyCalls = 0;
       mergeCalls = 0;
+      observeCalls = 0;
+      changeFeedbackOn = 0;
       async strictChecks() {
         await Promise.resolve();
         return true;
@@ -590,6 +592,12 @@ describe("exact-candidate GitHub draft delivery", () => {
         await Promise.resolve();
         this.mergeCalls++;
         this.merge(candidateTree);
+      }
+      override async observe() {
+        this.observeCalls++;
+        if (this.observeCalls === this.changeFeedbackOn)
+          this.feedback = [advisory("[P2] Changed during final preflight")];
+        return super.observe();
       }
     }
     const adapter = new CodexMergeGitHub(
@@ -664,6 +672,16 @@ describe("exact-candidate GitHub draft delivery", () => {
         }),
       ).rejects.toMatchObject({ code: "MERGE_PLAN_STALE" });
 
+      const finalDrift = await planMerge({ ...input, method: "squash" });
+      adapter.changeFeedbackOn = adapter.observeCalls + 2;
+      await expect(
+        applyMerge({
+          ...input,
+          approvalDigest: finalDrift.digest,
+          attended: true,
+        }),
+      ).rejects.toMatchObject({ code: "MERGE_PLAN_STALE" });
+      adapter.changeFeedbackOn = 0;
       const fresh = await planMerge({ ...input, method: "squash" });
       expect(
         (
@@ -3034,6 +3052,28 @@ describe("exact-candidate GitHub draft delivery", () => {
         candidateCommit,
       ),
     ).toBe(true);
+    expect(
+      reviewsPassed(
+        {
+          ...observation,
+          reviews: [
+            {
+              ...firstReview,
+              state: "APPROVED",
+              body: "",
+            },
+            {
+              ...firstReview,
+              id: "codex-summary",
+              state: "CODEX_COMPLETED",
+              body: "",
+            },
+          ],
+        },
+        policy,
+        candidateCommit,
+      ),
+    ).toBe(true);
   });
 
   it("requires exact-head GitHub Codex completion and blocks only configured priorities", () => {
@@ -3057,6 +3097,26 @@ describe("exact-candidate GitHub draft delivery", () => {
     } as Pick<GitHubObservation, "reviews" | "feedback"> as GitHubObservation;
 
     expect(reviewsPassed(observation, policy, candidateCommit)).toBe(true);
+    const completedReview = observation.reviews.at(0);
+    if (completedReview === undefined)
+      throw new Error("missing completed Codex review");
+    expect(
+      reviewsPassed(
+        {
+          ...observation,
+          reviews: [
+            ...observation.reviews,
+            {
+              ...completedReview,
+              id: "codex-invalid",
+              state: "CODEX_INVALID",
+            },
+          ],
+        },
+        policy,
+        candidateCommit,
+      ),
+    ).toBe(false);
     expect(
       reviewsPassed(
         {

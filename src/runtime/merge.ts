@@ -521,6 +521,7 @@ export async function applyMerge(
       const fresh = await preflight(input, context, effectDeadline);
       if (
         fresh.observation.defaultBranchHead !== plan.baseCommit ||
+        fresh.reviewEvidenceDigest !== plan.reviewEvidenceDigest ||
         Date.now() >= effectDeadline ||
         cancellationRequested()
       )

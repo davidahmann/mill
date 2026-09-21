@@ -859,6 +859,11 @@ describe("run outcome projection", () => {
           state: "APPROVED",
           commitId: candidateCommit,
         },
+        {
+          actorLogin: "reviewer",
+          state: "CODEX_COMPLETED",
+          commitId: candidateCommit,
+        },
       ],
       feedback: [],
     };
@@ -884,6 +889,11 @@ describe("run outcome projection", () => {
         },
       ],
       reviews: [
+        {
+          actorLogin: "chatgpt-codex-connector",
+          state: "APPROVED",
+          commitId: candidateCommit,
+        },
         {
           actorLogin: "chatgpt-codex-connector",
           state: "CODEX_COMPLETED",

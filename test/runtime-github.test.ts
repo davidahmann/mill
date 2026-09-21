@@ -79,7 +79,7 @@ else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markP
 else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
 else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
-else if(endpoint.includes("/issues/41/comments?"))console.log(JSON.stringify([[{id:13,user:{login:"codex-review"},body:mode.issueBody??${JSON.stringify(completedSummary)},html_url:"https://github.com/example/app/pull/41#issuecomment-13"}]]));
+else if(endpoint.includes("/issues/41/comments?")){const bodies=mode.issueBodies??[mode.issueBody??${JSON.stringify(completedSummary)}];console.log(JSON.stringify([bodies.map((body,index)=>({id:13+index,user:{login:"codex-review"},body,html_url:"https://github.com/example/app/pull/41#issuecomment-"+(13+index)}))]));}
 else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
 else process.exit(2);
 `,
@@ -247,10 +247,61 @@ else process.exit(2);
       });
       expect(
         malformed.reviews.some((review) => review.state.startsWith("CODEX_")),
-      ).toBe(false);
+      ).toBe(true);
+      expect(malformed.reviews).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            state: "CODEX_INVALID",
+            commitId: sha,
+          }),
+        ]),
+      );
       expect(malformed.feedback).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ priority: "unclassified" }),
+        ]),
+      );
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBodies: [
+            completedSummary,
+            "<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | unknown | malformed |",
+          ],
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          review: {
+            body: "### 💡 Codex Review\n\n**Reviewed commit:** abcdef0\n\n[P1] retain this finding\n\nCodex can also answer questions or update the PR",
+          },
+        }),
+      );
+      const substantive = await adapter.observe({
+        config,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(substantive.feedback).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            priority: "P1",
+            body: "[P1] retain this finding",
+          }),
         ]),
       );
       await writeFile(path.join(tools.path, "mode.json"), "{}");

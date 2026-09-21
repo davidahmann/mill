@@ -737,10 +737,15 @@ export function reviewsPassed(
     const latest = observation.reviews
       .filter(
         (review) =>
-          review.actorLogin === login && review.commitId === candidateCommit,
+          review.actorLogin === login &&
+          (reviewPolicy.mode === "github_codex_required"
+            ? review.state.startsWith("CODEX_")
+            : !review.state.startsWith("CODEX_")),
       )
       .at(-1);
-    return latest?.state === requiredState;
+    return (
+      latest?.state === requiredState && latest.commitId === candidateCommit
+    );
   });
 }
 

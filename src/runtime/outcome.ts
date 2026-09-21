@@ -442,9 +442,14 @@ function recordedReviewsPass(
         return false;
       if (
         review.actorLogin === login &&
-        review.commitId === delivery.candidateCommit
+        (delivery.reviewPolicy.mode === "github_codex_required"
+          ? review.state.startsWith("CODEX_")
+          : !review.state.startsWith("CODEX_"))
       )
-        latest = review.state;
+        latest =
+          review.commitId === delivery.candidateCommit
+            ? review.state
+            : undefined;
     }
     return latest === requiredState;
   });

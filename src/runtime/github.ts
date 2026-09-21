@@ -308,32 +308,46 @@ function codexSummaryReview(
     /\|\s*📝\s*\*\*Code Review\*\*\s*\|([\s\S]*?)\|\s*`([a-f0-9]{7,40})`\s*\|/iu.exec(
       body,
     );
-  if (row === null) return null;
-  const status = row[1] ?? "";
-  const commitPrefix = (row[2] ?? "").toLowerCase();
+  const status = row?.[1] ?? "";
+  const commitPrefix = (row?.[2] ?? "").toLowerCase();
   const state =
     status.includes("✅") && status.includes("**Completed**")
       ? "CODEX_COMPLETED"
       : status.includes("🔄") && status.includes("**Running**")
         ? "CODEX_RUNNING"
-        : null;
-  if (state === null) return null;
+        : "CODEX_INVALID";
   return {
     id: `codex-summary-${integer(item.id, "issue comment ID")}`,
     actorLogin: text(user.login, "issue comment actor login"),
     state,
-    commitId: headSha.startsWith(commitPrefix) ? headSha : null,
+    commitId:
+      state === "CODEX_INVALID" || headSha.startsWith(commitPrefix)
+        ? headSha
+        : null,
     body: "",
     url: text(item.html_url, "issue comment URL"),
   };
 }
 
-function codexReviewEnvelope(body: string): boolean {
-  return (
-    body.includes("### 💡 Codex Review") &&
-    body.includes("**Reviewed commit:**") &&
-    body.includes("Codex can also answer questions or update the PR")
-  );
+function withoutCodexReviewEnvelope(body: string): string {
+  if (
+    !body.includes("### 💡 Codex Review") ||
+    !body.includes("**Reviewed commit:**") ||
+    !body.includes("Codex can also answer questions or update the PR")
+  )
+    return body;
+  return body
+    .split("\n")
+    .filter((line) => {
+      const value = line.trim();
+      return !(
+        value === "### 💡 Codex Review" ||
+        value.startsWith("**Reviewed commit:**") ||
+        value.includes("Codex can also answer questions or update the PR")
+      );
+    })
+    .join("\n")
+    .trim();
 }
 
 function parseChecks(checkValue: unknown, statusValue: unknown): GitHubCheck[] {
@@ -881,13 +895,14 @@ class GhGitHubAdapter implements GitHubAdapter {
     );
     const reviewFeedback = providerReviews.flatMap(
       (review): GitHubFeedback[] => {
-        const reviewPriority = priority(review.body);
+        const reviewBody = codexSummaryActors.has(review.actorLogin)
+          ? withoutCodexReviewEnvelope(review.body)
+          : review.body;
+        const reviewPriority = priority(reviewBody);
         if (
-          review.body.trim().length === 0 ||
+          reviewBody.length === 0 ||
           review.commitId === null ||
-          review.state === "APPROVED" ||
-          (codexSummaryActors.has(review.actorLogin) &&
-            codexReviewEnvelope(review.body))
+          review.state === "APPROVED"
         ) {
           return [];
         }
@@ -896,7 +911,7 @@ class GhGitHubAdapter implements GitHubAdapter {
             id: `review-${review.id}`,
             actorLogin: review.actorLogin,
             priority: reviewPriority,
-            body: review.body,
+            body: reviewBody,
             path: null,
             line: null,
             url: review.url,
