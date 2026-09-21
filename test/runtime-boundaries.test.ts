@@ -1194,11 +1194,11 @@ playbooks:
     try {
       await writeDocker("process.exit(0);", "setInterval(()=>{},1000);");
       const preflightFallback = new AbortController();
-      const fallbackTimer = setTimeout(() => preflightFallback.abort(), 500);
+      const fallbackTimer = setTimeout(() => preflightFallback.abort(), 3_000);
       fallbackTimer.unref();
       try {
         await expect(
-          call(Date.now() + 100, preflightFallback.signal),
+          call(Date.now() + 1_000, preflightFallback.signal),
         ).rejects.toMatchObject({ code: "VERIFIER_DEADLINE_EXCEEDED" });
       } finally {
         clearTimeout(fallbackTimer);

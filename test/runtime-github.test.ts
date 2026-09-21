@@ -79,11 +79,10 @@ Codex can also answer questions or update the PR. Try commenting "@codex address
         `#!${process.execPath}
 import {appendFileSync,existsSync,readFileSync} from "node:fs";
 const modeUrl=new URL("./mode.json",import.meta.url);const mode=existsSync(modeUrl)?JSON.parse(readFileSync(modeUrl,"utf8")):{};
-const callsUrl=new URL("./calls.log",import.meta.url);const priorCalls=existsSync(callsUrl)?readFileSync(callsUrl,"utf8").trim().split("\\n").filter(Boolean).map(JSON.parse):[];
-appendFileSync(callsUrl,JSON.stringify(process.argv.slice(2))+"\\n");
+const callsUrl=new URL("./calls.log",import.meta.url);const priorCalls=existsSync(callsUrl)?readFileSync(callsUrl,"utf8"):"";
 if(process.env.GH_TOKEN!==undefined)appendFileSync(new URL("./token.log",import.meta.url),process.env.GH_TOKEN==="scoped-token"?"present\\n":"unexpected\\n");
 const args=process.argv.slice(2);const endpoint=args.includes("graphql")?"graphql":args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
-const endpointCall=priorCalls.filter((call)=>{const priorEndpoint=call.includes("graphql")?"graphql":call.find((value)=>value.startsWith("repos/"))??call.at(-1)??"";return priorEndpoint===endpoint;}).length;
+const endpointCall=priorCalls.split(JSON.stringify(endpoint)).length-1;appendFileSync(callsUrl,JSON.stringify(args)+"\\n");
 const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:"<!-- mill-delivery-key:fixture -->",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
 const listedPull={...pull};delete listedPull.merged;delete listedPull.merged_by;delete listedPull.merged_at;
 if(endpoint==="user")console.log(JSON.stringify({login:"operator",id:7}));
