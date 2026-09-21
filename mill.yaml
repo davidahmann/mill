@@ -38,7 +38,7 @@ propose:
       postMergeEvent: push
   reviewPolicy:
     mode: github_codex_required
-    requiredReviewerLogins: [chatgpt-codex-connector]
+    requiredReviewerLogins: ["chatgpt-codex-connector[bot]"]
   allowedMergeMethods: [linear_tree_preserving]
   approvalTtlSeconds: 900
   pollTimeoutSeconds: 600

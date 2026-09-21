@@ -239,7 +239,9 @@ scenarios:
       ? "local_only"
       : (options.githubReviewMode ?? "github_required");
   const reviewers =
-    options.githubReviewer === undefined ? "[]" : `[${options.githubReviewer}]`;
+    options.githubReviewer === undefined
+      ? "[]"
+      : JSON.stringify([options.githubReviewer]);
   const proposalConfiguration =
     options.propose === true
       ? `propose:

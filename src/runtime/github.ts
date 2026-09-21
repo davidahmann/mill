@@ -336,18 +336,29 @@ function withoutCodexReviewEnvelope(body: string): string {
     !body.includes("Codex can also answer questions or update the PR")
   )
     return body;
-  return body
-    .split("\n")
-    .filter((line) => {
-      const value = line.trim();
-      return !(
-        value === "### 💡 Codex Review" ||
-        value.startsWith("**Reviewed commit:**") ||
-        value.includes("Codex can also answer questions or update the PR")
-      );
-    })
-    .join("\n")
-    .trim();
+  let insideAbout = false;
+  const substantive: string[] = [];
+  for (const line of body.split("\n")) {
+    const value = line.trim();
+    if (value.startsWith("<details>") && value.includes("About Codex")) {
+      insideAbout = true;
+      continue;
+    }
+    if (insideAbout) {
+      if (value === "</details>") insideAbout = false;
+      continue;
+    }
+    if (
+      value === "### 💡 Codex Review" ||
+      value ===
+        "Here are some automated review suggestions for this pull request." ||
+      value.startsWith("**Reviewed commit:**") ||
+      value.includes("Codex can also answer questions or update the PR")
+    )
+      continue;
+    substantive.push(line);
+  }
+  return substantive.join("\n").trim();
 }
 
 function parseChecks(checkValue: unknown, statusValue: unknown): GitHubCheck[] {

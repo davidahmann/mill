@@ -37,7 +37,7 @@ const config: ProposeConfig = {
   requiredChecks: ["validate"],
   reviewPolicy: {
     mode: "github_required",
-    requiredReviewerLogins: ["codex-review"],
+    requiredReviewerLogins: ["chatgpt-codex-connector[bot]"],
   },
   allowedMergeMethods: ["linear_tree_preserving"],
   approvalTtlSeconds: 900,
@@ -53,6 +53,26 @@ describe("GitHub CLI adapter", () => {
 | Review | Status | Commit | Review trigger |
 | --- | --- | --- | --- |
 | 📝 **Code Review** | ✅ **Completed** | \`${sha.slice(0, 7)}\` | PR opened |`;
+    const fullReviewEnvelope = `
+### 💡 Codex Review
+
+Here are some automated review suggestions for this pull request.
+
+**Reviewed commit:** \`${sha.slice(0, 10)}\`
+
+<details> <summary>ℹ️ About Codex in GitHub</summary>
+<br/>
+
+[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you
+- Open a pull request for review
+- Mark a draft as ready
+- Comment "@codex review".
+
+If Codex has suggestions, it will comment; otherwise it will react with 👍.
+
+Codex can also answer questions or update the PR. Try commenting "@codex address that feedback".
+
+</details>`;
     try {
       await writeFile(
         gh,
@@ -78,9 +98,9 @@ else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({enforce_adm
 else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markPullRequestReadyForReview:{pullRequest:{id:"PR_example",isDraft:false}}}}));
 else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
-else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
-else if(endpoint.includes("/issues/41/comments?")){const bodies=mode.issueBodies??[mode.issueBody??${JSON.stringify(completedSummary)}];console.log(JSON.stringify([bodies.map((body,index)=>({id:13+index,user:{login:"codex-review"},body,html_url:"https://github.com/example/app/pull/41#issuecomment-"+(13+index)}))]));}
-else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
+else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"chatgpt-codex-connector[bot]"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
+else if(endpoint.includes("/issues/41/comments?")){const bodies=mode.issueBodies??[mode.issueBody??${JSON.stringify(completedSummary)}];console.log(JSON.stringify([bodies.map((body,index)=>({id:13+index,user:{login:"chatgpt-codex-connector[bot]"},body,html_url:"https://github.com/example/app/pull/41#issuecomment-"+(13+index)}))]));}
+else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"chatgpt-codex-connector[bot]"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
 else process.exit(2);
 `,
         { mode: 0o755 },
@@ -157,14 +177,14 @@ else process.exit(2);
         reviews: [
           {
             id: "11",
-            actorLogin: "codex-review",
+            actorLogin: "chatgpt-codex-connector[bot]",
             state: "COMMENTED",
             commitId: sha,
             body: "Top-level concern without a priority label",
           },
           {
             id: "codex-summary-13",
-            actorLogin: "codex-review",
+            actorLogin: "chatgpt-codex-connector[bot]",
             state: "CODEX_COMPLETED",
             commitId: sha,
             body: "",
@@ -216,7 +236,7 @@ else process.exit(2);
         path.join(tools.path, "mode.json"),
         JSON.stringify({
           review: {
-            body: "### 💡 Codex Review\n\n**Reviewed commit:** abcdef0\n\nCodex can also answer questions or update the PR",
+            body: fullReviewEnvelope,
           },
         }),
       );
@@ -287,7 +307,10 @@ else process.exit(2);
         path.join(tools.path, "mode.json"),
         JSON.stringify({
           review: {
-            body: "### 💡 Codex Review\n\n**Reviewed commit:** abcdef0\n\n[P1] retain this finding\n\nCodex can also answer questions or update the PR",
+            body: fullReviewEnvelope.replace(
+              "<details>",
+              "[P1] retain this finding\n\n<details>",
+            ),
           },
         }),
       );

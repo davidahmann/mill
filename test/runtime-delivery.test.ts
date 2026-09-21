@@ -569,7 +569,7 @@ describe("exact-candidate GitHub draft delivery", () => {
     const { fixture, runId, candidateCommit, candidateTree } =
       await reviewedFixture({
         attendedMerge: true,
-        githubReviewer: "chatgpt-codex-connector",
+        githubReviewer: "chatgpt-codex-connector[bot]",
         githubReviewMode: "github_codex_required",
         reviewBlocking: "p0_p1",
       });
@@ -613,7 +613,7 @@ describe("exact-candidate GitHub draft delivery", () => {
       state: "CODEX_RUNNING" | "CODEX_COMPLETED",
     ): GitHubReview => ({
       id: `summary-${state}`,
-      actorLogin: "chatgpt-codex-connector",
+      actorLogin: "chatgpt-codex-connector[bot]",
       state,
       commitId: candidateCommit,
       body: "",
@@ -621,7 +621,7 @@ describe("exact-candidate GitHub draft delivery", () => {
     });
     const advisory = (body = "[P2] Optional cleanup"): GitHubFeedback => ({
       id: "advisory-1",
-      actorLogin: "chatgpt-codex-connector",
+      actorLogin: "chatgpt-codex-connector[bot]",
       priority: "P2",
       body,
       path: "src/value.js",
@@ -710,7 +710,7 @@ describe("exact-candidate GitHub draft delivery", () => {
 
   it("blocks completed GitHub Codex review when exact-head P1 feedback remains", async () => {
     const { fixture, runId, candidateCommit } = await reviewedFixture({
-      githubReviewer: "chatgpt-codex-connector",
+      githubReviewer: "chatgpt-codex-connector[bot]",
       githubReviewMode: "github_codex_required",
       reviewBlocking: "p0_p1",
     });
@@ -723,7 +723,7 @@ describe("exact-candidate GitHub draft delivery", () => {
       adapter.reviews = [
         {
           id: "codex-complete",
-          actorLogin: "chatgpt-codex-connector",
+          actorLogin: "chatgpt-codex-connector[bot]",
           state: "CODEX_COMPLETED",
           commitId: candidateCommit,
           body: "",
@@ -733,7 +733,7 @@ describe("exact-candidate GitHub draft delivery", () => {
       adapter.feedback = [
         {
           id: "p1",
-          actorLogin: "chatgpt-codex-connector",
+          actorLogin: "chatgpt-codex-connector[bot]",
           priority: "P1",
           body: "[P1] Correctness gap",
           path: "src/value.js",
@@ -3080,13 +3080,13 @@ describe("exact-candidate GitHub draft delivery", () => {
     const candidateCommit = "a".repeat(40);
     const policy = {
       mode: "github_codex_required",
-      requiredReviewerLogins: ["chatgpt-codex-connector"],
+      requiredReviewerLogins: ["chatgpt-codex-connector[bot]"],
     } as unknown as DeliveryRecord["reviewPolicy"];
     const observation = {
       reviews: [
         {
           id: "codex-summary",
-          actorLogin: "chatgpt-codex-connector",
+          actorLogin: "chatgpt-codex-connector[bot]",
           state: "CODEX_COMPLETED",
           commitId: candidateCommit,
           body: "",
@@ -3134,7 +3134,7 @@ describe("exact-candidate GitHub draft delivery", () => {
 
     const feedback = (priority: "P1" | "P2"): GitHubFeedback => ({
       id: priority,
-      actorLogin: "chatgpt-codex-connector",
+      actorLogin: "chatgpt-codex-connector[bot]",
       priority,
       body: `[${priority}] finding`,
       path: "src/index.ts",

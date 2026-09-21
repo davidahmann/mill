@@ -36,6 +36,17 @@ rejection or missing approval into approval.
   this mode treats its exact-head summary as completion evidence and evaluates
   its current-head feedback separately.
 
+GitHub reports the Codex App login with its bot suffix:
+
+```yaml
+reviewPolicy:
+  mode: github_codex_required
+  requiredReviewerLogins: ["chatgpt-codex-connector[bot]"]
+```
+
+Confirm the login from the target repository's API before freezing policy. Mill
+compares it exactly.
+
 For `github_codex_required`, a running, missing, malformed, or stale summary is
 not completion. P0/P1 and unclassified feedback block when the frozen review
 policy is `p0_p1`; standalone P2/P3 remains recorded and advisory. Mill binds

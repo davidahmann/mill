@@ -875,7 +875,7 @@ describe("run outcome projection", () => {
     const codexDelivery = awaitingHumanDelivery();
     codexDelivery.reviewPolicy = {
       mode: "github_codex_required",
-      requiredReviewerLogins: ["chatgpt-codex-connector"],
+      requiredReviewerLogins: ["chatgpt-codex-connector[bot]"],
     };
     codexDelivery.observation = {
       headSha: candidateCommit,
@@ -890,12 +890,12 @@ describe("run outcome projection", () => {
       ],
       reviews: [
         {
-          actorLogin: "chatgpt-codex-connector",
+          actorLogin: "chatgpt-codex-connector[bot]",
           state: "APPROVED",
           commitId: candidateCommit,
         },
         {
-          actorLogin: "chatgpt-codex-connector",
+          actorLogin: "chatgpt-codex-connector[bot]",
           state: "CODEX_COMPLETED",
           commitId: candidateCommit,
         },
@@ -912,7 +912,7 @@ describe("run outcome projection", () => {
       ...completedCodexObservation,
       reviews: [
         {
-          actorLogin: "chatgpt-codex-connector",
+          actorLogin: "chatgpt-codex-connector[bot]",
           state: "CODEX_RUNNING",
           commitId: candidateCommit,
         },

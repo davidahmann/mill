@@ -1148,7 +1148,7 @@ describe("compact schemas", () => {
         ...localReview.propose,
         reviewPolicy: {
           mode: "github_codex_required",
-          requiredReviewerLogins: ["chatgpt-codex-connector"],
+          requiredReviewerLogins: ["chatgpt-codex-connector[bot]"],
         },
       },
     } as const;
