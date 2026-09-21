@@ -324,11 +324,16 @@ private labels and binds removal readback to the observed container and daemon.
 Unresolved ownership blocks retry and destructive cleanup. There is no
 host-independent deadline watchdog; see [OCI recovery](../docs/oci-recovery.md).
 The persisted absolute run deadline is reused for verification, review, retry,
-repair, and resume; no checkpoint grants a fresh budget. An attempt ID plus PID,
-PGID, and process-start digest is diagnostic state, not signalling authority.
-Cancellation is durable state polled by the foreground lease owner, which
-terminates its own in-memory child, including a GitHub mutation process; no
-command signals a stored PID. Cancellation is rechecked before each external
+repair, and resume; ordinary checkpoints grant no fresh budget. The explicit
+[candidate recovery](../docs/verifier-recovery.md) boundary may grant one
+separately approved verification/review window after eligible infrastructure
+failure. Its immutable receipt retains the original deadline, failure history,
+controller identity and exact candidate. It grants no builder or repair and
+requires settled worker/container ownership before application. An attempt ID
+plus PID, PGID, and process-start digest is diagnostic state, not signalling
+authority. Cancellation is durable state polled by the foreground lease owner,
+which terminates its own in-memory child, including a GitHub mutation process;
+no command signals a stored PID. Cancellation is rechecked before each external
 effect, and an interrupted effect remains unknown until authoritative readback.
 If the lease is free but a recorded process may still exist, resume and terminal
 cancellation fail closed for attended reconciliation. State events are

@@ -4,6 +4,19 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-21
+
+### Fixed
+
+- Recover unchanged candidates after eligible verifier infrastructure failures
+  through an exact attended plan, without another builder attempt.
+- Preserve the original blocker when a follow-up command is rejected.
+
+### Added
+
+- A single bounded verification/review recovery allowance, with its own expiry
+  and controller identity while retaining the original run history.
+
 ## [0.8.0] - 2026-09-21
 
 ### Added

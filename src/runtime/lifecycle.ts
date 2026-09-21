@@ -1,3 +1,13 @@
+import { readLockStatus, enforceExactVersion } from "../config/lock.js";
+import { safeReadText } from "../security/safe-path.js";
+import {
+  verificationRecoverySchema,
+  eligibleVerificationFailure,
+  recoveryCheckpoint,
+  recoveryDigest,
+  recoveryError,
+  type VerificationRecovery,
+} from "./verification-recovery.js";
 import { blockingReviewFindings, classifyReview } from "./review-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
@@ -444,7 +454,11 @@ async function admitWorker(input: {
       ? {}
       : { impactManifestDigest: input.inputs.continuity.impactDigest }),
     profile,
-    deadlineAt: input.run.deadlineAt,
+    deadlineAt:
+      input.role === "reviewer"
+        ? (input.store.verificationRecovery(input.run.id)?.expiresAt ??
+          input.run.deadlineAt)
+        : input.run.deadlineAt,
   });
   input.store.admitWorkerInvocation({
     runId: input.run.id,
@@ -880,6 +894,159 @@ export async function qualifyBaseline(input: {
   }
 }
 
+async function recoveryLock(
+  root: string,
+): Promise<{ pinnedVersion: string | null; lockDigest: string | null }> {
+  const lock = await readLockStatus(root);
+  return {
+    pinnedVersion: lock.requiredVersion ?? null,
+    lockDigest: lock.found
+      ? canonicalDigest(await safeReadText(root, "mill.lock", 256 * 1024))
+      : null,
+  };
+}
+
+async function verificationDeadline(
+  root: string,
+  store: StateStore,
+  run: RunRecord,
+): Promise<number> {
+  const receipt = store.verificationRecovery(run.id);
+  if (receipt === undefined) {
+    await enforceExactVersion(root);
+    return persistedRunDeadline(run);
+  }
+  const lock = await recoveryLock(root);
+  if (
+    receipt.controllerVersion !== MILL_VERSION ||
+    receipt.lockDigest !== lock.lockDigest ||
+    receipt.pinnedVersion !== lock.pinnedVersion
+  )
+    recoveryError("Recovery controller or original pin changed.");
+  if (Date.parse(receipt.expiresAt) <= Date.now())
+    recoveryError("The fixed recovery allowance expired.");
+  return Date.parse(receipt.expiresAt);
+}
+
+async function createVerificationRecoveryPlan(
+  root: string,
+  context: RunContext,
+  runId: string,
+  expiresAt: string,
+): Promise<VerificationRecovery> {
+  const { store, inputs } = context;
+  const run = store.getRun(runId);
+  if (store.verificationRecovery(runId) !== undefined)
+    recoveryError("Recovery is single use.");
+  if (
+    store.unresolvedMutatingWorkerInvocations(runId).length > 0 ||
+    (await hasPendingOciResources(store.directory))
+  )
+    recoveryError("Worker or OCI ownership must be reconciled first.");
+  assertEffectAllowsNewWork(run);
+  const failureSequence = eligibleVerificationFailure(run, store.events(runId));
+  const candidate = await assertRunBindings(root, run, inputs);
+  const lock = await recoveryLock(root);
+  if (
+    lock.pinnedVersion !== MILL_VERSION &&
+    Date.parse(run.deadlineAt) > Date.now()
+  )
+    recoveryError(
+      "Cross-version recovery requires expiration of the original builder deadline.",
+    );
+  const expiry = Date.parse(expiresAt);
+  if (
+    !Number.isFinite(expiry) ||
+    expiry <= Date.now() ||
+    expiry >
+      Date.now() + Math.min(1200, inputs.task.budget.deadlineSeconds) * 1000
+  )
+    recoveryError(
+      "Supply a fixed future expiry within the task deadline and 1200-second maximum.",
+    );
+  return verificationRecoverySchema.parse({
+    schemaVersion: "1",
+    scope: "candidate_verification_review_only",
+    runId,
+    repositoryId: run.repositoryId,
+    taskDigest: run.taskDigest,
+    configDigest: run.configDigest,
+    baseCommit: run.baseCommit,
+    candidateCommit: candidate.commit,
+    candidateTree: candidate.tree,
+    contextDigest: run.contextDigest,
+    controlDigest: canonicalDigest(run.controlJson ?? null),
+    originalDeadlineAt: run.deadlineAt,
+    expiresAt,
+    checkpointDigest: recoveryCheckpoint(store.events(runId)),
+    failureSequence,
+    controllerVersion: MILL_VERSION,
+    ...lock,
+    builderAttempts: 0,
+    repairGenerations: 0,
+  });
+}
+
+export async function planVerificationRecovery(input: {
+  root: string;
+  taskPath: string;
+  runId: string;
+  expiresAt: string;
+}): Promise<{ plan: VerificationRecovery; approvalDigest: string }> {
+  const context = await openRunContext(input.root, input.taskPath);
+  try {
+    const plan = await createVerificationRecoveryPlan(
+      input.root,
+      context,
+      input.runId,
+      input.expiresAt,
+    );
+    return { plan, approvalDigest: recoveryDigest(plan) };
+  } finally {
+    context.store.close();
+  }
+}
+
+export async function recoverVerification(input: {
+  root: string;
+  taskPath: string;
+  runId: string;
+  expiresAt: string;
+  approvalDigest: string;
+  attended: boolean;
+}): Promise<PublicRunRecord> {
+  if (!input.attended)
+    throw new MillError(
+      "ATTENDANCE_REQUIRED",
+      "Candidate recovery requires attended exact-plan approval.",
+      ExitCode.configuration,
+    );
+  const context = await openRunContext(input.root, input.taskPath);
+  let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
+  try {
+    lease = await acquireWriterLease(context.store);
+    const plan = await createVerificationRecoveryPlan(
+      input.root,
+      context,
+      input.runId,
+      input.expiresAt,
+    );
+    return publicRunRecord(
+      context.store.applyVerificationRecovery(
+        input.runId,
+        plan,
+        input.approvalDigest,
+      ),
+    );
+  } finally {
+    try {
+      await lease?.release();
+    } finally {
+      context.store.close();
+    }
+  }
+}
+
 export async function verifyRun(input: {
   root: string;
   taskPath: string;
@@ -889,6 +1056,7 @@ export async function verifyRun(input: {
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   const signals = processCancellationScope();
+  let operationStarted = false;
   try {
     lease = await acquireWriterLease(store);
     await reconcileOciResources({
@@ -905,7 +1073,7 @@ export async function verifyRun(input: {
         ExitCode.configuration,
       );
     }
-    const deadlineMs = persistedRunDeadline(run);
+    const deadlineMs = await verificationDeadline(input.root, store, run);
     const candidate = await assertRunBindings(input.root, run, inputs);
     const hooks = lifecycleHooks(store, run.id);
     const dependencyRoot = await dependencySnapshotDirectory({
@@ -913,6 +1081,7 @@ export async function verifyRun(input: {
       stateDirectory: store.directory,
       config: inputs.config,
     });
+    operationStarted = true;
     const evidence = await verifyDeclaredCommands({
       stateDirectory: store.directory,
       root: candidate.worktree,
@@ -956,7 +1125,8 @@ export async function verifyRun(input: {
     };
   } catch (error) {
     const failure = asMillError(error);
-    if (lease !== undefined) settleFailure(store, input.runId, failure);
+    if (lease !== undefined && operationStarted)
+      settleFailure(store, input.runId, failure);
     throw failure;
   } finally {
     signals.dispose();
@@ -995,7 +1165,7 @@ export async function reviewRun(input: {
     reconcileMutatingWorkerAdmissions(store, run, storedActiveProcess(run));
     run = store.getRun(run.id);
     assertEffectAllowsNewWork(run);
-    const deadlineMs = persistedRunDeadline(run);
+    const deadlineMs = await verificationDeadline(input.root, store, run);
     if (input.refresh === true) {
       if (input.attended !== true)
         throw new MillError(
@@ -1050,15 +1220,15 @@ export async function reviewRun(input: {
       "WORKER_RESULT_MISSING",
       "WORKER_RESULT_CONFLICT",
     ]);
-    if (
+    const retryReview =
       run.status === "blocked" &&
       run.blockCode !== undefined &&
       retryableReviewBlocks.has(run.blockCode) &&
-      run.validationJson !== undefined
+      run.validationJson !== undefined;
+    if (
+      (!retryReview && run.status !== "verified") ||
+      run.validationJson === undefined
     ) {
-      run = store.transition(run.id, "verified", "review.retry_ready");
-    }
-    if (run.status !== "verified" || run.validationJson === undefined) {
       throw new MillError(
         "RUN_NOT_VERIFIED",
         "Only an exact verified candidate can be reviewed.",
@@ -1106,6 +1276,10 @@ export async function reviewRun(input: {
         "The prepared review scope no longer matches the candidate.",
         ExitCode.configuration,
       );
+    if (retryReview) {
+      store.assertReviewBudget(run.id, inputs.task.budget.retryCount + 1);
+      run = store.transition(run.id, "verified", "review.retry_ready");
+    }
     const reviewAttempt = store.beginReviewAttempt(
       run.id,
       inputs.task.budget.retryCount + 1,
@@ -1167,7 +1341,7 @@ export async function reviewRun(input: {
     }
   } catch (error) {
     const failure = asMillError(error);
-    if (lease !== undefined && (input.refresh !== true || reviewPrepared))
+    if (lease !== undefined && reviewPrepared)
       settleFailure(store, input.runId, failure);
     throw failure;
   } finally {
@@ -1195,6 +1369,7 @@ export async function resumeRun(input: {
       stateDirectory: store.directory,
       root: input.root,
     });
+    store.assertNoRecoveryBuilder(input.runId);
     let run = store.getRun(input.runId);
     const active = storedActiveProcess(run);
     reconcileMutatingWorkerAdmissions(store, run, active);
@@ -1361,7 +1536,8 @@ export async function resumeRun(input: {
     return publicRunRecord(store.getRun(run.id));
   } catch (error) {
     const failure = asMillError(error);
-    if (lease !== undefined) settleFailure(store, input.runId, failure);
+    if (lease !== undefined && store.getRun(input.runId).status === "running")
+      settleFailure(store, input.runId, failure);
     throw failure;
   } finally {
     signals.dispose();

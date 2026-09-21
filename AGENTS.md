@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.6
+Version: 2.7
 
 Status: normative
 
@@ -20,6 +20,10 @@ The owner approved the review/delivery follow-through on 2026-09-21. Its scope
 and checks are in `product/review-delivery-follow-through.md`. Use the native
 maintainer path for these Mill control changes; it does not grant a builder
 permission to modify its own frozen controls.
+
+The owner approved the bounded verifier recovery repair on 2026-09-21. Its
+authority and acceptance are in `product/verifier-recovery.md`. Use the native
+maintainer route; preserve downstream task and candidate identities.
 
 ## Operating Mill
 
@@ -259,6 +263,10 @@ millctl --json state backup
 millctl --json support-bundle --run <run-id>
 ```
 
+- Eligible verifier infrastructure failures may use the exact attended
+  [candidate recovery](docs/verifier-recovery.md) plan. Its single-use allowance
+  retains the original deadline and grants only unchanged-candidate verification
+  and review. It cannot authorize another builder or repair.
 - `resume` is permitted only when Mill can prove no prior worker still owns the
   effect or when it is performing the approved bounded review-repair pass.
 - `cancel` records intent; only the live foreground controller may signal its

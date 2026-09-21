@@ -65,6 +65,8 @@ import {
   stateRestore,
   supportBundle,
   verifyRun,
+  planVerificationRecovery,
+  recoverVerification,
 } from "./runtime/lifecycle.js";
 import {
   builderIsolationBoundary,
@@ -1671,6 +1673,58 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       }
     });
 
+  const verificationRecovery = program
+    .command("verification-recovery")
+    .description("plan or approve bounded recovery of one unchanged candidate");
+  for (const mode of ["plan", "apply"] as const) {
+    verificationRecovery
+      .command(mode)
+      .requiredOption("--task <path>", "original approved task packet")
+      .requiredOption("--run <id>", "existing blocked run")
+      .requiredOption(
+        "--expires-at <timestamp>",
+        "fixed ISO expiry for verification and review only",
+      )
+      .option("--approve <digest>", "exact recovery plan digest")
+      .option("--attended", "confirm attended recovery")
+      .action(
+        async (options: {
+          task: string;
+          run: string;
+          expiresAt: string;
+          approve?: string;
+          attended?: boolean;
+        }) => {
+          const global = globals(program);
+          const root = await findRepositoryRoot(global.cwd);
+          const input = {
+            root,
+            taskPath: options.task,
+            runId: options.run,
+            expiresAt: options.expiresAt,
+          };
+          const result =
+            mode === "plan"
+              ? await planVerificationRecovery(input)
+              : await recoverVerification({
+                  ...input,
+                  approvalDigest: options.approve ?? "",
+                  attended: options.attended === true,
+                });
+          emit(
+            io,
+            global.json === true,
+            commandResult({
+              command: `verification-recovery.${mode}`,
+              ok: true,
+              status: "ok",
+              data: result,
+            }),
+          );
+        },
+      );
+  }
+
   program
     .command("verify")
     .description(
@@ -1681,7 +1735,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
     .action(async (options: { task: string; run: string }) => {
       const global = globals(program);
       const root = await findRepositoryRoot(global.cwd);
-      await enforceExactVersion(root);
+
       const result = await verifyRun({
         root,
         taskPath: options.task,
@@ -1738,7 +1792,7 @@ export function createProgram(io: CliIo, jsonErrors = false): Command {
       }) => {
         const global = globals(program);
         const root = await findRepositoryRoot(global.cwd);
-        await enforceExactVersion(root);
+
         const result = await reviewRun({
           root,
           taskPath: options.task,

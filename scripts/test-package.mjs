@@ -660,7 +660,7 @@ const stateFile=new URL("./containers.json",import.meta.url);
 if(args[0]==="info"){console.log(JSON.stringify("package-fixture-daemon"));process.exit(0)}
 let containers=existsSync(stateFile)?JSON.parse(readFileSync(stateFile,"utf8")):[];
 const save=()=>writeFileSync(stateFile,JSON.stringify(containers));
-if(args[0]==="image"&&args[1]==="inspect"){process.exit(0)}
+if(args[0]==="image"&&args[1]==="inspect"){process.exit(existsSync(new URL("./image-unavailable",import.meta.url))?1:0)}
 if(args[0]==="container"&&args[1]==="inspect"){
   const found=containers.find(value=>value.name==="/"+args.at(-1)||value.id===args.at(-1));
   if(found){console.log(JSON.stringify(found));process.exit(0)}
@@ -1152,6 +1152,152 @@ else process.exit(2);
   process.stdout.write(
     "package review-policy canary passed: opt-in P2 advisory, opt-in P1 block, legacy P2 block, provider receipt rejection (fixture adapters)\n",
   );
+  // Exercise public recovery commands from the installed tarball. The fake
+  // daemon fails before command execution; no model or registry is contacted.
+  await rm(path.join(tools, "review-scenario.json"), { force: true });
+  const recoveryFixture = path.join(temporary, "verification-recovery");
+  command(
+    gitExecutable,
+    ["clone", "--quiet", "--no-hardlinks", consumer, recoveryFixture],
+    temporary,
+  );
+  await writeFile(
+    path.join(recoveryFixture, "mill.lock"),
+    `schemaVersion: "1"
+mill:
+  package: "@davidahmann/mill"
+  version: "${MILL_VERSION}"
+`,
+  );
+  command(gitExecutable, ["add", "mill.lock"], recoveryFixture);
+  command(
+    gitExecutable,
+    [
+      "-c",
+      "user.name=Mill Package Test",
+      "-c",
+      "user.email=mill-package@example.invalid",
+      "commit",
+      "--no-gpg-sign",
+      "-m",
+      "test: pin candidate recovery controller",
+    ],
+    recoveryFixture,
+  );
+  const recoveryEnvironment = {
+    ...canaryEnvironment,
+    MILL_STATE_HOME: path.join(state, "verification-recovery"),
+  };
+  const recoveryCall = (args, succeeds = true) => {
+    const result = spawnSync(
+      bin,
+      ["--json", "--cwd", recoveryFixture, ...args],
+      {
+        cwd: recoveryFixture,
+        env: recoveryEnvironment,
+        encoding: "utf8",
+        timeout: 120_000,
+      },
+    );
+    if ((result.status === 0) !== succeeds) {
+      throw new Error(
+        `packed recovery command unexpected status: ${result.stdout}\n${result.stderr}`,
+      );
+    }
+    return JSON.parse(result.stdout);
+  };
+  const recoveryTask = "product/tasks/canary-1.yaml";
+  const recoveryBase = recoveryCall([
+    "qualify",
+    "--baseline",
+    "--task",
+    recoveryTask,
+  ]);
+  const recoveryStarted = recoveryCall([
+    "run",
+    "--task",
+    recoveryTask,
+    "--approve",
+    recoveryBase.data.approvalDigest,
+    "--attended",
+  ]);
+  const recoveryRun = recoveryStarted.data.run;
+  const recoveryArgs = ["--task", recoveryTask, "--run", recoveryRun.id];
+  await writeFile(path.join(tools, "image-unavailable"), "missing image\n");
+  const infraFailure = recoveryCall(["verify", ...recoveryArgs], false);
+  if (infraFailure.reasons?.[0]?.code !== "VERIFIER_IMAGE_UNAVAILABLE") {
+    throw new Error(
+      "packed recovery did not preserve pre-command image failure",
+    );
+  }
+  recoveryCall(["verify", ...recoveryArgs], false);
+  const stillBlocked = recoveryCall(["status", "--run", recoveryRun.id]).data
+    .run;
+  if (stillBlocked.blockCode !== "VERIFIER_IMAGE_UNAVAILABLE") {
+    throw new Error(
+      "rejected verify replaced the original infrastructure blocker",
+    );
+  }
+  await rm(path.join(tools, "image-unavailable"));
+  const recoveryExpiry = new Date(Date.now() + 50_000).toISOString();
+  const recoveryProposal = recoveryCall([
+    "verification-recovery",
+    "plan",
+    ...recoveryArgs,
+    "--expires-at",
+    recoveryExpiry,
+  ]);
+  recoveryCall(
+    [
+      "verification-recovery",
+      "apply",
+      ...recoveryArgs,
+      "--expires-at",
+      recoveryExpiry,
+      "--approve",
+      recoveryProposal.data.approvalDigest,
+    ],
+    false,
+  );
+  recoveryCall([
+    "verification-recovery",
+    "apply",
+    ...recoveryArgs,
+    "--expires-at",
+    recoveryExpiry,
+    "--approve",
+    recoveryProposal.data.approvalDigest,
+    "--attended",
+  ]);
+  recoveryCall(["verify", ...recoveryArgs]);
+  recoveryCall(["review", ...recoveryArgs]);
+  const recovered = recoveryCall(["status", "--run", recoveryRun.id]).data.run;
+  if (
+    recovered.status !== "reviewed" ||
+    recovered.candidateCommit !== recoveryRun.candidateCommit ||
+    recovered.candidateTree !== recoveryRun.candidateTree ||
+    recovered.deadlineAt !== recoveryRun.deadlineAt ||
+    recovered.attemptCount !== 1 ||
+    recovered.repairCount !== 0
+  ) {
+    throw new Error(
+      "packed recovery changed original authority or failed exact review",
+    );
+  }
+  recoveryCall(
+    [
+      "verification-recovery",
+      "plan",
+      ...recoveryArgs,
+      "--expires-at",
+      recoveryExpiry,
+    ],
+    false,
+  );
+  process.stdout.write(
+    "package candidate-recovery canary passed: preserved blocker, exact approval, attendance, unchanged candidate/deadline/attempts, verification and review, repeat denial (fixture adapters)\n",
+  );
+
   process.stdout.write(
     `package draft-PR lifecycle canary passed: ${packResult.filename}\n`,
   );
