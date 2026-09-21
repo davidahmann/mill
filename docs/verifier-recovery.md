@@ -28,6 +28,11 @@ millctl --json verify --task product/tasks/TASK.yaml --run <run-id>
 millctl --json review --task product/tasks/TASK.yaml --run <run-id>
 ```
 
+Planning reads existing state without creating or upgrading it. An incompatible
+controller must validate the recovery receipt before writable state access or
+resource cleanup. Apply checks attendance and approval before writable access,
+then rechecks the plan under the writer lease.
+
 Inspect the exact plan before applying it. Every fresh recovery window requires
 the original run deadline to have expired. This prevents an older controller
 from using remaining worker authority. The approval binds the recorded failure,

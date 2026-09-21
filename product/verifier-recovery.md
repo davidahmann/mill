@@ -36,6 +36,10 @@ Acceptance:
   Every new recovery window requires the original deadline to expire, preventing
   an old controller from launching a builder or repair. Bind the immutable
   candidate pin and reject invoking-checkout pin drift.
+- Recovery planning and incompatible-controller admission read existing state
+  before any writable open, migration or resource reconciliation. Apply
+  validates attendance and exact approval first, then rechecks under the writer
+  lease.
 - Unit/integration and installed CLI tests cover success and adversarial
   boundaries. Full native checks, audit and independent reviews pass before
   merge. Release follows the existing tag/artifact/OIDC/readback procedure.
