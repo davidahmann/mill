@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import type { MillConfig } from "./inputs.js";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import { findTrustedExecutable } from "../doctor.js";
 import { ExitCode, MillError } from "../errors.js";
 import { runProcess } from "./process.js";
@@ -52,6 +53,7 @@ export interface GitHubReview {
   commitId: string | null;
   body: string;
   url: string;
+  revision?: string;
 }
 
 export interface GitHubFeedback {
@@ -305,22 +307,29 @@ function codexSummaryReview(
   const user = object(item.user, "issue comment actor");
   const body = typeof item.body === "string" ? item.body : "";
   if (!body.includes("<!-- codex-pull-request-review-summary -->")) return null;
-  const rows = body.split("\n").flatMap((line) => {
-    const match =
-      /^\|\s*📝\s*\*\*Code Review\*\*\s*\|\s*(.*?)\s*\|\s*`([a-f0-9]{7,40})`\s*\|.*\|\s*$/iu.exec(
-        line,
-      );
-    return match === null ? [] : [match];
-  });
+  const rows = body
+    .split("\n")
+    .filter((line) => /^\|\s*[^|]*\*\*Code Review\*\*[^|]*\|/iu.test(line));
   const row = rows.length === 1 ? rows[0] : undefined;
-  const status = row?.[1] ?? "";
-  const commitPrefix = (row?.[2] ?? "").toLowerCase();
-  const completed = status.includes("✅") && status.includes("**Completed**");
-  const running = status.includes("🔄") && status.includes("**Running**");
+  const cells =
+    row === undefined
+      ? null
+      : /^\|\s*📝\s*\*\*Code Review\*\*\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*[^|]*\|\s*$/iu.exec(
+          row,
+        );
+  const status = cells?.[1] ?? "";
+  const commit = cells?.[2] ?? "";
+  const commitMatch = /^`([a-f0-9]{7,40})`$/iu.exec(commit);
+  const commitPrefix = (commitMatch?.[1] ?? "").toLowerCase();
+  const completed = status === "✅ **Completed**";
+  const running = status === "🔄 **Running**";
   const state =
-    completed !== running && completed
+    cells !== null && commitMatch !== null && completed !== running && completed
       ? "CODEX_COMPLETED"
-      : completed !== running && running
+      : cells !== null &&
+          commitMatch !== null &&
+          completed !== running &&
+          running
         ? "CODEX_RUNNING"
         : "CODEX_INVALID";
   const matchingCommits = pullRequestCommits.filter((commit) =>
@@ -338,6 +347,10 @@ function codexSummaryReview(
           : null,
     body: "",
     url: text(item.html_url, "issue comment URL"),
+    revision: canonicalDigest({
+      updatedAt: text(item.updated_at, "issue comment update timestamp"),
+      body,
+    }),
   };
 }
 
@@ -788,8 +801,8 @@ class GhGitHubAdapter implements GitHubAdapter {
       checkValue,
       pullRequestCommitsValue,
       statusValue,
-      reviewsValue,
-      commentsValue,
+      initialReviewsValue,
+      initialCommentsValue,
       issueCommentsValue,
       defaultRefValue,
     ] = await Promise.all([
@@ -879,6 +892,8 @@ class GhGitHubAdapter implements GitHubAdapter {
         lifecycle,
       ),
     ]);
+    let reviewsValue = initialReviewsValue;
+    let commentsValue = initialCommentsValue;
     const checks = await this.#bindCheckProducers(
       parseChecks(
         paginatedObjectCollection(checkValue, "check_runs", "check runs"),
@@ -887,8 +902,8 @@ class GhGitHubAdapter implements GitHubAdapter {
       input.config,
       lifecycle,
     );
-    const providerReviews = paginatedArray(reviewsValue, "reviews").map(
-      (raw): GitHubReview => {
+    const parseProviderReviews = (value: unknown) =>
+      paginatedArray(value, "reviews").map((raw): GitHubReview => {
         const item = object(raw, "review");
         const user = object(item.user, "review actor");
         return {
@@ -902,8 +917,7 @@ class GhGitHubAdapter implements GitHubAdapter {
           body: typeof item.body === "string" ? item.body : "",
           url: text(item.html_url, "review URL"),
         };
-      },
-    );
+      });
     const pullRequestCommits = paginatedArray(
       pullRequestCommitsValue,
       "pull request commits",
@@ -913,17 +927,68 @@ class GhGitHubAdapter implements GitHubAdapter {
         "pull request commit SHA",
       ),
     );
-    const codexSummaries = paginatedArray(
-      issueCommentsValue,
-      "issue comments",
-    ).flatMap((raw): GitHubReview[] => {
-      const review = codexSummaryReview(
-        raw,
-        pullRequest.headSha,
-        pullRequestCommits,
+    const parseCodexSummaries = (value: unknown) =>
+      paginatedArray(value, "issue comments").flatMap((raw): GitHubReview[] => {
+        const review = codexSummaryReview(
+          raw,
+          pullRequest.headSha,
+          pullRequestCommits,
+        );
+        return review === null ? [] : [review];
+      });
+    let codexSummaries = parseCodexSummaries(issueCommentsValue);
+    if (
+      input.config.reviewPolicy.mode === "github_codex_required" &&
+      codexSummaries.some((review) => review.state === "CODEX_COMPLETED")
+    ) {
+      [reviewsValue, commentsValue] = await Promise.all([
+        this.#ghJson(
+          [
+            "api",
+            "--hostname",
+            input.config.host,
+            "--paginate",
+            "--slurp",
+            `${prefix}/pulls/${input.pullRequestNumber}/reviews?per_page=100`,
+          ],
+          lifecycle,
+        ),
+        this.#ghJson(
+          [
+            "api",
+            "--hostname",
+            input.config.host,
+            "--paginate",
+            "--slurp",
+            `${prefix}/pulls/${input.pullRequestNumber}/comments?per_page=100`,
+          ],
+          lifecycle,
+        ),
+      ]);
+      const verifiedIssueCommentsValue = await this.#ghJson(
+        [
+          "api",
+          "--hostname",
+          input.config.host,
+          "--paginate",
+          "--slurp",
+          `${prefix}/issues/${input.pullRequestNumber}/comments?per_page=100`,
+        ],
+        lifecycle,
       );
-      return review === null ? [] : [review];
-    });
+      const verifiedSummaries = parseCodexSummaries(verifiedIssueCommentsValue);
+      const stable =
+        canonicalDigest(codexSummaries as unknown as JsonValue) ===
+        canonicalDigest(verifiedSummaries as unknown as JsonValue);
+      codexSummaries = stable
+        ? verifiedSummaries
+        : verifiedSummaries.map((review) => ({
+            ...review,
+            state: "CODEX_INVALID",
+            commitId: pullRequest.headSha,
+          }));
+    }
+    const providerReviews = parseProviderReviews(reviewsValue);
     const reviews = [...providerReviews, ...codexSummaries];
     const inlineFeedback = paginatedArray(commentsValue, "review comments").map(
       (raw): GitHubFeedback => {
