@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import {
@@ -1215,6 +1216,38 @@ mill:
     ],
     recoveryFixture,
   );
+  const pinnedSource = await readFile(
+    path.join(recoveryFixture, "mill.lock"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(recoveryFixture, "mill.lock"),
+    pinnedSource.replace(MILL_VERSION, "0.8.0"),
+  );
+  const deniedState = path.join(state, "denied-controller");
+  const deniedController = spawnSync(
+    bin,
+    [
+      "--json",
+      "--cwd",
+      recoveryFixture,
+      "verify",
+      "--task",
+      "product/tasks/canary-1.yaml",
+      "--run",
+      "11111111-1111-4111-8111-111111111111",
+    ],
+    {
+      cwd: recoveryFixture,
+      env: { ...canaryEnvironment, MILL_STATE_HOME: deniedState },
+      encoding: "utf8",
+      timeout: 120_000,
+    },
+  );
+  if (deniedController.status === 0 || existsSync(deniedState)) {
+    throw new Error("unapproved controller created state before pin rejection");
+  }
+  await writeFile(path.join(recoveryFixture, "mill.lock"), pinnedSource);
   const recoveryEnvironment = {
     ...canaryEnvironment,
     MILL_STATE_HOME: path.join(state, "verification-recovery"),

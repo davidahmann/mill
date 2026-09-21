@@ -182,6 +182,41 @@ async function openRunContext(
   return { inputs, store, commonDirectory };
 }
 
+async function openReadOnlyRunContext(
+  root: string,
+  taskPath: string,
+): Promise<RunContext> {
+  const inputs = await loadRuntimeInputs(root, taskPath);
+  assertBuildAuthorized(inputs);
+  const commonDirectory = await commonGitDirectory(root);
+  const store = await StateStore.openReadOnly(
+    inputs.config.repositoryId,
+    commonDirectory,
+  );
+  if (store === undefined)
+    recoveryError(
+      "Existing operational state is required; admission creates no state.",
+    );
+  return { inputs, store, commonDirectory };
+}
+
+/** Resolve the narrow version exception before opening or reconciling writable state. */
+async function admitVerificationController(input: {
+  root: string;
+  taskPath: string;
+  runId: string;
+}): Promise<void> {
+  if ((await readLockStatus(input.root)).compatible) return;
+  const context = await openReadOnlyRunContext(input.root, input.taskPath);
+  try {
+    const run = context.store.getRun(input.runId);
+    await verificationDeadline(input.root, context.store, run);
+    await assertRunBindings(input.root, run, context.inputs);
+  } finally {
+    context.store.close();
+  }
+}
+
 function storedManifest(run: RunRecord): ContextManifest {
   if (run.contextJson === undefined || run.contextDigest === undefined) {
     throw new MillError(
@@ -1009,7 +1044,7 @@ export async function planVerificationRecovery(input: {
   runId: string;
   expiresAt: string;
 }): Promise<{ plan: VerificationRecovery; approvalDigest: string }> {
-  const context = await openRunContext(input.root, input.taskPath);
+  const context = await openReadOnlyRunContext(input.root, input.taskPath);
   try {
     const plan = await createVerificationRecoveryPlan(
       input.root,
@@ -1037,6 +1072,9 @@ export async function recoverVerification(input: {
       "Candidate recovery requires attended exact-plan approval.",
       ExitCode.configuration,
     );
+  const admitted = await planVerificationRecovery(input);
+  if (admitted.approvalDigest !== input.approvalDigest)
+    recoveryError("Recovery approval does not match the read-only proposal.");
   const context = await openRunContext(input.root, input.taskPath);
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
   try {
@@ -1068,6 +1106,7 @@ export async function verifyRun(input: {
   taskPath: string;
   runId: string;
 }): Promise<{ run: PublicRunRecord; evidence: ValidationEvidence }> {
+  await admitVerificationController(input);
   const context = await openRunContext(input.root, input.taskPath);
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
@@ -1166,6 +1205,7 @@ export async function reviewRun(input: {
   review: ReturnType<typeof reviewResultSchema.parse>;
   usage: ProviderUsage;
 }> {
+  await admitVerificationController(input);
   const context = await openRunContext(input.root, input.taskPath);
   const { inputs, store } = context;
   let lease: Awaited<ReturnType<typeof acquireWriterLease>> | undefined;
