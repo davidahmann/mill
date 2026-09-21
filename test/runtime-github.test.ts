@@ -36,7 +36,7 @@ const config: ProposeConfig = {
   allowedMergerLogins: ["operator"],
   requiredChecks: ["validate"],
   reviewPolicy: {
-    mode: "github_required",
+    mode: "github_codex_required",
     requiredReviewerLogins: ["chatgpt-codex-connector[bot]"],
   },
   allowedMergeMethods: ["linear_tree_preserving"],
@@ -91,6 +91,7 @@ else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:
 else if(endpoint.includes("/pulls?"))console.log(JSON.stringify([[listedPull]]));
 else if(args.includes("--method")&&endpoint==="repos/example/app/pulls")console.log(JSON.stringify(pull));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
+else if(endpoint.includes("/pulls/41/commits?"))console.log(JSON.stringify([((mode.commits??["${sha}"]).map((sha)=>({sha}))) ]));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{id:101,name:"validate",status:"completed",conclusion:"success",app:{id:15368},head_sha:"${sha}",details_url:"https://github.com/example/app/actions/runs/50/job/101",...mode.check}]}]));
 else if(endpoint.endsWith("/actions/jobs/101"))console.log(JSON.stringify({id:101,run_id:50,head_sha:"${sha}",check_run_url:"https://api.github.com/repos/example/app/check-runs/101",...mode.job}));
 else if(endpoint.endsWith("/actions/runs/50"))console.log(JSON.stringify({head_sha:"${sha}",repository:{node_id:"R_example"},path:".github/workflows/ci.yml",event:"pull_request",...mode.run}));
@@ -230,6 +231,63 @@ else process.exit(2);
         reviews: [
           { state: "COMMENTED", commitId: sha },
           { state: "CODEX_RUNNING", commitId: null },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          commits: [sha, `${sha.slice(0, 7)}${"b".repeat(33)}`],
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: null },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary.replace(
+            "✅ **Completed**",
+            "✅ **Completed** 🔄 **Running**",
+          ),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: `${completedSummary}\n| 📝 **Code Review** | ✅ **Completed** | \`${sha.slice(0, 7)}\` | retried |`,
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
         ],
       });
       await writeFile(
@@ -620,6 +678,7 @@ else process.exit(2);
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
 const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"closed",draft:false,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:true,merge_commit_sha:"${mergeSha}",merged_by:{login:"operator"},merged_at:"2026-09-01T17:00:00.000Z"};
 if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
+else if(endpoint.includes("/pulls/41/commits?"))console.log(JSON.stringify([[{sha:"${sha}"}]]));
 else if(endpoint.includes("/git/ref/heads/mill")){console.error("HTTP 404");process.exit(1)}
 else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${mergeSha}"}}));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{name:"validate",status:"completed",conclusion:"success"}]}]));
@@ -672,6 +731,7 @@ else if(endpoint==="repos/example/app")console.log(JSON.stringify(mode==="bad-re
 else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:{sha:mode==="bad-sha"?"bad":"${sha}"}}));
 else if(endpoint.includes("/pulls?"))console.log(JSON.stringify(mode==="bad-pages"?{}:mode==="bad-page"?[{}]:[[listedPull]]));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
+else if(endpoint.includes("/pulls/41/commits?"))console.log(JSON.stringify([[{sha:"${sha}"}]]));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify(mode==="bad-check-pages"?{}:mode==="bad-check-page"?[{}]:[{check_runs:[]}]))
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[]}]))
 else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[]]));

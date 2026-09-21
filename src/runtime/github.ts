@@ -299,31 +299,43 @@ function priority(body: string): GitHubFeedback["priority"] {
 function codexSummaryReview(
   value: unknown,
   headSha: string,
+  pullRequestCommits: readonly string[],
 ): GitHubReview | null {
   const item = object(value, "issue comment");
   const user = object(item.user, "issue comment actor");
   const body = typeof item.body === "string" ? item.body : "";
   if (!body.includes("<!-- codex-pull-request-review-summary -->")) return null;
-  const row =
-    /\|\s*📝\s*\*\*Code Review\*\*\s*\|([\s\S]*?)\|\s*`([a-f0-9]{7,40})`\s*\|/iu.exec(
-      body,
-    );
+  const rows = body.split("\n").flatMap((line) => {
+    const match =
+      /^\|\s*📝\s*\*\*Code Review\*\*\s*\|\s*(.*?)\s*\|\s*`([a-f0-9]{7,40})`\s*\|.*\|\s*$/iu.exec(
+        line,
+      );
+    return match === null ? [] : [match];
+  });
+  const row = rows.length === 1 ? rows[0] : undefined;
   const status = row?.[1] ?? "";
   const commitPrefix = (row?.[2] ?? "").toLowerCase();
+  const completed = status.includes("✅") && status.includes("**Completed**");
+  const running = status.includes("🔄") && status.includes("**Running**");
   const state =
-    status.includes("✅") && status.includes("**Completed**")
+    completed !== running && completed
       ? "CODEX_COMPLETED"
-      : status.includes("🔄") && status.includes("**Running**")
+      : completed !== running && running
         ? "CODEX_RUNNING"
         : "CODEX_INVALID";
+  const matchingCommits = pullRequestCommits.filter((commit) =>
+    commit.startsWith(commitPrefix),
+  );
   return {
     id: `codex-summary-${integer(item.id, "issue comment ID")}`,
     actorLogin: text(user.login, "issue comment actor login"),
     state,
     commitId:
-      state === "CODEX_INVALID" || headSha.startsWith(commitPrefix)
+      state === "CODEX_INVALID"
         ? headSha
-        : null,
+        : matchingCommits.length === 1
+          ? (matchingCommits[0] ?? null)
+          : null,
     body: "",
     url: text(item.html_url, "issue comment URL"),
   };
@@ -774,6 +786,7 @@ class GhGitHubAdapter implements GitHubAdapter {
     const [
       branchSha,
       checkValue,
+      pullRequestCommitsValue,
       statusValue,
       reviewsValue,
       commentsValue,
@@ -797,6 +810,19 @@ class GhGitHubAdapter implements GitHubAdapter {
         ],
         lifecycle,
       ),
+      input.config.reviewPolicy.mode === "github_codex_required"
+        ? this.#ghJson(
+            [
+              "api",
+              "--hostname",
+              input.config.host,
+              "--paginate",
+              "--slurp",
+              `${prefix}/pulls/${input.pullRequestNumber}/commits?per_page=100`,
+            ],
+            lifecycle,
+          )
+        : Promise.resolve([[]]),
       this.#ghJson(
         [
           "api",
@@ -830,17 +856,19 @@ class GhGitHubAdapter implements GitHubAdapter {
         ],
         lifecycle,
       ),
-      this.#ghJson(
-        [
-          "api",
-          "--hostname",
-          input.config.host,
-          "--paginate",
-          "--slurp",
-          `${prefix}/issues/${input.pullRequestNumber}/comments?per_page=100`,
-        ],
-        lifecycle,
-      ),
+      input.config.reviewPolicy.mode === "github_codex_required"
+        ? this.#ghJson(
+            [
+              "api",
+              "--hostname",
+              input.config.host,
+              "--paginate",
+              "--slurp",
+              `${prefix}/issues/${input.pullRequestNumber}/comments?per_page=100`,
+            ],
+            lifecycle,
+          )
+        : Promise.resolve([[]]),
       this.#ghJson(
         [
           "api",
@@ -876,11 +904,24 @@ class GhGitHubAdapter implements GitHubAdapter {
         };
       },
     );
+    const pullRequestCommits = paginatedArray(
+      pullRequestCommitsValue,
+      "pull request commits",
+    ).map((value) =>
+      assertSha(
+        text(object(value, "pull request commit").sha, "commit SHA"),
+        "pull request commit SHA",
+      ),
+    );
     const codexSummaries = paginatedArray(
       issueCommentsValue,
       "issue comments",
     ).flatMap((raw): GitHubReview[] => {
-      const review = codexSummaryReview(raw, pullRequest.headSha);
+      const review = codexSummaryReview(
+        raw,
+        pullRequest.headSha,
+        pullRequestCommits,
+      );
       return review === null ? [] : [review];
     });
     const reviews = [...providerReviews, ...codexSummaries];
