@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -1270,11 +1271,8 @@ mill:
   }
   await rm(path.join(tools, "image-unavailable"));
   // A fresh allowance must never overlap the original worker authority.
-  await new Promise((resolve) =>
-    setTimeout(
-      resolve,
-      Math.max(0, Date.parse(recoveryRun.deadlineAt) - Date.now() + 50),
-    ),
+  await delay(
+    Math.max(0, Date.parse(recoveryRun.deadlineAt) - Date.now() + 50),
   );
   const recoveryExpiry = new Date(Date.now() + 19_000).toISOString();
   const recoveryProposal = recoveryCall([
