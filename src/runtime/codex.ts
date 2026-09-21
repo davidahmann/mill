@@ -535,8 +535,10 @@ export async function runCodexReview(input: ReviewerWorkerInput): Promise<{
     // Public state parsing retains optional scope for legacy persisted reviews.
     const providerSchema =
       input.reviewScope === undefined
-        ? reviewResultSchema.omit({ scope: true })
-        : reviewResultSchema.extend({ scope: reviewScopeSchema });
+        ? reviewResultSchema.omit({ scope: true, gate: true })
+        : reviewResultSchema
+            .omit({ gate: true })
+            .extend({ scope: reviewScopeSchema });
     await writeFile(
       schemaPath,
       JSON.stringify(z.toJSONSchema(providerSchema)),
@@ -630,7 +632,7 @@ export async function runCodexReview(input: ReviewerWorkerInput): Promise<{
       { cause: String(error) },
     );
   }
-  const parsed = reviewResultSchema.safeParse(raw);
+  const parsed = reviewResultSchema.omit({ gate: true }).safeParse(raw);
   if (
     !parsed.success ||
     parsed.data.candidateCommit !== input.candidateCommit ||

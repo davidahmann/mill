@@ -1,3 +1,5 @@
+import { classifyReview } from "../src/runtime/review-policy.js";
+import { reviewResultSchema } from "../src/contracts/schemas.js";
 import { describe, expect, it } from "vitest";
 
 import { projectRunOutcome } from "../src/runtime/outcome.js";
@@ -1345,4 +1347,24 @@ describe("run outcome projection", () => {
       expect.objectContaining({ code: "OUTCOME_ADAPTATION_COMMAND_MISMATCH" }),
     );
   });
+});
+
+it("projects advisory review as passed policy without deleting the findings", () => {
+  const value = run();
+  const report = reviewResultSchema.parse(
+    JSON.parse(value.reviewJson ?? "null"),
+  );
+  report.findings.push({
+    id: "R1",
+    severity: "P2",
+    class: "maintainability",
+    title: "Optional",
+    body: "Advisory",
+    file: null,
+    line: null,
+  });
+  value.reviewJson = JSON.stringify(classifyReview(report, digest, "p0_p1"));
+  const result = outcome(value);
+  expect(result.review.status).toBe("advisories");
+  expect(result.review.findingCounts.P2).toBe(1);
 });

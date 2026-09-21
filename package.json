@@ -1,6 +1,6 @@
 {
   "name": "@davidahmann/mill",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Local-first software factory for new and existing codebases. Turns approved product intent into tested, reviewed PRs with repo-native evidence and explicit human approval for delivery and merge.",
   "license": "Apache-2.0",
   "author": "David Ahmann",
@@ -14,7 +14,8 @@
     "recipes/",
     "schemas/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts/maintainer-review.mjs"
   ],
   "exports": {
     "./schemas/*.json": "./schemas/*.json"
@@ -41,8 +42,9 @@
     "test": "vitest run --configLoader native",
     "test:coverage": "vitest run --configLoader native --coverage",
     "test:package": "npm run clean && npm run build && node scripts/test-package.mjs",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run docs:check && npm run check:workflows && npm run schemas:check && npm run test:coverage && npm run test:package",
-    "prepack": "npm run clean && npm run build"
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run docs:check && npm run check:workflows && npm run check:dependabot && npm run schemas:check && npm run test:coverage && npm run test:package",
+    "prepack": "npm run clean && npm run build",
+    "check:dependabot": "node scripts/check-dependabot.mjs"
   },
   "dependencies": {
     "commander": "15.0.0",

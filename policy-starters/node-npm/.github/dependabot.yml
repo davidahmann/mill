@@ -9,8 +9,8 @@ updates:
       development-minor-and-patch:
         dependency-type: development
         update-types:
-          - version-update:semver-minor
-          - version-update:semver-patch
+          - minor
+          - patch
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /

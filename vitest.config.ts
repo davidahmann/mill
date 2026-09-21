@@ -4,7 +4,7 @@ export default defineConfig({
   cacheDir: "coverage/.vite-cache",
   test: {
     clearMocks: true,
-    exclude: ["recipes/**", "node_modules/**", "dist/**"],
+    exclude: ["recipes/**", "node_modules/**", "dist/**", ".mill-scratch/**"],
     testTimeout: 10_000,
     coverage: {
       reportsDirectory: "coverage/report",

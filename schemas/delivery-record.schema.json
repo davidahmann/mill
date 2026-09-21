@@ -133,6 +133,7 @@
         }
       ]
     },
+    "reviewBlocking": { "type": "string", "const": "p0_p1" },
     "allowedMergerLogins": {
       "minItems": 1,
       "type": "array",

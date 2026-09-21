@@ -350,3 +350,10 @@ Before medium/high-risk code, answer:
 Run one architecture/threat pass before medium/high-risk implementation and one
 complete exact-candidate review after validation. Batch all actionable findings
 into one systemic repair. Recurring same-subsystem P1 findings return to design.
+
+Use [review policy and preparation](review-policy.md) to select blocking
+severity before admission and qualify the test infrastructure on the base.
+Native maintainer changes use the
+[standalone review route](maintainer-review.md). Dependabot grouping is checked
+by `npm run check:dependabot`; the checker covers Mill's bounded update policy
+and the shipped starter, not GitHub's full schema.

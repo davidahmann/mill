@@ -20,6 +20,12 @@
         "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
       }
     },
+    "review": {
+      "type": "object",
+      "properties": { "blocking": { "type": "string", "const": "p0_p1" } },
+      "required": ["blocking"],
+      "additionalProperties": false
+    },
     "reporting": {
       "type": "object",
       "properties": {

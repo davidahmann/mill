@@ -1,3 +1,4 @@
+import { blockingReviewFindings, classifyReview } from "./review-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -230,7 +231,7 @@ function storedReviewFindings(
         ? new Error("candidate identity mismatch")
         : parsed.error;
     }
-    return parsed.data.findings;
+    return blockingReviewFindings(parsed.data, run.configDigest);
   } catch (error) {
     throw new MillError(
       "REVIEW_EVIDENCE_INVALID",
@@ -1136,6 +1137,11 @@ export async function reviewRun(input: {
       });
       assertNotCancelled(store, run.id);
       await assertCandidateIdentity(candidate.worktree, candidate);
+      result.review = classifyReview(
+        result.review,
+        inputs.configDigest,
+        inputs.config.review?.blocking,
+      );
       const completed = store.completeReview(
         run.id,
         JSON.stringify(result.review),
@@ -1949,7 +1955,10 @@ export async function supportBundle(input: {
               repairCount: selected.repairCount,
               attemptCount: selected.attemptCount,
             },
-            events: store.events(selected.id),
+            events: projectRunTimeline({
+              run: selected,
+              events: store.events(selected.id),
+            }).events,
           }),
       redaction:
         "credentials, prompts, model streams, command output, and host paths are excluded",

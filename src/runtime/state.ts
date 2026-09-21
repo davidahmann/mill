@@ -1,3 +1,4 @@
+import { blockingReviewFindings } from "./review-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
@@ -926,9 +927,23 @@ export class StateStore {
           ExitCode.configuration,
         );
       }
-      const status: RunStatus = findings === 0 ? "reviewed" : "blocked";
+      const review = reviewResultSchema.parse(JSON.parse(value));
+      if (
+        review.candidateCommit !== current.candidateCommit ||
+        review.findings.length !== findings
+      )
+        throw new MillError(
+          "REVIEW_EVIDENCE_INVALID",
+          "Review candidate or count mismatch.",
+          ExitCode.data,
+        );
+      const blocking = blockingReviewFindings(
+        review,
+        current.configDigest,
+      ).length;
+      const status: RunStatus = blocking === 0 ? "reviewed" : "blocked";
       const code =
-        findings === 0
+        blocking === 0
           ? null
           : nonConverged
             ? "REVIEW_NON_CONVERGENCE"
@@ -942,8 +957,10 @@ export class StateStore {
         ...completionDetails,
         candidateCommit: current.candidateCommit ?? null,
         findings,
+        blockingFindings: blocking,
+        review,
       });
-      this.#event(id, findings === 0 ? "review.passed" : "review.blocked", {
+      this.#event(id, blocking === 0 ? "review.passed" : "review.blocked", {
         from: current.status,
         to: status,
         findings,
@@ -1205,7 +1222,7 @@ export class StateStore {
         !validation.passed ||
         validation.candidateCommit !== current.candidateCommit ||
         review.candidateCommit !== current.candidateCommit ||
-        review.findings.length !== 0 ||
+        blockingReviewFindings(review, current.configDigest).length !== 0 ||
         checked.candidateCommit !== current.candidateCommit ||
         checked.candidateTree !== current.candidateTree
       )

@@ -96,6 +96,7 @@ try {
     "schemas/run-timeline.schema.json",
     "schemas/source-manifest.schema.json",
     "schemas/support-tuple.schema.json",
+    "scripts/maintainer-review.mjs",
     "schemas/specification-proposal.schema.json",
     "schemas/task-packet.schema.json",
     "schemas/validation-evidence.schema.json",

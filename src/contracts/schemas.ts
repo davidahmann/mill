@@ -500,6 +500,7 @@ export const millConfigSchema = z
     repositoryId: z.uuid(),
     trustCeiling: z.enum(["inspect", "build", "propose"]),
     sensitivePaths: z.array(repositoryPathPatternSchema).default([]),
+    review: z.strictObject({ blocking: z.literal("p0_p1") }).optional(),
     reporting: z
       .strictObject({
         ledgerPath: repositoryFilePathSchema.optional(),
@@ -1084,7 +1085,13 @@ export const runOutcomeSchema = z.strictObject({
       .nullable(),
   }),
   review: z.strictObject({
-    status: z.enum(["not_recorded", "clean", "findings", "inconsistent"]),
+    status: z.enum([
+      "not_recorded",
+      "clean",
+      "advisories",
+      "findings",
+      "inconsistent",
+    ]),
     candidateCommit: z
       .string()
       .regex(/^[a-f0-9]{40}$/u)
@@ -1200,6 +1207,15 @@ export const reviewResultSchema = z.strictObject({
   schemaVersion: z.literal("1"),
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   scope: reviewScopeSchema.optional(),
+  gate: z
+    .strictObject({
+      schemaVersion: z.literal("1"),
+      policy: z.literal("p0_p1"),
+      configDigest: digestSchema,
+      blockingFindingIds: z.array(z.string().min(1)),
+      advisoryFindingIds: z.array(z.string().min(1)),
+    })
+    .optional(),
   summary: z.string(),
   findings: z.array(
     z.strictObject({
@@ -1358,6 +1374,7 @@ export const deliveryRecordSchema = z
       .optional(),
     legacyPostMergePolicyConfigDigest: digestSchema.optional(),
     reviewPolicy: githubReviewPolicySchema,
+    reviewBlocking: z.literal("p0_p1").optional(),
     allowedMergerLogins: z.array(z.string().min(1)).min(1),
     allowedMergeMethods: z
       .array(z.enum(["merge", "linear_tree_preserving"]))

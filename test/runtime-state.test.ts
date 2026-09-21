@@ -48,6 +48,27 @@ function startWorkerInvocation(
   return invocationId;
 }
 
+function stateReview(candidate: string, blocked = false): string {
+  return JSON.stringify({
+    schemaVersion: "1",
+    candidateCommit: candidate.repeat(40),
+    summary: "Review",
+    findings: blocked
+      ? [
+          {
+            id: "R1",
+            severity: "P1",
+            class: "correctness",
+            title: "Failure",
+            body: "Repro",
+            file: null,
+            line: null,
+          },
+        ]
+      : [],
+  });
+}
+
 describe("operational state", () => {
   it("keeps absent and older state diagnostic reads free of writes", async () => {
     const temporary = await temporaryDirectory("mill-state-read-only-");
@@ -854,7 +875,7 @@ describe("operational state", () => {
       store.beginReviewAttempt(run.id, 1);
       const invocationId = startWorkerInvocation(store, run.id, "review");
       expect(() =>
-        store.completeReview(run.id, '{"findings":[]}', 0, false, randomUUID()),
+        store.completeReview(run.id, stateReview("e"), 0, false, randomUUID()),
       ).toThrow(
         expect.objectContaining({
           code: "WORKER_INVOCATION_SETTLEMENT_CONFLICT",
@@ -864,10 +885,10 @@ describe("operational state", () => {
       expect(store.getRun(run.id)).not.toHaveProperty("reviewJson");
       expect(store.workerInvocationStatus(invocationId)).toBe("launch_started");
       expect(
-        store.completeReview(run.id, '{"findings":[]}', 0, false, invocationId),
+        store.completeReview(run.id, stateReview("e"), 0, false, invocationId),
       ).toMatchObject({
         status: "reviewed",
-        reviewJson: '{"findings":[]}',
+        reviewJson: stateReview("e"),
       });
       expect(store.workerInvocationStatus(invocationId)).toBe("settled");
     } finally {
@@ -983,7 +1004,7 @@ describe("operational state", () => {
       expect(store.beginReviewAttempt(reviewRetry.id, 2)).toBe(2);
       const findings = store.completeReview(
         reviewed.id,
-        '{"findings":[1]}',
+        stateReview("1", true),
         1,
         false,
         startWorkerInvocation(store, reviewed.id, "review"),
@@ -1008,7 +1029,7 @@ describe("operational state", () => {
       expect(
         store.completeReview(
           nonConverged.id,
-          '{"findings":[1]}',
+          stateReview("3", true),
           1,
           true,
           startWorkerInvocation(store, nonConverged.id, "review"),
@@ -1031,7 +1052,7 @@ describe("operational state", () => {
       store.completeValidation(awaitingHuman.id, '{"passed":true}', true);
       store.completeReview(
         awaitingHuman.id,
-        '{"findings":[]}',
+        stateReview("d"),
         0,
         false,
         startWorkerInvocation(store, awaitingHuman.id, "review"),
@@ -1166,7 +1187,7 @@ describe("operational state", () => {
       expectCancellationToWin(() =>
         store.completeReview(
           reviewEvidence.id,
-          '{"findings":[]}',
+          stateReview("e"),
           0,
           false,
           reviewInvocation,

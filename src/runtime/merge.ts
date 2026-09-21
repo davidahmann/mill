@@ -1,3 +1,4 @@
+import { blockingReviewFindings } from "./review-policy.js";
 import type { z } from "zod";
 import { canonicalDigest } from "../contracts/canonical.js";
 import { assessImpactManifest } from "../planning/impact.js";
@@ -221,10 +222,13 @@ async function preflight(
   );
   const review = reviewResultSchema.parse(JSON.parse(run.reviewJson ?? "null"));
   if (
+    delivery.reviewBlocking !== inputs.config.review?.blocking ||
     !validation.passed ||
     validation.candidateCommit !== candidate.commit ||
     review.candidateCommit !== candidate.commit ||
-    review.findings.length !== 0 ||
+    blockingReviewFindings(review, run.configDigest, {
+      policy: inputs.config.review?.blocking,
+    }).length !== 0 ||
     candidate.commit !== delivery.candidateCommit ||
     candidate.tree !== delivery.candidateTree
   )
@@ -280,8 +284,12 @@ async function preflight(
       candidate.commit,
     ).status !== "passed" ||
     !reviewsPassed(observation, config.reviewPolicy, candidate.commit) ||
-    actionableFeedback(observation, config.reviewPolicy, candidate.commit)
-      .length !== 0
+    actionableFeedback(
+      observation,
+      config.reviewPolicy,
+      candidate.commit,
+      delivery.reviewBlocking,
+    ).length !== 0
   )
     throw new MillError(
       "MERGE_CHECKS_NOT_GREEN",
