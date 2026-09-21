@@ -4,6 +4,8 @@ export default defineConfig({
   cacheDir: "coverage/.vite-cache",
   test: {
     clearMocks: true,
+    // Lifecycle fixtures spawn Git, Node and OCI fakes; cap process fan-out.
+    maxWorkers: 4,
     exclude: ["recipes/**", "node_modules/**", "dist/**", ".mill-scratch/**"],
     testTimeout: 10_000,
     coverage: {
