@@ -8,7 +8,7 @@ import {
 } from "./effect-boundary.js";
 import { parse as parseYaml } from "yaml";
 
-import { canonicalDigest } from "../contracts/canonical.js";
+import { canonicalDigest, type JsonValue } from "../contracts/canonical.js";
 import {
   deliveryRecordSchema,
   millConfigSchema,
@@ -713,7 +713,7 @@ export function actionableFeedback(
   candidateCommit: string,
   blocking?: "p0_p1",
 ): GitHubFeedback[] {
-  if (reviewPolicy.mode !== "github_required") return [];
+  if (reviewPolicy.mode === "local_only") return [];
   return observation.feedback.filter(
     (item) =>
       item.commitId === candidateCommit &&
@@ -729,15 +729,90 @@ export function reviewsPassed(
   candidateCommit: string,
 ): boolean {
   if (reviewPolicy.mode === "local_only") return true;
+  const requiredState =
+    reviewPolicy.mode === "github_codex_required"
+      ? "CODEX_COMPLETED"
+      : "APPROVED";
   return reviewPolicy.requiredReviewerLogins.every((login) => {
     const latest = observation.reviews
       .filter(
         (review) =>
-          review.actorLogin === login && review.commitId === candidateCommit,
+          review.actorLogin === login &&
+          (reviewPolicy.mode === "github_codex_required"
+            ? review.state.startsWith("CODEX_")
+            : !review.state.startsWith("CODEX_")),
       )
       .at(-1);
-    return latest?.state === "APPROVED";
+    return (
+      latest?.state === requiredState && latest.commitId === candidateCommit
+    );
   });
+}
+
+export function githubReviewEvidenceDigest(
+  observation: Pick<GitHubObservation, "reviews" | "feedback">,
+  reviewPolicy: DeliveryRecord["reviewPolicy"],
+  candidateCommit: string,
+): string | undefined {
+  if (reviewPolicy.mode === "local_only") return undefined;
+  const requiredActors = new Set(reviewPolicy.requiredReviewerLogins);
+  const reviews = observation.reviews
+    .filter(
+      (review) =>
+        requiredActors.has(review.actorLogin) &&
+        review.commitId === candidateCommit,
+    )
+    .toSorted((left, right) => left.id.localeCompare(right.id));
+  const feedback = observation.feedback
+    .filter(
+      (item) =>
+        requiredActors.has(item.actorLogin) &&
+        item.commitId === candidateCommit,
+    )
+    .toSorted((left, right) => left.id.localeCompare(right.id));
+  return canonicalDigest(
+    JSON.parse(
+      JSON.stringify({
+        schemaVersion: "1",
+        candidateCommit,
+        reviewPolicy,
+        reviews,
+        feedback,
+      }),
+    ) as JsonValue,
+  );
+}
+
+export function githubReviewCompletionDigest(
+  observation: Pick<GitHubObservation, "reviews">,
+  reviewPolicy: DeliveryRecord["reviewPolicy"],
+  candidateCommit: string,
+): string | undefined {
+  if (reviewPolicy.mode === "local_only") return undefined;
+  const completions = reviewPolicy.requiredReviewerLogins.map((actorLogin) => {
+    const review = observation.reviews
+      .filter(
+        (item) =>
+          item.actorLogin === actorLogin &&
+          (reviewPolicy.mode === "github_codex_required"
+            ? item.state.startsWith("CODEX_")
+            : !item.state.startsWith("CODEX_")),
+      )
+      .at(-1);
+    return review === undefined
+      ? { actorLogin, review: null }
+      : { actorLogin, review };
+  });
+  return canonicalDigest(
+    JSON.parse(
+      JSON.stringify({
+        schemaVersion: "1",
+        candidateCommit,
+        reviewPolicy,
+        completions,
+      }),
+    ) as JsonValue,
+  );
 }
 
 function feedbackAsReview(
@@ -1711,7 +1786,10 @@ export async function finalizeDraftPr(input: {
       run.status !== "merged" &&
       run.status !== "post_merge_verified" &&
       !(
-        run.status === "blocked" && run.blockCode === "POST_MERGE_CHECKS_FAILED"
+        run.status === "blocked" &&
+        ["POST_MERGE_CHECKS_FAILED", "POST_MERGE_REVIEW_BLOCKED"].includes(
+          run.blockCode ?? "",
+        )
       )
     ) {
       throw new MillError(
@@ -1842,6 +1920,8 @@ export async function finalizeDraftPr(input: {
         },
         observation: {
           mergeChecks: observation.mergeChecks,
+          reviews: observation.reviews,
+          feedback: observation.feedback,
           observedAt: new Date().toISOString(),
         },
         lastErrorCode: null,
@@ -1851,6 +1931,37 @@ export async function finalizeDraftPr(input: {
     );
     if (run.status !== "merged" && run.status !== "post_merge_verified") {
       run = store.transition(run.id, "merged", "delivery.merged");
+    }
+    if (
+      !reviewsPassed(
+        observation,
+        delivery.reviewPolicy,
+        delivery.candidateCommit,
+      ) ||
+      actionableFeedback(
+        observation,
+        delivery.reviewPolicy,
+        delivery.candidateCommit,
+        delivery.reviewBlocking,
+      ).length !== 0
+    ) {
+      delivery = persistDelivery(
+        store,
+        run.id,
+        {
+          ...delivery,
+          state: "blocked",
+          lastErrorCode: "POST_MERGE_REVIEW_BLOCKED",
+        },
+        "delivery.post_merge_review_blocked",
+      );
+      run = setRunBlocker(
+        store,
+        run,
+        "POST_MERGE_REVIEW_BLOCKED",
+        "delivery.blocked",
+      );
+      return { run: publicRunRecord(run), delivery };
     }
     const checks = checkDecision(
       delivery.postMergeRequiredChecks ?? delivery.requiredChecks,

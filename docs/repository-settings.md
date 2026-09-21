@@ -18,9 +18,12 @@ After the Wave 1 checks have run at least once, configure:
 - maintainer bypass allowed only for emergencies and recorded as repair/audit
   intake.
 
-`CODEOWNERS` routes ownership but must not deadlock the sole maintainer. GitHub
-Codex review is optional repository policy in v1; frozen local review and
-required machine checks are portable and mandatory.
+`CODEOWNERS` routes ownership but must not deadlock the sole maintainer. Frozen
+local review and required machine checks remain mandatory. A downstream
+repository can additionally select `github_required` for ordinary GitHub
+approvals or `github_codex_required` for GitHub Codex completion and feedback.
+The latter uses a separate readiness approval because the hosted review begins
+after draft state ends. See [review policy](review-policy.md).
 
 ## Check names and workflow events
 

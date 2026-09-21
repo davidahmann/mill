@@ -36,8 +36,8 @@ const config: ProposeConfig = {
   allowedMergerLogins: ["operator"],
   requiredChecks: ["validate"],
   reviewPolicy: {
-    mode: "github_required",
-    requiredReviewerLogins: ["codex-review"],
+    mode: "github_codex_required",
+    requiredReviewerLogins: ["chatgpt-codex-connector[bot]"],
   },
   allowedMergeMethods: ["linear_tree_preserving"],
   approvalTtlSeconds: 900,
@@ -49,15 +49,41 @@ describe("GitHub CLI adapter", () => {
     const repository = await temporaryDirectory("mill-github-repository-");
     const tools = await temporaryDirectory("mill-github-tools-");
     const gh = path.join(tools.path, "gh");
+    const completedSummary = `<!-- codex-pull-request-review-summary -->
+| Review | Status | Commit | Review trigger |
+| --- | --- | --- | --- |
+| 📝 **Code Review** | ✅ **Completed** | \`${sha.slice(0, 7)}\` | PR opened |`;
+    const fullReviewEnvelope = `
+### 💡 Codex Review
+
+Here are some automated review suggestions for this pull request.
+
+**Reviewed commit:** \`${sha.slice(0, 10)}\`
+
+<details> <summary>ℹ️ About Codex in GitHub</summary>
+<br/>
+
+[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you
+- Open a pull request for review
+- Mark a draft as ready
+- Comment "@codex review".
+
+If Codex has suggestions, it will comment; otherwise it will react with 👍.
+
+Codex can also answer questions or update the PR. Try commenting "@codex address that feedback".
+
+</details>`;
     try {
       await writeFile(
         gh,
         `#!${process.execPath}
 import {appendFileSync,existsSync,readFileSync} from "node:fs";
 const modeUrl=new URL("./mode.json",import.meta.url);const mode=existsSync(modeUrl)?JSON.parse(readFileSync(modeUrl,"utf8")):{};
-appendFileSync(new URL("./calls.log",import.meta.url),JSON.stringify(process.argv.slice(2))+"\\n");
+const callsUrl=new URL("./calls.log",import.meta.url);const priorCalls=existsSync(callsUrl)?readFileSync(callsUrl,"utf8").trim().split("\\n").filter(Boolean).map(JSON.parse):[];
+appendFileSync(callsUrl,JSON.stringify(process.argv.slice(2))+"\\n");
 if(process.env.GH_TOKEN!==undefined)appendFileSync(new URL("./token.log",import.meta.url),process.env.GH_TOKEN==="scoped-token"?"present\\n":"unexpected\\n");
 const args=process.argv.slice(2);const endpoint=args.includes("graphql")?"graphql":args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
+const endpointCall=priorCalls.filter((call)=>{const priorEndpoint=call.includes("graphql")?"graphql":call.find((value)=>value.startsWith("repos/"))??call.at(-1)??"";return priorEndpoint===endpoint;}).length;
 const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"open",draft:true,body:"<!-- mill-delivery-key:fixture -->",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:false,merge_commit_sha:null,merged_by:null,merged_at:null};
 const listedPull={...pull};delete listedPull.merged;delete listedPull.merged_by;delete listedPull.merged_at;
 if(endpoint==="user")console.log(JSON.stringify({login:"operator",id:7}));
@@ -67,6 +93,7 @@ else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:
 else if(endpoint.includes("/pulls?"))console.log(JSON.stringify([[listedPull]]));
 else if(args.includes("--method")&&endpoint==="repos/example/app/pulls")console.log(JSON.stringify(pull));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
+else if(endpoint.includes("/pulls/41/commits?"))console.log(JSON.stringify([((mode.commits??["${sha}"]).map((sha)=>({sha}))) ]));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{id:101,name:"validate",status:"completed",conclusion:"success",app:{id:15368},head_sha:"${sha}",details_url:"https://github.com/example/app/actions/runs/50/job/101",...mode.check}]}]));
 else if(endpoint.endsWith("/actions/jobs/101"))console.log(JSON.stringify({id:101,run_id:50,head_sha:"${sha}",check_run_url:"https://api.github.com/repos/example/app/check-runs/101",...mode.job}));
 else if(endpoint.endsWith("/actions/runs/50"))console.log(JSON.stringify({head_sha:"${sha}",repository:{node_id:"R_example"},path:".github/workflows/ci.yml",event:"pull_request",...mode.run}));
@@ -74,8 +101,9 @@ else if(endpoint.endsWith("/protection"))console.log(JSON.stringify({enforce_adm
 else if(endpoint==="graphql")console.log(JSON.stringify(mode.ready??{data:{markPullRequestReadyForReview:{pullRequest:{id:"PR_example",isDraft:false}}}}));
 else if(endpoint.endsWith("/pulls/41/merge"))console.log(JSON.stringify({merged:mode.merged??true}));
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[{state:"pending",context:"legacy"}]}]))
-else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"codex-review"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
-else if(endpoint.includes("/comments?"))console.log(JSON.stringify([[{id:12,user:{login:"codex-review"},body:"[P2] clarify edge case",path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));
+else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[{id:11,user:{login:"chatgpt-codex-connector[bot]"},state:"COMMENTED",commit_id:"${sha}",body:"Top-level concern without a priority label",html_url:"https://github.com/example/app/pull/41#pullrequestreview-11",...mode.review}]]));
+else if(endpoint.includes("/issues/41/comments?")){const bodies=mode.issueBodies??[mode.issueBody??${JSON.stringify(completedSummary)}];const updatedAt=(mode.issueUpdatedAts??[])[endpointCall]??"2026-09-21T12:00:00Z";console.log(JSON.stringify([bodies.map((body,index)=>({id:13+index,user:{login:"chatgpt-codex-connector[bot]"},body,updated_at:updatedAt,html_url:"https://github.com/example/app/pull/41#issuecomment-"+(13+index)}))]));}
+else if(endpoint.includes("/comments?")){const body=mode.interleave&&endpointCall>0?"[P1] published with completion":"[P2] clarify edge case";console.log(JSON.stringify([[{id:12,user:{login:"chatgpt-codex-connector[bot]"},body,path:"src/index.ts",line:4,html_url:"https://github.com/example/app/pull/41#discussion_r12",commit_id:"${sha}"}]]));}
 else process.exit(2);
 `,
         { mode: 0o755 },
@@ -152,10 +180,17 @@ else process.exit(2);
         reviews: [
           {
             id: "11",
-            actorLogin: "codex-review",
+            actorLogin: "chatgpt-codex-connector[bot]",
             state: "COMMENTED",
             commitId: sha,
             body: "Top-level concern without a priority label",
+          },
+          {
+            id: "codex-summary-13",
+            actorLogin: "chatgpt-codex-connector[bot]",
+            state: "CODEX_COMPLETED",
+            commitId: sha,
+            body: "",
           },
         ],
         feedback: [
@@ -174,9 +209,271 @@ else process.exit(2);
           deadlineMs: Date.now() + 10_000,
         }),
       ).resolves.toMatchObject({
-        reviews: [{ state: "APPROVED", body: "LGTM" }],
+        reviews: [
+          { state: "APPROVED", body: "LGTM" },
+          { state: "CODEX_COMPLETED", commitId: sha },
+        ],
         feedback: [{ priority: "P2", path: "src/index.ts" }],
       });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary
+            .replace("✅ **Completed**", "🔄 **Running**")
+            .replace(sha.slice(0, 7), "b".repeat(7)),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_RUNNING", commitId: null },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          commits: [sha, `${sha.slice(0, 7)}${"b".repeat(33)}`],
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: null },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary.replace(
+            "✅ **Completed**",
+            "✅ **Completed** 🔄 **Running**",
+          ),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: `${completedSummary}\n| 📝 **Code Review** | 🔄 **Running** | malformed | retried |`,
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      const callsBeforeInterleave = await readFile(
+        path.join(tools.path, "calls.log"),
+        "utf8",
+      );
+      await writeFile(path.join(tools.path, "calls.log"), "");
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({ interleave: true }),
+      );
+      const interleaved = await adapter.observe({
+        config,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(interleaved.reviews).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            state: "CODEX_COMPLETED",
+            commitId: sha,
+          }),
+        ]),
+      );
+      expect(interleaved.feedback).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            priority: "P1",
+            body: "[P1] published with completion",
+          }),
+        ]),
+      );
+      const interleaveCalls = await readFile(
+        path.join(tools.path, "calls.log"),
+        "utf8",
+      );
+      await writeFile(
+        path.join(tools.path, "calls.log"),
+        `${callsBeforeInterleave}${interleaveCalls}`,
+      );
+      const callsBeforeRevisionCheck = await readFile(
+        path.join(tools.path, "calls.log"),
+        "utf8",
+      );
+      await writeFile(path.join(tools.path, "calls.log"), "");
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueUpdatedAts: ["2026-09-21T12:00:00Z", "2026-09-21T12:00:01Z"],
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      const revisionCheckCalls = await readFile(
+        path.join(tools.path, "calls.log"),
+        "utf8",
+      );
+      await writeFile(
+        path.join(tools.path, "calls.log"),
+        `${callsBeforeRevisionCheck}${revisionCheckCalls}`,
+      );
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: `${completedSummary}\n| 📝 **Code Review** | ✅ **Completed** | \`${sha.slice(0, 7)}\` | retried |`,
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          review: {
+            body: fullReviewEnvelope,
+          },
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: sha },
+        ],
+        feedback: [{ priority: "P2", path: "src/index.ts" }],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody:
+            "<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | unknown | malformed |",
+        }),
+      );
+      const malformed = await adapter.observe({
+        config,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(
+        malformed.reviews.some((review) => review.state.startsWith("CODEX_")),
+      ).toBe(true);
+      expect(malformed.reviews).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            state: "CODEX_INVALID",
+            commitId: sha,
+          }),
+        ]),
+      );
+      expect(malformed.feedback).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ priority: "unclassified" }),
+        ]),
+      );
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBodies: [
+            completedSummary,
+            "<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | unknown | malformed |",
+          ],
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          review: {
+            body: fullReviewEnvelope.replace(
+              "<details>",
+              "[P1] retain this finding\n\n<details>",
+            ),
+          },
+        }),
+      );
+      const substantive = await adapter.observe({
+        config,
+        pullRequestNumber: 41,
+        deadlineMs: Date.now() + 10_000,
+      });
+      expect(substantive.feedback).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            priority: "P1",
+            body: "[P1] retain this finding",
+          }),
+        ]),
+      );
       await writeFile(path.join(tools.path, "mode.json"), "{}");
       const calls = await readFile(path.join(tools.path, "calls.log"), "utf8");
       const producerConfig: ProposeConfig = {
@@ -470,6 +767,7 @@ else process.exit(2);
 const args=process.argv.slice(2);const endpoint=args.find((value)=>value.startsWith("repos/"))??args.at(-1)??"";
 const pull={number:41,node_id:"PR_example",html_url:"https://github.com/example/app/pull/41",state:"closed",draft:false,body:"marker",head:{ref:"mill/task",sha:"${sha}"},base:{ref:"main"},merged:true,merge_commit_sha:"${mergeSha}",merged_by:{login:"operator"},merged_at:"2026-09-01T17:00:00.000Z"};
 if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
+else if(endpoint.includes("/pulls/41/commits?"))console.log(JSON.stringify([[{sha:"${sha}"}]]));
 else if(endpoint.includes("/git/ref/heads/mill")){console.error("HTTP 404");process.exit(1)}
 else if(endpoint.includes("/git/ref/heads/main"))console.log(JSON.stringify({object:{sha:"${mergeSha}"}}));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify([{check_runs:[{name:"validate",status:"completed",conclusion:"success"}]}]));
@@ -522,6 +820,7 @@ else if(endpoint==="repos/example/app")console.log(JSON.stringify(mode==="bad-re
 else if(endpoint.includes("/git/ref/heads/"))console.log(JSON.stringify({object:{sha:mode==="bad-sha"?"bad":"${sha}"}}));
 else if(endpoint.includes("/pulls?"))console.log(JSON.stringify(mode==="bad-pages"?{}:mode==="bad-page"?[{}]:[[listedPull]]));
 else if(endpoint.endsWith("/pulls/41"))console.log(JSON.stringify(pull));
+else if(endpoint.includes("/pulls/41/commits?"))console.log(JSON.stringify([[{sha:"${sha}"}]]));
 else if(endpoint.includes("/check-runs"))console.log(JSON.stringify(mode==="bad-check-pages"?{}:mode==="bad-check-page"?[{}]:[{check_runs:[]}]))
 else if(endpoint.includes("/status?"))console.log(JSON.stringify([{statuses:[]}]))
 else if(endpoint.includes("/reviews?"))console.log(JSON.stringify([[]]));

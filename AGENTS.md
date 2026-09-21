@@ -25,6 +25,11 @@ The owner approved the bounded verifier recovery repair on 2026-09-21. Its
 authority and acceptance are in `product/verifier-recovery.md`. Use the native
 maintainer route; preserve downstream task and candidate identities.
 
+The owner approved the GitHub Codex review follow-through on 2026-09-21. Its
+authority and acceptance are in `product/github-codex-review-follow-through.md`.
+Use the native maintainer route and preserve the existing local and GitHub
+approval policies.
+
 ## Operating Mill
 
 Mill turns approved repository-native product intent into a bounded, tested,
@@ -195,6 +200,12 @@ two-step plan/apply wrapper, never as implicit push authority.
   Preserve every finding; only P0/P1 require repair under that policy. Legacy
   reviews retain their original blocking rules. Required GitHub approval remains
   separate. See `docs/review-policy.md`.
+- `propose.reviewPolicy.mode: github_codex_required` requires the named GitHub
+  Codex actor's completed summary on the exact PR head. If marking a draft ready
+  triggers review, execute and verify readiness only. Observe review completion,
+  then approve a new merge plan bound to the exact review and feedback snapshot.
+  Running, stale, malformed, unclassified, or P0/P1 feedback blocks. Never treat
+  readiness approval as merge approval.
 - Before any remote attempt, stale full-diff scope may use attended
   `review --refresh --base <exact-provider-commit>`. Preserve candidate, native
   validation, prior receipts, deadline and remaining review budget; do not move

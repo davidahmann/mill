@@ -425,6 +425,10 @@ function recordedReviewsPass(
 ): boolean {
   if (delivery.reviewPolicy.mode === "local_only") return true;
   if (!Array.isArray(value)) return false;
+  const requiredState =
+    delivery.reviewPolicy.mode === "github_codex_required"
+      ? "CODEX_COMPLETED"
+      : "APPROVED";
   return delivery.reviewPolicy.requiredReviewerLogins.every((login) => {
     let latest: string | undefined;
     for (const entry of value) {
@@ -438,11 +442,16 @@ function recordedReviewsPass(
         return false;
       if (
         review.actorLogin === login &&
-        review.commitId === delivery.candidateCommit
+        (delivery.reviewPolicy.mode === "github_codex_required"
+          ? review.state.startsWith("CODEX_")
+          : !review.state.startsWith("CODEX_"))
       )
-        latest = review.state;
+        latest =
+          review.commitId === delivery.candidateCommit
+            ? review.state
+            : undefined;
     }
-    return latest === "APPROVED";
+    return latest === requiredState;
   });
 }
 

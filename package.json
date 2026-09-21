@@ -1,6 +1,6 @@
 {
   "name": "@davidahmann/mill",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Local-first software factory for new and existing codebases. Turns approved product intent into tested, reviewed PRs with repo-native evidence and explicit human approval for delivery and merge.",
   "license": "Apache-2.0",
   "author": "David Ahmann",

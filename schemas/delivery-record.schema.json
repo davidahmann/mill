@@ -111,7 +111,10 @@
     "reviewPolicy": {
       "type": "object",
       "properties": {
-        "mode": { "type": "string", "enum": ["local_only", "github_required"] },
+        "mode": {
+          "type": "string",
+          "enum": ["local_only", "github_required", "github_codex_required"]
+        },
         "requiredReviewerLogins": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
@@ -122,7 +125,9 @@
       "allOf": [
         {
           "if": {
-            "properties": { "mode": { "const": "github_required" } },
+            "properties": {
+              "mode": { "enum": ["github_required", "github_codex_required"] }
+            },
             "required": ["mode"]
           },
           "then": {
@@ -216,6 +221,14 @@
               "maximum": 9007199254740991
             },
             "policyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "reviewEvidenceDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "reviewCompletionDigest": {
               "type": "string",
               "pattern": "^sha256:[a-f0-9]{64}$"
             },

@@ -4,6 +4,24 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-21
+
+### Added
+
+- Add a GitHub Codex review mode that requires exact-head completion, retains
+  hosted feedback, and binds that evidence into attended merge approval.
+- Split draft readiness from merge when readiness starts hosted review.
+
+### Fixed
+
+- Recheck required hosted review and feedback during post-merge closure.
+- Reject hosted-review drift between merge planning and execution.
+
+### Changed
+
+- Shorten the installation command and rewrite the README around the first
+  reviewed pull request, trust boundary, supported scope, and recovery path.
+
 ## [0.8.1] - 2026-09-21
 
 ### Fixed

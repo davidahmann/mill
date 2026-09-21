@@ -80,6 +80,7 @@ export async function runtimeFixture(
     impactExpiresAt?: string;
     nativeRepair?: boolean;
     githubReviewer?: string;
+    githubReviewMode?: "github_required" | "github_codex_required";
     reviewerCacheInputTokens?: number;
   } = {},
 ): Promise<{
@@ -234,9 +235,13 @@ scenarios:
     ),
   ]);
   const reviewMode =
-    options.githubReviewer === undefined ? "local_only" : "github_required";
+    options.githubReviewer === undefined
+      ? "local_only"
+      : (options.githubReviewMode ?? "github_required");
   const reviewers =
-    options.githubReviewer === undefined ? "[]" : `[${options.githubReviewer}]`;
+    options.githubReviewer === undefined
+      ? "[]"
+      : JSON.stringify([options.githubReviewer]);
   const proposalConfiguration =
     options.propose === true
       ? `propose:
