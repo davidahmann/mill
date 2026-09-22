@@ -22,10 +22,16 @@ Use these terms consistently when operating or reviewing Mill.
   but it cannot alter acceptance criteria or approve an action.
 - **Proposal:** structured product input that Mill can inspect and compare with
   sources. It becomes authority only after the repository's approval process.
+- **Promotion preflight:** the deterministic local decision that validation and
+  review are current, exact, and free of blocking findings. GitHub checks,
+  hosted review, approval, and readback remain separate delivery gates.
 - **Repair:** one new candidate built from recorded verification or review
   findings. It must repeat validation and review; it cannot certify itself.
 - **Report:** a redacted, read-only aggregate of local run outcomes and recorded
   usage. It cannot establish customer value or authorize a change.
+- **Review checklist:** bounded repository guidance selected by changed path and
+  risk class from the immutable review base. It focuses the reviewer without
+  narrowing the complete diff or changing acceptance.
 - **Self-hosting:** Mill's own repository using its delivery process. It is an
   operating measure, not proof that every downstream repository is supported.
 - **Task packet:** the versioned, bounded execution authority for one outcome.

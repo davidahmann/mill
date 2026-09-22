@@ -25,3 +25,8 @@ downstream Mill pin, deliberate. The verified Dependabot DCO exception is not an
 exemption from reviewing manifests, lockfiles and affected behavior. Mill's
 standalone maintainer review script can record that exact-candidate review
 before merge; it does not install a required GitHub check.
+
+`review-checklists/` contains three short focus guides for runtime state, tests
+and authority, and delivery and release work. Copy only the guides that match
+the target repository, then map them in `mill.yaml`. They guide one full-diff
+review; they do not replace repository tests or acceptance criteria.

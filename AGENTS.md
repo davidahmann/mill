@@ -1,6 +1,6 @@
 # AGENTS.md: operating Mill safely
 
-Version: 2.7
+Version: 2.8
 
 Status: normative
 
@@ -162,6 +162,13 @@ two-step plan/apply wrapper, never as implicit push authority.
   release authority.
 - Report measured, partial and unavailable usage truthfully. Routine output must
   not expose private emails, commit trailers, raw worker context or logs.
+- If a task declares `budget.maxModelTokens`, check measured input plus output
+  tokens before every later worker call. Missing prior measurements block. This
+  is a between-invocation guard; it is not a hard cap on an in-flight call.
+- Repository review checklists are focused guidance selected from changed paths
+  and risk class. Read them from the immutable review base, bind their digests
+  to the scope, and still inspect the complete diff. They cannot change task
+  authority or acceptance.
 - `stats` and `report` are read-only, redacted local aggregates. `report` uses
   an explicitly declared development-evidence ledger for eligible-change and
   route counts; it does not infer a productivity or customer-value measure from

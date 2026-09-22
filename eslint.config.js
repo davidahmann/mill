@@ -15,7 +15,12 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
-    files: ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"],
+    files: [
+      "src/**/*.ts",
+      "test/**/*.ts",
+      "scripts/**/*.d.mts",
+      "vitest.config.ts",
+    ],
     languageOptions: {
       parserOptions: {
         projectService: true,

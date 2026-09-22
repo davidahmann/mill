@@ -3,6 +3,34 @@ repositoryId: 889e67bd-0768-4f73-9e18-286f2fb8b5f3
 trustCeiling: propose
 review:
   blocking: p0_p1
+  checklists:
+    - id: runtime-state
+      path: policy-starters/review-checklists/runtime-state.md
+      pathPatterns: [src/runtime/**, src/contracts/**, schemas/**]
+    - id: tests-authority
+      path: policy-starters/review-checklists/tests-authority.md
+      pathPatterns:
+        [
+          test/**,
+          docs/**,
+          policy-starters/**,
+          AGENTS.md,
+          WORKFLOW.md,
+          mill.yaml,
+        ]
+    - id: delivery-release
+      path: policy-starters/review-checklists/delivery-release.md
+      pathPatterns:
+        [
+          src/runtime/delivery.ts,
+          src/runtime/merge.ts,
+          scripts/**,
+          .github/**,
+          package.json,
+          package-lock.json,
+          docs/release.md,
+          docs/releases/**,
+        ]
 reporting:
   ledgerPath: quality/development-evidence-ledger.yaml
 sensitivePaths: [".env", ".npmrc", ".mill/**"]

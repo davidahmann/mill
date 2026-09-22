@@ -313,6 +313,12 @@ version `2`, including an approved impact manifest and explicit acceptance,
 invariant, scenario, coverage, and evidence bindings. Do not rewrite an
 in-flight version `1` task: its canonical bytes and digest remain unchanged.
 
+Task-packet version `2` may set `budget.maxModelTokens`. The value covers
+provider-measured input plus output tokens across build, repair, and review.
+Before a later invocation, incomplete prior usage or an exhausted allowance
+blocks. The first call is admitted, and an in-flight call may cross the limit
+because its usage is known only after settlement.
+
 The real-provider canaries use the maintainer's personal Codex and GitHub
 accounts, a pre-pulled digest-pinned image, and an explicitly named disposable
 repository. They may exercise only the wave's approved effects and must preserve

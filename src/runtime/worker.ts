@@ -12,6 +12,7 @@ import { ExitCode, MillError } from "../errors.js";
 import type { ContextManifest } from "./context.js";
 import type { TaskPacket } from "./inputs.js";
 import type { ActiveProcess } from "./process.js";
+import type { ResolvedReviewChecklist } from "./repository.js";
 
 export interface ProviderUsage {
   source: "measured" | "unavailable";
@@ -47,6 +48,7 @@ export interface ReviewerWorkerInput extends WorkerLifecycle {
   manifest: ContextManifest;
   candidateCommit: string;
   reviewScope?: NonNullable<z.infer<typeof reviewResultSchema>["scope"]>;
+  reviewChecklists?: readonly ResolvedReviewChecklist[];
   deadlineMs: number;
   maxOutputBytes: number;
 }

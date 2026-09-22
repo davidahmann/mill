@@ -503,7 +503,26 @@ export const millConfigSchema = z
     repositoryId: z.uuid(),
     trustCeiling: z.enum(["inspect", "build", "propose"]),
     sensitivePaths: z.array(repositoryPathPatternSchema).default([]),
-    review: z.strictObject({ blocking: z.literal("p0_p1") }).optional(),
+    review: z
+      .strictObject({
+        blocking: z.literal("p0_p1"),
+        checklists: z
+          .array(
+            z.strictObject({
+              id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+              path: repositoryFilePathSchema,
+              pathPatterns: z.array(repositoryPathPatternSchema).min(1).max(32),
+              riskClasses: z
+                .array(z.enum(["low", "medium", "high"]))
+                .min(1)
+                .max(3)
+                .optional(),
+            }),
+          )
+          .max(8)
+          .optional(),
+      })
+      .optional(),
     reporting: z
       .strictObject({
         ledgerPath: repositoryFilePathSchema.optional(),
@@ -582,6 +601,14 @@ export const millConfigSchema = z
     ),
   })
   .superRefine((value, context) => {
+    const checklistIds = value.review?.checklists?.map((item) => item.id) ?? [];
+    if (new Set(checklistIds).size !== checklistIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["review", "checklists"],
+        message: "review checklist identifiers must be unique",
+      });
+    }
     for (const [commandId, command] of Object.entries(value.commands)) {
       if (
         command.executableFixtureScratch === true &&
@@ -825,6 +852,7 @@ const taskPacketCommonShape = {
     deadlineSeconds: z.number().int().min(1).max(7200),
     maxContextBytes: z.number().int().min(1024).max(16_777_216).optional(),
     maxOutputBytes: z.number().int().min(1024).max(10_000_000),
+    maxModelTokens: z.number().int().min(1).max(100_000_000).optional(),
     retryCount: z.number().int().min(0).max(1),
   }),
 } as const;
@@ -999,6 +1027,15 @@ const outcomeReasonSchema = z.strictObject({
   message: z.string().min(1),
 });
 
+const phaseUsageSchema = z.strictObject({
+  calls: z.number().int().min(0),
+  completedCalls: z.number().int().min(0),
+  failedCalls: z.number().int().min(0),
+  measuredCalls: z.number().int().min(0),
+  inputTokens: z.number().int().min(0).nullable(),
+  outputTokens: z.number().int().min(0).nullable(),
+});
+
 const outcomeUsageSchema = z.strictObject({
   source: z.enum(["measured", "partial", "unavailable"]),
   admittedCalls: z.number().int().min(0),
@@ -1010,6 +1047,13 @@ const outcomeUsageSchema = z.strictObject({
   cacheSource: z.enum(["measured", "partial", "unavailable"]),
   cost: z.literal("unavailable"),
   blockEvents: z.number().int().min(0),
+  phases: z
+    .strictObject({
+      build: phaseUsageSchema,
+      repair: phaseUsageSchema,
+      review: phaseUsageSchema,
+    })
+    .optional(),
 });
 
 export const runOutcomeSchema = z.strictObject({
@@ -1203,6 +1247,16 @@ export const reviewScopeSchema = z.strictObject({
   candidateCommit: z.string().regex(/^[a-f0-9]{40}$/u),
   candidateTree: z.string().regex(/^[a-f0-9]{40}$/u),
   changedPaths: z.array(z.string().min(1)),
+  checklists: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/u),
+        path: repositoryFilePathSchema,
+        digest: digestSchema,
+      }),
+    )
+    .max(8)
+    .optional(),
   digest: digestSchema,
 });
 

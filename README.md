@@ -25,7 +25,7 @@ GitHub workflow.
 Pin a released version in the repository that will use Mill:
 
 ```sh
-npm i -D -E --ignore-scripts @davidahmann/mill@0.9.0
+npm i -D -E --ignore-scripts @davidahmann/mill@0.10.0
 npx --no-install millctl --version
 ```
 
@@ -101,6 +101,11 @@ npx --no-install millctl --json review \
 The builder cannot edit task authority or the declared controls that certify its
 change. Verification and review bind to the same candidate commit.
 
+An optional `budget.maxModelTokens` limits measured input plus output tokens
+across the run. Mill checks the total before each later model call. It blocks
+when prior usage is incomplete or the allowance is spent. The current call can
+still cross the allowance because provider usage arrives after completion.
+
 ### 4. Approve a draft pull request
 
 ```sh
@@ -132,6 +137,11 @@ feedback, missing completion, stale feedback, failed checks, and review drift
 block the applicable phase. Read [review policy](docs/review-policy.md) before
 changing this boundary.
 
+Repositories may also map short review checklists to changed paths in
+`review.checklists`. Mill reads selected checklists from the immutable review
+base, records their digests in the review scope, and still requires review of
+the complete diff.
+
 Attended merge is opt-in. It requires producer-bound checks, strict up-to-date
 branch protection, allowed operator and merger identities, and an exact approval
 plan:
@@ -159,6 +169,9 @@ and [repository settings](docs/repository-settings.md).
   versioned in Git.
 - Each run binds the base, configuration, context, budget, candidate,
   validation, review, and delivery evidence by digest.
+- One promotion preflight applies the same exact-candidate validation and local
+  review rules before draft delivery and merge. The maintainer review script
+  uses the same evaluator before reporting a candidate ready to push.
 - The builder cannot push, merge, deploy, or rewrite its acceptance oracle.
 - GitHub effects are planned, approved, journaled, read back, and reconciled.
 - Native checks remain the repository's source of behavioral evidence.

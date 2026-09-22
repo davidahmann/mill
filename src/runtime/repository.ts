@@ -28,6 +28,20 @@ export interface CandidateIdentity {
   tree: string;
 }
 
+export interface ReviewChecklistPolicy {
+  id: string;
+  path: string;
+  pathPatterns: readonly string[];
+  riskClasses?: readonly ("low" | "medium" | "high")[] | undefined;
+}
+
+export interface ResolvedReviewChecklist {
+  id: string;
+  path: string;
+  digest: string;
+  content: string;
+}
+
 export interface GitControlSnapshot {
   schemaVersion: "1";
   currentRef: string;
@@ -217,6 +231,10 @@ export async function captureReviewScope(
   root: string,
   baseRef: string,
   candidateCommit: string,
+  options: {
+    checklists?: readonly ReviewChecklistPolicy[] | undefined;
+    riskClass?: "low" | "medium" | "high" | undefined;
+  } = {},
 ) {
   const target = await resolveCommit(root, baseRef);
   const candidate = await readCandidateIdentity(root, candidateCommit);
@@ -237,13 +255,144 @@ export async function captureReviewScope(
     .split("\0")
     .filter(Boolean)
     .sort();
+  const selected = await resolveReviewChecklists({
+    root,
+    baseCommit,
+    changedPaths: paths,
+    ...(options.checklists === undefined
+      ? {}
+      : { checklists: options.checklists }),
+    ...(options.riskClass === undefined
+      ? {}
+      : { riskClass: options.riskClass }),
+  });
   const scope = {
     baseCommit,
     candidateCommit: candidate.commit,
     candidateTree: candidate.tree,
     changedPaths: paths,
+    ...(options.checklists === undefined
+      ? {}
+      : {
+          checklists: selected.map(({ id, path: checklistPath, digest }) => ({
+            id,
+            path: checklistPath,
+            digest,
+          })),
+        }),
   };
   return { ...scope, digest: canonicalDigest(scope) };
+}
+
+function matchesReviewPath(candidate: string, pattern: string): boolean {
+  if (pattern.endsWith("/**")) {
+    const prefix = pattern.slice(0, -3).replace(/\/$/u, "");
+    return candidate === prefix || candidate.startsWith(`${prefix}/`);
+  }
+  return candidate === pattern;
+}
+
+async function readCommittedChecklist(
+  root: string,
+  commit: string,
+  checklistPath: string,
+): Promise<string> {
+  const entry = (
+    await git(root, ["ls-tree", commit, "--", checklistPath], 64 * 1024)
+  ).trim();
+  if (!/^(100644|100755) blob [a-f0-9]{40}\t/u.test(entry)) {
+    throw new MillError(
+      "REVIEW_CHECKLIST_UNSAFE",
+      `Review checklist must be a regular file in the immutable review base: ${checklistPath}`,
+      ExitCode.configuration,
+    );
+  }
+  const content = await readCommittedFile(
+    root,
+    commit,
+    checklistPath,
+    64 * 1024,
+  );
+  if (Buffer.byteLength(content, "utf8") > 32 * 1024) {
+    throw new MillError(
+      "REVIEW_CHECKLIST_TOO_LARGE",
+      `Review checklist exceeds the 32 KiB limit: ${checklistPath}`,
+      ExitCode.configuration,
+    );
+  }
+  return content;
+}
+
+export async function resolveReviewChecklists(input: {
+  root: string;
+  baseCommit: string;
+  changedPaths: readonly string[];
+  checklists?: readonly ReviewChecklistPolicy[] | undefined;
+  riskClass?: "low" | "medium" | "high" | undefined;
+}): Promise<ResolvedReviewChecklist[]> {
+  if (input.checklists === undefined) return [];
+  const selected = input.checklists
+    .filter(
+      (checklist) =>
+        (checklist.riskClasses === undefined ||
+          (input.riskClass !== undefined &&
+            checklist.riskClasses.includes(input.riskClass))) &&
+        input.changedPaths.some((changed) =>
+          checklist.pathPatterns.some((pattern) =>
+            matchesReviewPath(changed, pattern),
+          ),
+        ),
+    )
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const resolved: ResolvedReviewChecklist[] = [];
+  let totalBytes = 0;
+  for (const checklist of selected) {
+    const content = await readCommittedChecklist(
+      input.root,
+      input.baseCommit,
+      checklist.path,
+    );
+    totalBytes += Buffer.byteLength(content, "utf8");
+    if (totalBytes > 128 * 1024) {
+      throw new MillError(
+        "REVIEW_CHECKLIST_BUDGET_EXCEEDED",
+        "Selected review checklists exceed the 128 KiB aggregate limit.",
+        ExitCode.configuration,
+      );
+    }
+    resolved.push({
+      id: checklist.id,
+      path: checklist.path,
+      digest: `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`,
+      content,
+    });
+  }
+  return resolved;
+}
+
+export async function loadReviewChecklistContents(input: {
+  root: string;
+  baseCommit: string;
+  checklists?: readonly { id: string; path: string; digest: string }[];
+}): Promise<ResolvedReviewChecklist[]> {
+  const result: ResolvedReviewChecklist[] = [];
+  for (const checklist of input.checklists ?? []) {
+    const content = await readCommittedChecklist(
+      input.root,
+      input.baseCommit,
+      checklist.path,
+    );
+    const digest = `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+    if (digest !== checklist.digest) {
+      throw new MillError(
+        "REVIEW_CHECKLIST_DIGEST_MISMATCH",
+        `Review checklist changed after scope capture: ${checklist.path}`,
+        ExitCode.configuration,
+      );
+    }
+    result.push({ ...checklist, content });
+  }
+  return result;
 }
 
 /**

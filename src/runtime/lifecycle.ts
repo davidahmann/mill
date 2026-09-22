@@ -53,6 +53,7 @@ import {
   resetCandidateWorktree,
   resolveCommit,
   readCommittedFile,
+  loadReviewChecklistContents,
   type GitControlSnapshot,
 } from "./repository.js";
 import {
@@ -474,6 +475,7 @@ async function admitWorker(input: {
   invocationId: string;
   hooks: ReturnType<typeof lifecycleHooks>;
 }> {
+  assertModelTokenBudget(input.store, input.run, input.inputs);
   const profile = await workerAdapter.profile(input.root, input.role);
   const admitted = createWorkerInvocation({
     runId: input.run.id,
@@ -608,16 +610,98 @@ function reconcileMutatingWorkerAdmissions(
 function recordProviderUsage(
   store: StateStore,
   runId: string,
-  eventType: string,
+  invocationId: string,
+  phase: "build" | "repair" | "review",
+  outcome: "completed" | "failed",
   usage: ProviderUsage,
 ): void {
-  store.recordEvent(runId, eventType, {
+  store.recordEvent(runId, "provider.usage_recorded", {
+    invocationId,
+    phase,
+    outcome,
     usageSource: usage.source,
     costSource: usage.cost,
     inputTokens: usage.inputTokens ?? null,
     outputTokens: usage.outputTokens ?? null,
     cacheInputTokens: usage.cacheInputTokens ?? null,
   });
+}
+
+function providerUsageFromError(error: unknown): ProviderUsage {
+  const failure = asMillError(error);
+  const value = failure.details.providerUsage;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { source: "unavailable", cost: "unavailable" };
+  }
+  const usage = value as Record<string, unknown>;
+  if (
+    !["measured", "unavailable"].includes(String(usage.source)) ||
+    usage.cost !== "unavailable"
+  )
+    return { source: "unavailable", cost: "unavailable" };
+  return {
+    source: usage.source as ProviderUsage["source"],
+    ...(Number.isSafeInteger(usage.inputTokens) &&
+    (usage.inputTokens as number) >= 0
+      ? { inputTokens: usage.inputTokens as number }
+      : {}),
+    ...(Number.isSafeInteger(usage.outputTokens) &&
+    (usage.outputTokens as number) >= 0
+      ? { outputTokens: usage.outputTokens as number }
+      : {}),
+    ...(Number.isSafeInteger(usage.cacheInputTokens) &&
+    (usage.cacheInputTokens as number) >= 0
+      ? { cacheInputTokens: usage.cacheInputTokens as number }
+      : {}),
+    cost: "unavailable",
+  };
+}
+
+function assertModelTokenBudget(
+  store: StateStore,
+  run: RunRecord,
+  inputs: RuntimeInputs,
+): void {
+  const limit = inputs.task.budget.maxModelTokens;
+  if (limit === undefined) return;
+  const usage = summarizeUsage(store.events(run.id));
+  if (usage.admittedCalls === 0) return;
+  if (
+    usage.source !== "measured" ||
+    usage.inputTokens === null ||
+    usage.outputTokens === null
+  ) {
+    store.recordEvent(run.id, "model_token_budget.blocked", {
+      code: "MODEL_TOKEN_USAGE_INCOMPLETE",
+      limit,
+      admittedCalls: usage.admittedCalls,
+      measuredCalls: usage.measuredCalls,
+    });
+    throw new MillError(
+      "MODEL_TOKEN_USAGE_INCOMPLETE",
+      "A later model invocation requires complete provider usage for every prior admitted call.",
+      ExitCode.configuration,
+      {
+        limit,
+        admittedCalls: usage.admittedCalls,
+        measuredCalls: usage.measuredCalls,
+      },
+    );
+  }
+  const used = usage.inputTokens + usage.outputTokens;
+  if (used >= limit) {
+    store.recordEvent(run.id, "model_token_budget.blocked", {
+      code: "MODEL_TOKEN_BUDGET_EXHAUSTED",
+      limit,
+      used,
+    });
+    throw new MillError(
+      "MODEL_TOKEN_BUDGET_EXHAUSTED",
+      "The approved aggregate model-token budget is exhausted before the next invocation.",
+      ExitCode.configuration,
+      { limit, used },
+    );
+  }
 }
 
 export async function startLocalRun(input: {
@@ -748,7 +832,8 @@ export async function startLocalRun(input: {
       role: "builder",
       attempt: run.attemptCount,
     });
-    let invocation: Awaited<ReturnType<typeof workerAdapter.runBuilder>>;
+    let invocation:
+      Awaited<ReturnType<typeof workerAdapter.runBuilder>> | undefined;
     let candidate: Awaited<ReturnType<typeof commitCandidate>>;
     try {
       invocation = await workerAdapter.runBuilder({
@@ -760,6 +845,14 @@ export async function startLocalRun(input: {
         signal: signals.signal,
         ...admission.hooks,
       });
+      recordProviderUsage(
+        store,
+        run.id,
+        admission.invocationId,
+        "build",
+        "completed",
+        invocation.usage,
+      );
       assertNotCancelled(store, run.id);
       await assertGitControlState(worktree, gitControl);
       candidate = await commitCandidate(
@@ -775,10 +868,18 @@ export async function startLocalRun(input: {
         admission.invocationId,
       );
     } catch (error) {
+      if (invocation === undefined)
+        recordProviderUsage(
+          store,
+          run.id,
+          admission.invocationId,
+          "build",
+          "failed",
+          providerUsageFromError(error),
+        );
       settleWorkerFailure(store, admission.invocationId, "builder", error);
       throw error;
     }
-    recordProviderUsage(store, run.id, "builder.completed", invocation.usage);
     const completed = store.getRun(run.id);
     return { run: publicRunRecord(completed), usage: invocation.usage };
   } catch (error) {
@@ -1249,6 +1350,12 @@ export async function reviewRun(input: {
         candidate.worktree,
         input.baseCommit,
         candidate.commit,
+        {
+          ...(inputs.config.review?.checklists === undefined
+            ? {}
+            : { checklists: inputs.config.review.checklists }),
+          riskClass: inputs.task.riskClass,
+        },
       );
       run = store.prepareReviewRefresh(
         run.id,
@@ -1322,7 +1429,20 @@ export async function reviewRun(input: {
           ? run.baseCommit
           : `refs/heads/${inputs.config.propose.baseBranch}`),
       candidate.commit,
+      {
+        ...(inputs.config.review?.checklists === undefined
+          ? {}
+          : { checklists: inputs.config.review.checklists }),
+        riskClass: inputs.task.riskClass,
+      },
     );
+    const reviewChecklists = await loadReviewChecklistContents({
+      root: candidate.worktree,
+      baseCommit: reviewScope.baseCommit,
+      ...(reviewScope.checklists === undefined
+        ? {}
+        : { checklists: reviewScope.checklists }),
+    });
     if (
       refreshedScope !== undefined &&
       reviewScope.digest !== refreshedScope.digest
@@ -1352,7 +1472,8 @@ export async function reviewRun(input: {
       attempt: reviewAttempt,
       candidateCommit: candidate.commit,
     });
-    let result: Awaited<ReturnType<typeof workerAdapter.runReviewer>>;
+    let result:
+      Awaited<ReturnType<typeof workerAdapter.runReviewer>> | undefined;
     try {
       result = await workerAdapter.runReviewer({
         root: candidate.worktree,
@@ -1360,11 +1481,20 @@ export async function reviewRun(input: {
         manifest: candidate.manifest,
         candidateCommit: candidate.commit,
         reviewScope,
+        reviewChecklists,
         deadlineMs,
         maxOutputBytes: inputs.task.budget.maxOutputBytes,
         signal: signals.signal,
         ...admission.hooks,
       });
+      recordProviderUsage(
+        store,
+        run.id,
+        admission.invocationId,
+        "review",
+        "completed",
+        result.usage,
+      );
       assertNotCancelled(store, run.id);
       await assertCandidateIdentity(candidate.worktree, candidate);
       result.review = classifyReview(
@@ -1392,6 +1522,15 @@ export async function reviewRun(input: {
         usage: result.usage,
       };
     } catch (error) {
+      if (result === undefined)
+        recordProviderUsage(
+          store,
+          run.id,
+          admission.invocationId,
+          "review",
+          "failed",
+          providerUsageFromError(error),
+        );
       settleWorkerFailure(store, admission.invocationId, "reviewer", error);
       throw error;
     }
@@ -1493,7 +1632,8 @@ export async function resumeRun(input: {
         attempt: run.repairCount,
         candidateCommit: base,
       });
-      let invocation: Awaited<ReturnType<typeof workerAdapter.runBuilder>>;
+      let invocation:
+        Awaited<ReturnType<typeof workerAdapter.runBuilder>> | undefined;
       let candidate: Awaited<ReturnType<typeof commitCandidate>>;
       try {
         invocation = await workerAdapter.runBuilder({
@@ -1506,6 +1646,14 @@ export async function resumeRun(input: {
           signal: signals.signal,
           ...admission.hooks,
         });
+        recordProviderUsage(
+          store,
+          run.id,
+          admission.invocationId,
+          "repair",
+          "completed",
+          invocation.usage,
+        );
         assertNotCancelled(store, run.id);
         await assertGitControlState(worktreePath, gitControl);
         candidate = await commitCandidate(
@@ -1521,15 +1669,18 @@ export async function resumeRun(input: {
           admission.invocationId,
         );
       } catch (error) {
+        if (invocation === undefined)
+          recordProviderUsage(
+            store,
+            run.id,
+            admission.invocationId,
+            "repair",
+            "failed",
+            providerUsageFromError(error),
+          );
         settleWorkerFailure(store, admission.invocationId, "builder", error);
         throw error;
       }
-      recordProviderUsage(
-        store,
-        run.id,
-        "repair.builder_completed",
-        invocation.usage,
-      );
       return publicRunRecord(store.getRun(run.id));
     }
     if (run.candidateCommit !== undefined) {
@@ -1553,7 +1704,8 @@ export async function resumeRun(input: {
       role: "builder",
       attempt: run.attemptCount,
     });
-    let invocation: Awaited<ReturnType<typeof workerAdapter.runBuilder>>;
+    let invocation:
+      Awaited<ReturnType<typeof workerAdapter.runBuilder>> | undefined;
     let candidate: Awaited<ReturnType<typeof commitCandidate>>;
     try {
       invocation = await workerAdapter.runBuilder({
@@ -1565,6 +1717,14 @@ export async function resumeRun(input: {
         signal: signals.signal,
         ...admission.hooks,
       });
+      recordProviderUsage(
+        store,
+        run.id,
+        admission.invocationId,
+        "build",
+        "completed",
+        invocation.usage,
+      );
       assertNotCancelled(store, run.id);
       await assertGitControlState(worktreePath, gitControl);
       candidate = await commitCandidate(
@@ -1580,15 +1740,18 @@ export async function resumeRun(input: {
         admission.invocationId,
       );
     } catch (error) {
+      if (invocation === undefined)
+        recordProviderUsage(
+          store,
+          run.id,
+          admission.invocationId,
+          "build",
+          "failed",
+          providerUsageFromError(error),
+        );
       settleWorkerFailure(store, admission.invocationId, "builder", error);
       throw error;
     }
-    recordProviderUsage(
-      store,
-      run.id,
-      "builder.resume_completed",
-      invocation.usage,
-    );
     return publicRunRecord(store.getRun(run.id));
   } catch (error) {
     const failure = asMillError(error);

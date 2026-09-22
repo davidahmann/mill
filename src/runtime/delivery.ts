@@ -29,6 +29,7 @@ import {
 import { loadRuntimeInputs, type RuntimeInputs } from "./inputs.js";
 import { assertRunBindings } from "./lifecycle.js";
 import { publicPullRequestTitle } from "./public-metadata.js";
+import { evaluatePromotionReadiness } from "../../scripts/promotion-readiness.mjs";
 import {
   commonGitDirectory,
   captureReviewScope,
@@ -250,20 +251,6 @@ async function assertReviewedCandidate(
       { cause: String(error) },
     );
   }
-  if (
-    !validation.passed ||
-    validation.candidateCommit !== run.candidateCommit ||
-    review.candidateCommit !== run.candidateCommit ||
-    blockingReviewFindings(review, run.configDigest, {
-      policy: inputs.config.review?.blocking,
-    }).length > 0
-  ) {
-    throw new MillError(
-      "LOCAL_EVIDENCE_STALE",
-      "Validation and local review must pass on the exact candidate head.",
-      ExitCode.configuration,
-    );
-  }
   const candidate = await assertRunBindings(root, run, inputs);
   const expectedScope = await captureReviewScope(
     candidate.worktree,
@@ -272,12 +259,35 @@ async function assertReviewedCandidate(
         ? run.baseCommit
         : `refs/heads/${inputs.config.propose.baseBranch}`),
     candidate.commit,
+    {
+      ...(inputs.config.review?.checklists === undefined
+        ? {}
+        : { checklists: inputs.config.review.checklists }),
+      riskClass: inputs.task.riskClass,
+    },
   );
-  if (review.scope?.digest !== expectedScope.digest) {
+  const readiness = evaluatePromotionReadiness({
+    candidateCommit: candidate.commit,
+    validation,
+    review: {
+      candidateCommit: review.candidateCommit,
+      ...(review.scope?.digest === undefined
+        ? {}
+        : { scopeDigest: review.scope.digest }),
+      blockingFindingIds: blockingReviewFindings(review, run.configDigest, {
+        policy: inputs.config.review?.blocking,
+      }).map((finding) => finding.id),
+    },
+    expectedScopeDigest: expectedScope.digest,
+  });
+  if (!readiness.ready) {
     throw new MillError(
-      "REVIEW_SCOPE_STALE",
-      "Delivery requires a fresh complete base-to-candidate review, including preparatory commits.",
+      readiness.reasonCodes.includes("REVIEW_SCOPE_MISMATCH")
+        ? "REVIEW_SCOPE_STALE"
+        : "LOCAL_EVIDENCE_STALE",
+      "Delivery requires passing validation and complete review evidence for the exact candidate.",
       ExitCode.configuration,
+      { reasonCodes: readiness.reasonCodes },
     );
   }
   return { commit: candidate.commit, tree: candidate.tree };
@@ -286,6 +296,7 @@ async function assertReviewedCandidate(
 async function assertProviderReviewScope(
   run: RunRecord,
   config: ProposeConfig,
+  inputs: RuntimeInputs,
   adapter: GitHubAdapter,
   deadlineMs: number,
 ): Promise<void> {
@@ -309,6 +320,12 @@ async function assertProviderReviewScope(
     run.worktreePath,
     base,
     run.candidateCommit,
+    {
+      ...(inputs.config.review?.checklists === undefined
+        ? {}
+        : { checklists: inputs.config.review.checklists }),
+      riskClass: inputs.task.riskClass,
+    },
   );
   if (review.scope?.digest !== scope.digest)
     throw new MillError(
@@ -898,6 +915,7 @@ export async function planDraftPr(input: {
     await assertProviderReviewScope(
       run,
       config,
+      inputs,
       adapter,
       operationDeadline(config),
     );
@@ -1073,7 +1091,7 @@ export async function openDraftPr(input: {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     await assertBinding(input.root, config, binding);
-    await assertProviderReviewScope(run, config, adapter, deadlineMs);
+    await assertProviderReviewScope(run, config, inputs, adapter, deadlineMs);
     const liveDigest = proposalDigest({
       run,
       candidate,
@@ -1171,7 +1189,7 @@ export async function openDraftPr(input: {
         delivery,
         push.expectedOldCommit,
       );
-      await assertProviderReviewScope(run, config, adapter, deadlineMs);
+      await assertProviderReviewScope(run, config, inputs, adapter, deadlineMs);
       push = {
         ...push,
         status: "call_started",
@@ -1317,7 +1335,7 @@ export async function openDraftPr(input: {
         "delivery.pull_request_intent",
         { effectId: prEffect.id },
       );
-      await assertProviderReviewScope(run, config, adapter, deadlineMs);
+      await assertProviderReviewScope(run, config, inputs, adapter, deadlineMs);
       prEffect = {
         ...prEffect,
         status: "call_started",

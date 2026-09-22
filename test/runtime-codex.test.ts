@@ -242,7 +242,7 @@ describe("Codex adapter boundaries", () => {
     try {
       process.env.MILL_CODEX_PATH = await executableScript(
         tools.path,
-        `console.log(JSON.stringify({type:"error",message:JSON.stringify({error:{code:"invalid_json_schema",message:"sensitive prose"}})}));process.exit(1);`,
+        `console.log(JSON.stringify({type:"diagnostic",usage:{input_tokens:9,output_tokens:2}}));console.log(JSON.stringify({type:"error",message:JSON.stringify({error:{code:"invalid_json_schema",message:"sensitive prose"}})}));process.exit(1);`,
       );
       const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
       const frozen = await buildContextManifest(
@@ -262,7 +262,15 @@ describe("Codex adapter boundaries", () => {
         }),
       ).rejects.toMatchObject({
         code: "CODEX_EXECUTION_FAILED",
-        details: { providerErrorCode: "invalid_json_schema" },
+        details: {
+          providerErrorCode: "invalid_json_schema",
+          providerUsage: {
+            source: "measured",
+            inputTokens: 9,
+            outputTokens: 2,
+            cost: "unavailable",
+          },
+        },
       });
     } finally {
       await Promise.all([fixture.cleanup(), tools.cleanup()]);

@@ -18,6 +18,7 @@ function fixture(
   malformed = false,
   attributes?: string,
   deletedDirectory = false,
+  checklist = false,
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "maintainer-review-test-"));
   directories.push(directory);
@@ -40,6 +41,17 @@ function fixture(
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.test");
   writeFileSync(path.join(root, "file.txt"), "before\n");
+  if (checklist) {
+    mkdirSync(path.join(root, "policy"));
+    writeFileSync(
+      path.join(root, "policy", "review.md"),
+      "# Fixture review\n\n- Check the changed file.\n",
+    );
+    writeFileSync(
+      path.join(root, "mill.yaml"),
+      'review:\n  checklists:\n    - id: fixture\n      path: policy/review.md\n      pathPatterns: ["file.txt"]\n',
+    );
+  }
   if (deletedDirectory) {
     mkdirSync(path.join(root, "removed"));
     writeFileSync(
@@ -64,6 +76,7 @@ const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[args.indexOf('--sandbox') + 1] !== 'read-only' || !args.includes('--ignore-user-config') || process.env.GH_TOKEN || process.env.MILL_GITHUB_TOKEN || process.env.GIT_NO_REPLACE_OBJECTS !== "1" || process.env.GIT_GRAFT_FILE !== "/dev/null") process.exit(9);
 fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], ${JSON.stringify(malformed ? "{}" : JSON.stringify({ base, head, findings: [{ id: "R1", priority, subsystem: "fixture", description: "file.txt:1 concrete fixture finding" }] }))});
+console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:12,output_tokens:3,cached_input_tokens:4}}));
 `,
     { mode: 0o700 },
   );
@@ -120,11 +133,19 @@ describe("standalone maintainer review evidence", () => {
       review: { findings: { priority: string }[] };
       ledger: { disposition: string }[];
       validation: { argv: string[] };
+      usage: { source: string; inputTokens: number | null };
+      reviewFocus: { digest: string; changedPaths: string[] };
       [key: string]: unknown;
     };
     expect(evidence.review.findings[0]?.priority).toBe("P2");
     expect(evidence.ledger[0]?.disposition).toBe("advisory");
     expect(evidence.validation.argv).toContain("console.log('validated')");
+    expect(evidence.usage).toMatchObject({
+      source: "measured",
+      inputTokens: 12,
+    });
+    expect(evidence.reviewFocus.digest).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(evidence.reviewFocus.changedPaths).toEqual(["file.txt"]);
     expect(test.invoke("run").status).not.toBe(0); // immutable path
   });
   it.each(["P0", "P1"])("records but blocks %s findings", (priority) => {
@@ -138,6 +159,23 @@ describe("standalone maintainer review evidence", () => {
         }
       ).ledger[0]?.disposition,
     ).toBe("blocking");
+  });
+  it("binds matching repository-owned review guidance from the base", () => {
+    const test = fixture("P2", false, undefined, false, true);
+    expect(test.invoke("run").status).toBe(0);
+    const evidence = JSON.parse(readFileSync(test.receipt, "utf8")) as {
+      reviewFocus: {
+        checklists: { id: string; path: string; digest: string }[];
+      };
+    };
+    expect(evidence.reviewFocus.checklists).toHaveLength(1);
+    expect(evidence.reviewFocus.checklists[0]).toMatchObject({
+      id: "fixture",
+      path: "policy/review.md",
+    });
+    expect(evidence.reviewFocus.checklists[0]?.digest).toMatch(
+      /^sha256:[a-f0-9]{64}$/u,
+    );
   });
   it("rejects malformed model output", () => {
     const test = fixture("P2", true);
