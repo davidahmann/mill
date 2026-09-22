@@ -14,6 +14,23 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "checklists": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+              "path": {
+                "type": "string",
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+$"
+              },
+              "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+            },
+            "required": ["id", "path", "digest"],
+            "additionalProperties": false
+          }
+        },
         "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
       },
       "required": [

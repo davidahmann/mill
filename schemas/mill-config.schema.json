@@ -22,7 +22,40 @@
     },
     "review": {
       "type": "object",
-      "properties": { "blocking": { "type": "string", "const": "p0_p1" } },
+      "properties": {
+        "blocking": { "type": "string", "const": "p0_p1" },
+        "checklists": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+              "path": {
+                "type": "string",
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+$"
+              },
+              "pathPatterns": {
+                "minItems": 1,
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^*?[\\]\\\\]+(?:\\/\\*\\*)?$"
+                }
+              },
+              "riskClasses": {
+                "minItems": 1,
+                "maxItems": 3,
+                "type": "array",
+                "items": { "type": "string", "enum": ["low", "medium", "high"] }
+              }
+            },
+            "required": ["id", "path", "pathPatterns"],
+            "additionalProperties": false
+          }
+        }
+      },
       "required": ["blocking"],
       "additionalProperties": false
     },

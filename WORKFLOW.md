@@ -15,7 +15,9 @@ bookkeeping, closure, tests, or docs into micro-PRs.
 
 For native maintainer changes outside an admitted run, use the packaged
 [local review script](docs/maintainer-review.md). It records exact-candidate
-validation and independent review without claiming runtime delivery authority.
+validation, selected base-owned review guidance, provider usage, and independent
+review without claiming runtime delivery authority. Its readiness decision uses
+the same local promotion policy as admitted draft delivery and merge.
 
 For each wave:
 

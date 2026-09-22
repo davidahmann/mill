@@ -22,6 +22,32 @@ policy was frozen for that delivery. Unclassified feedback blocks. An explicit
 required GitHub approval remains required; advisory findings do not turn a
 rejection or missing approval into approval.
 
+## Focus review with repository checklists
+
+`review.checklists` may select short repository-owned files by changed path and
+task risk class:
+
+```yaml
+review:
+  blocking: p0_p1
+  checklists:
+    - id: runtime-state
+      path: policy/review/runtime-state.md
+      pathPatterns: [src/runtime/**, src/contracts/**]
+      riskClasses: [medium, high]
+```
+
+Mill selects no more than eight checklists. Each file is limited to 32 KiB and
+the selected set to 128 KiB. It reads the files from the immutable review base,
+records their paths and digests in the scope, and supplies their contents to the
+reviewer. Changed checklist files take effect on the next admitted base. A
+checklist focuses inspection; it cannot exclude changed files, alter acceptance,
+or authorize delivery.
+
+The maintainer review script applies the base revision's checklist mappings by
+changed path. It has no task risk class, so a maintainer checklist should use a
+path mapping when it must apply to that route.
+
 ## GitHub review modes
 
 `propose.reviewPolicy` has three modes:

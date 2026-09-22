@@ -767,6 +767,65 @@ describe("local delivery lifecycle", () => {
     }
   });
 
+  it("blocks a later model call after the aggregate token allowance is spent", async () => {
+    const fixture = await runtimeFixture({ maxModelTokens: 15 });
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      await verifyRun(input);
+      await expect(reviewRun(input)).rejects.toMatchObject({
+        code: "MODEL_TOKEN_BUDGET_EXHAUSTED",
+      });
+      await expect(
+        runStatus({ root: fixture.root, runId: started.run.id }),
+      ).resolves.toMatchObject({
+        usage: {
+          source: "measured",
+          inputTokens: 10,
+          outputTokens: 5,
+          phases: { build: { calls: 1, measuredCalls: 1 } },
+        },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("blocks a later model call when prior provider usage is incomplete", async () => {
+    const fixture = await runtimeFixture({
+      maxModelTokens: 100,
+      builderUsageUnavailable: true,
+    });
+    activate(fixture);
+    try {
+      const started = await startLocalRun({
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        approvalDigest: await qualifiedApproval(fixture),
+      });
+      const input = {
+        root: fixture.root,
+        taskPath: fixture.taskPath,
+        runId: started.run.id,
+      };
+      await verifyRun(input);
+      await expect(reviewRun(input)).rejects.toMatchObject({
+        code: "MODEL_TOKEN_USAGE_INCOMPLETE",
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("recovers a stale verifier binding instead of indefinitely waiting", async () => {
     const fixture = await runtimeFixture();
     activate(fixture);

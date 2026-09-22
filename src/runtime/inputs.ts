@@ -217,13 +217,20 @@ export async function loadRuntimeInputs(
     ...(config.verifier?.dependencies === undefined
       ? []
       : [config.verifier.dependencies.targetPath]),
+    ...(config.review?.checklists ?? []).map((checklist) => checklist.path),
     ...Object.values(config.commands).flatMap(
       (command) => command.writablePaths ?? [],
     ),
   ]) {
     validateRelative(candidate.replace(/\/\*\*$/u, ""), "Runtime path");
   }
-  for (const candidate of [...task.allowedPaths, ...config.sensitivePaths]) {
+  for (const candidate of [
+    ...task.allowedPaths,
+    ...config.sensitivePaths,
+    ...(config.review?.checklists ?? []).flatMap(
+      (checklist) => checklist.pathPatterns,
+    ),
+  ]) {
     validatePathPattern(candidate, "Runtime path pattern");
   }
   const dependencyTarget = config.verifier?.dependencies?.targetPath;

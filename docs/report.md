@@ -12,7 +12,16 @@ millctl --json report
 The run section groups lifecycle and validation facts. Its elapsed time is run
 wall time. It is not a measure of human effort or productivity. Provider usage
 appears only when the provider recorded it; unavailable usage remains `null` or
-`unavailable`.
+`unavailable`. The report separates build, repair, and review calls. A failed
+call is included when the provider emitted complete input and output counts.
+Cache input remains separate and is not added to input tokens again.
+
+A task may set `budget.maxModelTokens` to the allowed sum of measured input and
+output tokens for the run. Mill admits the first call, then checks the recorded
+total before each later call. It blocks when the allowance is spent or any prior
+admitted call lacks complete usage. Providers report usage after a call, so this
+guard cannot stop an in-flight call from crossing the allowance. Mill does not
+estimate missing tokens or currency cost.
 
 The `developmentEvidence` section uses the ledger as its denominator. Each
 record states whether a change was eligible, whether it used Mill or a manual

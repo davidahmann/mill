@@ -82,6 +82,8 @@ export async function runtimeFixture(
     githubReviewer?: string;
     githubReviewMode?: "github_required" | "github_codex_required";
     reviewerCacheInputTokens?: number;
+    maxModelTokens?: number;
+    builderUsageUnavailable?: boolean;
   } = {},
 ): Promise<{
   root: string;
@@ -333,7 +335,7 @@ commit:
 budget:
   deadlineSeconds: 60
   maxOutputBytes: 1048576
-  retryCount: ${options.retryCount ?? 1}
+${options.maxModelTokens === undefined ? "" : `  maxModelTokens: ${options.maxModelTokens}\n`}  retryCount: ${options.retryCount ?? 1}
 ${
   options.twoReviewRepairs === true
     ? `repairExperiment:
@@ -408,7 +410,7 @@ if(args.includes("--output-schema")){
   const value=prompt.includes("Repair this complete")?current+1:2;
   await writeFile(path.join(cwd,"src/value.js"),\`export const value = \${value};\\n\`);
   console.log(JSON.stringify({type:"thread.started",thread_id:"fake-build"}));
-  console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:10,output_tokens:5}}));
+  console.log(JSON.stringify({type:"turn.completed"${options.builderUsageUnavailable === true ? "" : ",usage:{input_tokens:10,output_tokens:5}"}}));
 }
 `,
     { mode: 0o755 },

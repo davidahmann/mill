@@ -14,6 +14,15 @@ export type ContinuationAction =
   | "finalize_merge"
   | "attended_disposition";
 
+export interface PhaseUsage {
+  calls: number;
+  completedCalls: number;
+  failedCalls: number;
+  measuredCalls: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
 export interface ContinuationUsage {
   source: "measured" | "partial" | "unavailable";
   admittedCalls: number;
@@ -25,6 +34,11 @@ export interface ContinuationUsage {
   cacheSource: "measured" | "partial" | "unavailable";
   cost: "unavailable";
   blockEvents: number;
+  phases?: {
+    build: PhaseUsage;
+    repair: PhaseUsage;
+    review: PhaseUsage;
+  };
 }
 
 export interface RunContinuationPacket {

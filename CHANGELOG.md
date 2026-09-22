@@ -4,6 +4,24 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-22
+
+### Added
+
+- Add an optional between-invocation model-token allowance with phase-level
+  measured usage for build, repair, and review calls.
+- Select bounded repository review checklists from changed paths and task risk,
+  then bind their base-revision digests into the complete review scope.
+- Use one deterministic local promotion-readiness policy in admitted delivery,
+  merge, and standalone maintainer review.
+
+### Changed
+
+- Record maintainer-review provider usage and checklist focus in its immutable
+  receipt.
+- Retain provider measurements from failed calls when available without
+  estimating missing tokens or currency cost.
+
 ## [0.9.0] - 2026-09-21
 
 ### Added

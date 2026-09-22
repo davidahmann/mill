@@ -25,6 +25,7 @@ import {
 } from "./github.js";
 import { loadRuntimeInputs, type RuntimeInputs } from "./inputs.js";
 import { assertRunBindings } from "./lifecycle.js";
+import { evaluatePromotionReadiness } from "../../scripts/promotion-readiness.mjs";
 import {
   captureReviewScope,
   commonGitDirectory,
@@ -232,12 +233,6 @@ async function preflight(
   const review = reviewResultSchema.parse(JSON.parse(run.reviewJson ?? "null"));
   if (
     delivery.reviewBlocking !== inputs.config.review?.blocking ||
-    !validation.passed ||
-    validation.candidateCommit !== candidate.commit ||
-    review.candidateCommit !== candidate.commit ||
-    blockingReviewFindings(review, run.configDigest, {
-      policy: inputs.config.review?.blocking,
-    }).length !== 0 ||
     candidate.commit !== delivery.candidateCommit ||
     candidate.tree !== delivery.candidateTree
   )
@@ -262,12 +257,33 @@ async function preflight(
     candidate.worktree,
     observation.defaultBranchHead,
     candidate.commit,
+    {
+      ...(inputs.config.review?.checklists === undefined
+        ? {}
+        : { checklists: inputs.config.review.checklists }),
+      riskClass: inputs.task.riskClass,
+    },
   );
-  if (review.scope?.digest !== scope.digest)
+  const readiness = evaluatePromotionReadiness({
+    candidateCommit: candidate.commit,
+    validation,
+    review: {
+      candidateCommit: review.candidateCommit,
+      ...(review.scope?.digest === undefined
+        ? {}
+        : { scopeDigest: review.scope.digest }),
+      blockingFindingIds: blockingReviewFindings(review, run.configDigest, {
+        policy: inputs.config.review?.blocking,
+      }).map((finding) => finding.id),
+    },
+    expectedScopeDigest: scope.digest,
+  });
+  if (!readiness.ready)
     throw new MillError(
       "MERGE_EVIDENCE_STALE",
-      "The reviewed diff differs from GitHub's authoritative merge base.",
+      "Merge requires passing validation and complete review evidence for the exact delivered candidate and authoritative merge base.",
       ExitCode.configuration,
+      { reasonCodes: readiness.reasonCodes },
     );
   if (
     pull.nodeId !== delivery.pullRequest.nodeId ||

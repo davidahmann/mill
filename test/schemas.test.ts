@@ -827,6 +827,38 @@ describe("compact schemas", () => {
     );
   });
 
+  it("accepts bounded model usage and rejects duplicate review checklist IDs", () => {
+    expect(
+      contractSchemas.taskPacket.safeParse({
+        ...samples.taskPacket,
+        budget: { ...samples.taskPacket.budget, maxModelTokens: 50_000 },
+      }).success,
+    ).toBe(true);
+    expect(
+      contractSchemas.taskPacket.safeParse({
+        ...samples.taskPacket,
+        budget: { ...samples.taskPacket.budget, maxModelTokens: 0 },
+      }).success,
+    ).toBe(false);
+    const checklist = {
+      id: "runtime",
+      path: "policy/review/runtime.md",
+      pathPatterns: ["src/**"],
+    };
+    expect(
+      contractSchemas.millConfig.safeParse({
+        ...samples.millConfig,
+        review: { blocking: "p0_p1", checklists: [checklist] },
+      }).success,
+    ).toBe(true);
+    expect(
+      contractSchemas.millConfig.safeParse({
+        ...samples.millConfig,
+        review: { blocking: "p0_p1", checklists: [checklist, checklist] },
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps executable JSON Schemas aligned with runtime validators", async () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     ajv.addFormat(

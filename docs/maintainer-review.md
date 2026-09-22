@@ -6,6 +6,10 @@ fresh Codex reviewer in read-only mode. P0/P1 findings block; P2/P3 findings
 stay in the receipt as advisory. The operator still decides whether the selected
 validation covers the change.
 
+When the immutable base configures `review.checklists`, the script selects the
+path-matched files from that base and records their digests with the changed
+paths. The reviewer uses them as focus guidance while inspecting the full diff.
+
 Run from a clean repository root, with dependencies already prepared. Supply
 full commit IDs. The base must be an ancestor of the candidate, and the
 candidate must be the current HEAD. Store the receipt outside the repository.
@@ -30,9 +34,10 @@ node /path/to/mill/scripts/maintainer-review.mjs check \
 
 For an installed package, the script is at
 `node_modules/@davidahmann/mill/scripts/maintainer-review.mjs`. Keep the same
-script version for recording and checking a receipt. A changed script, base,
-candidate, tree, or dirty checkout requires fresh evidence. The checker does not
-fetch the provider base; the operator must supply its current exact commit.
+script version for recording and checking a receipt. A changed script,
+promotion-policy helper, base, candidate, tree, checklist scope, or dirty
+checkout requires fresh evidence. The checker does not fetch the provider base;
+the operator must supply its current exact commit.
 
 The validation argument is an argv array, not a shell expression. It executes
 with the operator's environment and authority. Choose the repository's native
@@ -40,6 +45,12 @@ checks, and do not put secrets in command arguments. Each command has a
 30-minute timeout and a bounded output buffer. Failed or excessive output blocks
 evidence creation; rerun the command directly to diagnose it. The receipt stores
 a digest of validation stdout, not raw logs.
+
+The receipt records reviewer input, output, and cache-input tokens only when the
+provider emits usable measurements. Currency cost remains unavailable. Its
+readiness result comes from the same exact-candidate validation and blocking
+review evaluator used before admitted delivery and merge. It does not include
+GitHub checks or hosted review; those remain separate post-push gates.
 
 Codex uses its existing local login. Its process receives no standard GitHub or
 npm token environment variables. Strict configuration and the read-only sandbox
