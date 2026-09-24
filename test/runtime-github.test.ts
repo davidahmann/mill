@@ -197,6 +197,71 @@ else process.exit(2);
           { priority: "P2", commitId: sha, path: "src/index.ts" },
         ],
       });
+      const timestamp = "2026-09-24T17:45:04.727157Z";
+      const relativeTime = `<relative-time datetime="${timestamp}">${timestamp}</relative-time>`;
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary.replace(
+            "✅ **Completed**",
+            `✅ **Completed** ${relativeTime}`,
+          ),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_COMPLETED", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary.replace(
+            "✅ **Completed**",
+            `🔄 **Running** since ${relativeTime}`,
+          ),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_RUNNING", commitId: sha },
+        ],
+      });
+      await writeFile(
+        path.join(tools.path, "mode.json"),
+        JSON.stringify({
+          issueBody: completedSummary.replace(
+            "✅ **Completed**",
+            `✅ **Completed** ${relativeTime.replace(timestamp, "2026-09-24T17:45:05Z")}`,
+          ),
+        }),
+      );
+      await expect(
+        adapter.observe({
+          config,
+          pullRequestNumber: 41,
+          deadlineMs: Date.now() + 10_000,
+        }),
+      ).resolves.toMatchObject({
+        reviews: [
+          { state: "COMMENTED", commitId: sha },
+          { state: "CODEX_INVALID", commitId: sha },
+        ],
+      });
       await writeFile(
         path.join(tools.path, "mode.json"),
         JSON.stringify({ review: { state: "APPROVED", body: "LGTM" } }),

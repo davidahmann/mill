@@ -25,7 +25,7 @@ GitHub workflow.
 Pin a released version in the repository that will use Mill:
 
 ```sh
-npm i -D -E --ignore-scripts @davidahmann/mill@0.10.1
+npm i -D -E --ignore-scripts @davidahmann/mill@0.10.2
 npx --no-install millctl --version
 ```
 
