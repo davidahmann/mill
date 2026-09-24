@@ -588,12 +588,22 @@ export async function runCodexReview(input: ReviewerWorkerInput): Promise<{
   try {
     // Strict provider output requires every declared property to be required.
     // Public state parsing retains optional scope for legacy persisted reviews.
+    const providerScopeSchema =
+      input.reviewScope?.checklists === undefined
+        ? reviewScopeSchema.omit({ checklists: true })
+        : reviewScopeSchema.extend({
+            checklists: reviewScopeSchema.shape.checklists
+              .unwrap()
+              .element.extend({ path: z.string().min(1) })
+              .array()
+              .max(8),
+          });
     const providerSchema =
       input.reviewScope === undefined
         ? reviewResultSchema.omit({ scope: true, gate: true })
         : reviewResultSchema
             .omit({ gate: true })
-            .extend({ scope: reviewScopeSchema });
+            .extend({ scope: providerScopeSchema });
     await writeFile(
       schemaPath,
       JSON.stringify(z.toJSONSchema(providerSchema)),

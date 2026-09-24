@@ -513,6 +513,68 @@ describe("Codex adapter boundaries", () => {
     }
   });
 
+  it("sends a strict nested review scope schema with and without selected checklists", async () => {
+    const fixture = await runtimeFixture();
+    const tools = await temporaryDirectory("mill-codex-scope-schema-");
+    const inputs = await loadRuntimeInputs(fixture.root, fixture.taskPath);
+    const candidate = "a".repeat(40);
+    const frozen = await buildContextManifest(
+      fixture.root,
+      candidate,
+      inputs.task,
+      inputs.config,
+      inputs.taskDigest,
+    );
+    try {
+      for (const selected of [false, true]) {
+        const scope = {
+          baseCommit: "b".repeat(40),
+          candidateCommit: candidate,
+          candidateTree: "c".repeat(40),
+          changedPaths: ["src/example.ts"],
+          ...(selected
+            ? {
+                checklists: [
+                  {
+                    id: "runtime",
+                    path: "quality/runtime.md",
+                    digest: textDigest("checklist"),
+                  },
+                ],
+              }
+            : {}),
+          digest: textDigest("scope"),
+        };
+        const output = JSON.stringify({
+          schemaVersion: "1",
+          candidateCommit: candidate,
+          scope,
+          summary: "clean",
+          findings: [],
+        });
+        process.env.MILL_CODEX_PATH = await executableScript(
+          tools.path,
+          `const fs=require("node:fs");const i=process.argv.indexOf("--output-schema");const schema=JSON.parse(fs.readFileSync(process.argv[i+1],"utf8"));const nested=schema.properties.scope;const keys=Object.keys(nested.properties).sort();const required=[...nested.required].sort();if(JSON.stringify(keys)!==JSON.stringify(required)||Object.hasOwn(nested.properties,"checklists")!==${selected})process.exit(13);if(${selected}&&nested.properties.checklists.items.properties.path.pattern)process.exit(14);console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(output)}}}));console.log(JSON.stringify({type:"turn.completed"}));`,
+        );
+        await expect(
+          runCodexReview({
+            root: fixture.root,
+            task: inputs.task,
+            manifest: frozen.manifest,
+            candidateCommit: candidate,
+            reviewScope: scope,
+            deadlineMs: Date.now() + 5_000,
+            maxOutputBytes: 1024 * 1024,
+          }),
+        ).resolves.toMatchObject({
+          review: { candidateCommit: candidate, scope, findings: [] },
+        });
+      }
+    } finally {
+      await Promise.all([fixture.cleanup(), tools.cleanup()]);
+    }
+  });
+
   it("rejects unsafe or oversized explicit final-message outputs", async () => {
     const fixture = await runtimeFixture();
     const tools = await temporaryDirectory("mill-codex-review-file-");
