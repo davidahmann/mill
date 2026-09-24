@@ -298,6 +298,27 @@ function priority(body: string): GitHubFeedback["priority"] {
   );
 }
 
+function codexSummaryStatus(
+  status: string,
+  label: "✅ **Completed**" | "🔄 **Running**",
+): boolean {
+  if (status === label) return true;
+  const prefix = label === "✅ **Completed**" ? `${label} ` : `${label} since `;
+  if (!status.startsWith(prefix)) return false;
+  const suffix = status.slice(prefix.length);
+  const match =
+    /^<relative-time datetime="([^"<>]+)">([^<>]+)<\/relative-time>$/u.exec(
+      suffix,
+    );
+  const timestamp = match?.[1];
+  return (
+    timestamp !== undefined &&
+    timestamp === match?.[2] &&
+    timestamp.endsWith("Z") &&
+    Number.isFinite(Date.parse(timestamp))
+  );
+}
+
 function codexSummaryReview(
   value: unknown,
   headSha: string,
@@ -321,8 +342,8 @@ function codexSummaryReview(
   const commit = cells?.[2] ?? "";
   const commitMatch = /^`([a-f0-9]{7,40})`$/iu.exec(commit);
   const commitPrefix = (commitMatch?.[1] ?? "").toLowerCase();
-  const completed = status === "✅ **Completed**";
-  const running = status === "🔄 **Running**";
+  const completed = codexSummaryStatus(status, "✅ **Completed**");
+  const running = codexSummaryStatus(status, "🔄 **Running**");
   const state =
     cells !== null && commitMatch !== null && completed !== running && completed
       ? "CODEX_COMPLETED"
